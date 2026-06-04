@@ -1,0 +1,4 @@
+int32 proximal_pan_angle
+int32 proximal_tilt_angle
+int32 distal_pan_angle
+int32 distal_tilt_angle
