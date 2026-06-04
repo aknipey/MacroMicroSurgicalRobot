@@ -1,6 +1,6 @@
 #ifndef POSE
 #define POSE
-#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Quaternion.hpp>
 
 class Pose
 {

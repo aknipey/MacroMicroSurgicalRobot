@@ -3,28 +3,27 @@
 #include <vector>
 #include <algorithm>
 #include <math.h>
-#include "ros/ros.h"
-#include "std_msgs/Header.h"
-#include "std_msgs/String.h"
-#include "std_msgs/Int32.h"
-#include "geometry_msgs/Pose.h"
-#include "geometry_msgs/Vector3.h"
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TransformStamped.h>
-#include "omni_msgs/OmniState.h"
-#include "omni_msgs/OmniButtonEvent.h"
 #include <memory>
-#include <tf2_ros/transform_listener.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <rosbag/bag.h>
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/int32.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "omni_msgs/msg/omni_state.hpp"
+#include "omni_msgs/msg/omni_button_event.hpp"
+#include "tf2_ros/transform_listener.hpp"
+#include "tf2/LinearMath/Quaternion.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "../include/ManipulatorModule.hpp"
 #include "../include/Pose.hpp"
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 #include <Eigen/StdVector>
 #include <Eigen/Geometry>
-#include "motor_angles_msg/MotorAngles.h"
+#include "motor_angles_msg/msg/motor_angles.hpp"
 
 // Touch position coordinates are output in millimetres, must convert to metres
 const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
@@ -105,7 +104,7 @@ void PrintMatrix(const Eigen::MatrixXd& matrix, const char* title)
 
     output << matrix;
 
-    ROS_INFO("%s:\n%s", title, output.str().c_str());
+    RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "%s:\n%s", title, output.str().c_str());
 }
 
 Eigen::Matrix3d xRotationMatrix(double theta)
@@ -378,7 +377,7 @@ Eigen::MatrixXd GetInverseJacobianDamped(
         maxAngle = maxJointAngles(i);
 
         D(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
-        ROS_INFO("lambda value: %.6f", pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1);
+        RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "lambda value: %.6f", pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1);
     }
 
     PrintMatrix(D, "D matrix");
@@ -399,12 +398,12 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
         proximal.GetNumTiltJoints() * (1 - cos(proximal.GetTiltJointAngle() / 2))
     );
 
-    // ROS_INFO("test: %.6f", test);
+    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "test: %.6f", test);
 
     double proximalPanLengthDelta = proximal.GetIsolatedPanLengthDelta();
     double proximalTiltLengthDelta = proximal.GetIsolatedTiltLengthDelta();
 
-    // ROS_INFO("prox. pan: %.6f, prox. tilt: %.6f", proximalPanLengthDelta, proximalTiltLengthDelta);
+    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "prox. pan: %.6f, prox. tilt: %.6f", proximalPanLengthDelta, proximalTiltLengthDelta);
 
     motorPositions(0) = proximalPanLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(1) = proximalTiltLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
@@ -421,12 +420,12 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
     // The contribution of the proximal joint positions to the length delta of the distal tendons
     double distalLengthDeltaDueToProximalJoints = proximalPanLengthDelta + proximalTiltLengthDelta + distalTendonProximalJointOffset;
 
-    // ROS_INFO("dLengthDelta: %.6f", distalLengthDeltaDueToProximalJoints);
+    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dLengthDelta: %.6f", distalLengthDeltaDueToProximalJoints);
 
     motorPositions(2) = (distal.GetIsolatedPanLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(3) = (distal.GetIsolatedTiltLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
 
-    // ROS_INFO("dist. pan: %.6f, dist. tilt: %.6f", motorPositions(0), motorPositions(1));
+    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dist. pan: %.6f, dist. tilt: %.6f", motorPositions(0), motorPositions(1));
 
     return motorPositions;
 }
@@ -506,7 +505,7 @@ Eigen::VectorXd CapVectorMagnitude(const Eigen::VectorXd& vector, const double m
 }
 
 void touchStateCallback(
-    const omni_msgs::OmniState::ConstPtr& omniState,
+    const omni_msgs::msg::OmniState::ConstSharedPtr& omniState,
     Pose& currentPose
 )
 {
@@ -517,11 +516,11 @@ void touchStateCallback(
 
     tf2::fromMsg(omniState->pose.orientation, currentPose.orientation);
 
-    geometry_msgs::Vector3 current = omniState->current;
+    geometry_msgs::msg::Vector3 current = omniState->current;
 }
 
 void touchButtonCallback(
-    const omni_msgs::OmniButtonEvent::ConstPtr& omniButtonStates,
+    const omni_msgs::msg::OmniButtonEvent::ConstSharedPtr& omniButtonStates,
     bool& isGreyButtonPressed,
     bool& isWhiteButtonPressed,
     Pose& currentTouchPose,
@@ -557,7 +556,7 @@ Eigen::Matrix3d tf2QuaternionToEigenRotationMatrix(const tf2::Quaternion& quater
 }
 
 void motorStatesCallback(
-    const motor_angles_msg::MotorAngles::ConstPtr& motorStates,
+    const motor_angles_msg::msg::MotorAngles::ConstSharedPtr& motorStates,
     Eigen::VectorXd& motorStatesCache,
     Eigen::VectorXd& motorCommands,
     bool& hasReceivedMotorStates
@@ -574,13 +573,13 @@ void motorStatesCallback(
     hasReceivedMotorStates = true;
 }
 
-void motorMinAnglesCallback(const motor_angles_msg::MotorAngles::ConstPtr& motorMinAngles, Eigen::VectorXd& motorMinAnglesCache, bool& hasReceivedMotorMinAngles)
+void motorMinAnglesCallback(const motor_angles_msg::msg::MotorAngles::ConstSharedPtr& motorMinAngles, Eigen::VectorXd& motorMinAnglesCache, bool& hasReceivedMotorMinAngles)
 {
     hasReceivedMotorMinAngles = true;
     motorMinAnglesCache << motorMinAngles->proximal_pan_angle, motorMinAngles->proximal_tilt_angle, motorMinAngles->distal_pan_angle, motorMinAngles->distal_tilt_angle;
 }
 
-void motorMaxAnglesCallback(const motor_angles_msg::MotorAngles::ConstPtr& motorMaxAngles, Eigen::VectorXd& motorMaxAnglesCache, bool& hasReceivedMotorMaxAngles)
+void motorMaxAnglesCallback(const motor_angles_msg::msg::MotorAngles::ConstSharedPtr& motorMaxAngles, Eigen::VectorXd& motorMaxAnglesCache, bool& hasReceivedMotorMaxAngles)
 {
     hasReceivedMotorMaxAngles = true;
     motorMaxAnglesCache << motorMaxAngles->proximal_pan_angle, motorMaxAngles->proximal_tilt_angle, motorMaxAngles->distal_pan_angle, motorMaxAngles->distal_tilt_angle;
@@ -598,21 +597,20 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d endRotation;
     Pose currentTouchPose;
-    geometry_msgs::PoseStamped currentUR5EPoseStamped;
+    geometry_msgs::msg::PoseStamped currentUR5EPoseStamped;
 
     Pose touchPoseDelta;
 
-    ros::init(argc, argv, "micro_module_control");
-    ros::NodeHandle nodeHandle;
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<rclcpp::Node>("micro_module_control");
 
-    ros::Subscriber touchStateSubscriber = nodeHandle.subscribe<omni_msgs::OmniState>(
+    auto touchStateSubscriber = node->create_subscription<omni_msgs::msg::OmniState>(
         "/phantom/state",
-        1,
-        boost::bind(
-            &touchStateCallback,
-            _1,
-            boost::ref(currentTouchPose)
-        )
+        rclcpp::QoS(1),
+        [&](const omni_msgs::msg::OmniState::ConstSharedPtr omniState)
+        {
+            touchStateCallback(omniState, currentTouchPose);
+        }
     );
 
     bool isGreyButtonPressed = false;
@@ -627,54 +625,62 @@ int main(int argc, char **argv)
     Eigen::VectorXd motorMinAngles(4);
     Eigen::VectorXd motorMaxAngles(4);
 
-    ros::Subscriber touchButtonSubscriber = nodeHandle.subscribe<omni_msgs::OmniButtonEvent>(
+    auto touchButtonSubscriber = node->create_subscription<omni_msgs::msg::OmniButtonEvent>(
         "/phantom/button",
-        1,
-        boost::bind(
-            &touchButtonCallback,
-            _1,
-            boost::ref(isGreyButtonPressed),
-            boost::ref(isWhiteButtonPressed),
-            boost::ref(currentTouchPose),
-            boost::ref(touchOriginPose)
-        )
+        rclcpp::QoS(1),
+        [&](const omni_msgs::msg::OmniButtonEvent::ConstSharedPtr omniButtonStates)
+        {
+            touchButtonCallback(
+                omniButtonStates,
+                isGreyButtonPressed,
+                isWhiteButtonPressed,
+                currentTouchPose,
+                touchOriginPose
+            );
+        }
     );
 
-    ros::Subscriber motorStatesSubscriber = nodeHandle.subscribe<motor_angles_msg::MotorAngles>(
+    auto motorStatesSubscriber = node->create_subscription<motor_angles_msg::msg::MotorAngles>(
         "micro_module_motor_states",
-        1,
-        boost::bind(
-            &motorStatesCallback,
-            _1,
-            boost::ref(motorStates),
-            boost::ref(motorCommands),
-            boost::ref(hasReceivedMotorStates)
-        )
+        rclcpp::QoS(1),
+        [&](const motor_angles_msg::msg::MotorAngles::ConstSharedPtr motorStatesMsg)
+        {
+            motorStatesCallback(
+                motorStatesMsg,
+                motorStates,
+                motorCommands,
+                hasReceivedMotorStates
+            );
+        }
     );
 
-    ros::Subscriber motorMinAnglesSubscriber = nodeHandle.subscribe<motor_angles_msg::MotorAngles>(
+    auto motorMinAnglesSubscriber = node->create_subscription<motor_angles_msg::msg::MotorAngles>(
         "micro_module_motor_min_angles",
-        1,
-        boost::bind(
-            &motorMinAnglesCallback,
-            _1,
-            boost::ref(motorMinAngles),
-            boost::ref(hasReceivedMotorMinAngles)
-        )
+        rclcpp::QoS(1),
+        [&](const motor_angles_msg::msg::MotorAngles::ConstSharedPtr motorMinAnglesMsg)
+        {
+            motorMinAnglesCallback(
+                motorMinAnglesMsg,
+                motorMinAngles,
+                hasReceivedMotorMinAngles
+            );
+        }
     );
 
-    ros::Subscriber motorMaxAnglesSubscriber = nodeHandle.subscribe<motor_angles_msg::MotorAngles>(
+    auto motorMaxAnglesSubscriber = node->create_subscription<motor_angles_msg::msg::MotorAngles>(
         "micro_module_motor_max_angles",
-        1,
-        boost::bind(
-            &motorMaxAnglesCallback,
-            _1,
-            boost::ref(motorMaxAngles),
-            boost::ref(hasReceivedMotorMaxAngles)
-        )
+        rclcpp::QoS(1),
+        [&](const motor_angles_msg::msg::MotorAngles::ConstSharedPtr motorMaxAnglesMsg)
+        {
+            motorMaxAnglesCallback(
+                motorMaxAnglesMsg,
+                motorMaxAngles,
+                hasReceivedMotorMaxAngles
+            );
+        }
     );
 
-    ros::Publisher motorCommandsPublisher = nodeHandle.advertise<motor_angles_msg::MotorAngles>("micro_module_motor_command", 1);
+    auto motorCommandsPublisher = node->create_publisher<motor_angles_msg::msg::MotorAngles>("micro_module_motor_command", rclcpp::QoS(1));
 
     ManipulatorModule proximal(
         true,
@@ -705,7 +711,7 @@ int main(int argc, char **argv)
     distal.SetTotalPanAngle(0.0);
     distal.SetTotalTiltAngle(0.0);
 
-    ROS_INFO("Proximal parameters:\n\tcurvature radius: %.6f\n\tnum pan joints: %d\n\thalf curvature angle: %.6f\n\tpan joint angle: %.6f\n\tnum tilt joints: %d\n\ttilt joint angle: %.6f\n\tpan central separation: %.6f\n\ttilt central separation: %.6f\n\tjoint separation distance: %.6f\n\tisolated pan length delta: %.6f\n\tisolated tilt length delta: %.6f",
+    RCLCPP_INFO(node->get_logger(), "Proximal parameters:\n\tcurvature radius: %.6f\n\tnum pan joints: %d\n\thalf curvature angle: %.6f\n\tpan joint angle: %.6f\n\tnum tilt joints: %d\n\ttilt joint angle: %.6f\n\tpan central separation: %.6f\n\ttilt central separation: %.6f\n\tjoint separation distance: %.6f\n\tisolated pan length delta: %.6f\n\tisolated tilt length delta: %.6f",
         proximal.GetCurvatureRadius(),
         proximal.GetNumPanJoints(),
         proximal.GetHalfCurvatureAngle(),
@@ -719,7 +725,7 @@ int main(int argc, char **argv)
         proximal.GetIsolatedTiltLengthDelta()
     );
 
-    ROS_INFO("Distal parameters:\n\tcurvature radius: %.6f\n\tnum pan joints: %d\n\thalf curvature angle: %.6f\n\tpan joint angle: %.6f\n\tnum tilt joints: %d\n\ttilt joint angle: %.6f\n\tpan central separation: %.6f\n\ttilt central separation: %.6f\n\tjoint separation distance: %.6f\n\tisolated pan length delta: %.6f\n\tisolated tilt length delta: %.6f",
+    RCLCPP_INFO(node->get_logger(), "Distal parameters:\n\tcurvature radius: %.6f\n\tnum pan joints: %d\n\thalf curvature angle: %.6f\n\tpan joint angle: %.6f\n\tnum tilt joints: %d\n\ttilt joint angle: %.6f\n\tpan central separation: %.6f\n\ttilt central separation: %.6f\n\tjoint separation distance: %.6f\n\tisolated pan length delta: %.6f\n\tisolated tilt length delta: %.6f",
         distal.GetCurvatureRadius(),
         distal.GetNumPanJoints(),
         distal.GetHalfCurvatureAngle(),
@@ -761,9 +767,9 @@ int main(int argc, char **argv)
     Eigen::Vector4d jointPositions;
     jointPositions << proximal.GetPanJointAngle(), proximal.GetTiltJointAngle(), distal.GetPanJointAngle(), distal.GetTiltJointAngle();
 
-    ros::Rate rate(60);
+    rclcpp::Rate rate(60);
 
-    while (ros::ok())
+    while (rclcpp::ok())
     {
         TransformVector jointTransforms = GetJointTransforms(baseTransform, endEffectorTransform, proximal, distal);
 
@@ -779,16 +785,18 @@ int main(int argc, char **argv)
                 tf2::Quaternion currentTouchOrientation = touchToManipulatorRotation * currentTouchPose.orientation;
                 tf2::Quaternion touchOriginOrientation = touchToManipulatorRotation * touchOriginPose.orientation;
 
-                ROS_INFO("touch orienation: %s", QuaternionToString(currentTouchOrientation).c_str());
-                ROS_INFO("touch origin orientation: %s", QuaternionToString(touchOriginOrientation).c_str());
+                RCLCPP_INFO(node->get_logger(), "touch orienation: %s", QuaternionToString(currentTouchOrientation).c_str());
+                RCLCPP_INFO(node->get_logger(), "touch origin orientation: %s", QuaternionToString(touchOriginOrientation).c_str());
 
                 // Update Touch orientation delta (in manipulator coordinate frame)
                 touchPoseDelta.orientation = (touchToManipulatorRotation * currentTouchPose.orientation) * (touchToManipulatorRotation * touchOriginPose.orientation).inverse();
 
-                ROS_INFO_THROTTLE(1, "Touch orientation delta: %s", QuaternionToString(touchPoseDelta.orientation).c_str());
+                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Touch orientation delta: %s", QuaternionToString(touchPoseDelta.orientation).c_str());
 
-                ROS_INFO_THROTTLE(
-                    1,
+                RCLCPP_INFO_THROTTLE(
+                    node->get_logger(),
+                    *node->get_clock(),
+                    1000,
                     "Current Maniulator Orientation: %s, Manipulator origin orientation: %s",
                     QuaternionToString(manipulatorOrientation).c_str(),
                     QuaternionToString(manipulatorOriginOrientation).c_str()
@@ -799,15 +807,15 @@ int main(int argc, char **argv)
 
                 manipulatorOrientation = EigenRotationMatrixToTF2Quaternion(endRotation);
 
-                ROS_INFO("Manipulator orientation: %s", QuaternionToString(manipulatorOrientation).c_str());
+                RCLCPP_INFO(node->get_logger(), "Manipulator orientation: %s", QuaternionToString(manipulatorOrientation).c_str());
 
                 manipulatorOriginOrientation = EigenRotationMatrixToTF2Quaternion(endOriginRotation);
 
-                ROS_INFO("Manipulator origin orientation: %s", QuaternionToString(manipulatorOriginOrientation).c_str());
+                RCLCPP_INFO(node->get_logger(), "Manipulator origin orientation: %s", QuaternionToString(manipulatorOriginOrientation).c_str());
 
                 manipulatorOrientationDelta = manipulatorOrientation * manipulatorOriginOrientation.inverse();
 
-                ROS_INFO("Manipulator orientation delta: %s", QuaternionToString(manipulatorOrientationDelta).c_str());
+                RCLCPP_INFO(node->get_logger(), "Manipulator orientation delta: %s", QuaternionToString(manipulatorOrientationDelta).c_str());
 
                 // Final movement orientation delta is difference between Touch and manipulator orientation deltas
                 movementOrientationDelta = manipulatorOrientation.slerp(
@@ -815,7 +823,7 @@ int main(int argc, char **argv)
                     MANIPULATOR_ROTATION_SCALE_FACTOR
                 );
 
-                ROS_INFO("Movement orientation delta: %s", QuaternionToString(movementOrientationDelta).c_str());
+                RCLCPP_INFO(node->get_logger(), "Movement orientation delta: %s", QuaternionToString(movementOrientationDelta).c_str());
 
                 movementRotation = tf2QuaternionToEigenRotationMatrix(movementOrientationDelta);
 
@@ -878,15 +886,15 @@ int main(int argc, char **argv)
                 motorCommands(2) = clamp(motorCommands(2), motorMinAngles(2), motorMaxAngles(2));
                 motorCommands(3) = clamp(motorCommands(3), motorMinAngles(3), motorMaxAngles(3));
 
-                ROS_INFO("Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
+                RCLCPP_INFO(node->get_logger(), "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
 
-                motor_angles_msg::MotorAngles motorCommandsMsg;
+                motor_angles_msg::msg::MotorAngles motorCommandsMsg;
                 motorCommandsMsg.proximal_pan_angle = motorCommands(0);
                 motorCommandsMsg.proximal_tilt_angle = motorCommands(1);
                 motorCommandsMsg.distal_pan_angle = motorCommands(2);
                 motorCommandsMsg.distal_tilt_angle = motorCommands(3);
 
-                motorCommandsPublisher.publish(motorCommandsMsg);
+                motorCommandsPublisher->publish(motorCommandsMsg);
             }
             rate.sleep();
         }
@@ -895,8 +903,10 @@ int main(int argc, char **argv)
             endOriginRotation = endRotation;
         }
 
-        ros::spinOnce();
+        rclcpp::spin_some(node);
     }
+
+    rclcpp::shutdown();
 
     return 0;
 }

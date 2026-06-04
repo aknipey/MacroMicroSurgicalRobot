@@ -3,34 +3,22 @@
 #include <vector>
 #include <array>
 #include <math.h>
-#include "ros/ros.h"
-#include "std_msgs/Header.h"
-#include "std_msgs/String.h"
-#include "std_msgs/Int32.h"
-#include "geometry_msgs/Pose.h"
-#include "geometry_msgs/Vector3.h"
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <controller_manager_msgs/LoadController.h>
-#include <controller_manager_msgs/SwitchController.h>
-#include "omni_msgs/OmniState.h"
-#include "omni_msgs/OmniButtonEvent.h"
-#include "sensor_msgs/JointState.h"
-#include "actionlib/client/simple_action_client.h"
-#include "cartesian_control_msgs/FollowCartesianTrajectoryAction.h"
-#include "cartesian_control_msgs/FollowCartesianTrajectoryGoal.h"
-#include "cartesian_control_msgs/CartesianTrajectoryPoint.h"
-#include "boost/bind.hpp"
-#include "boost/thread.hpp"
 #include <memory>
-#include <kdl_parser/kdl_parser.hpp>
-#include <kdl/chain.hpp>
-#include <kdl/chainfksolverpos_recursive.hpp>
-#include <kdl/frames_io.hpp>
-#include <tf2_ros/transform_listener.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <visualization_msgs/Marker.h>
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/int32.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "omni_msgs/msg/omni_state.hpp"
+#include "omni_msgs/msg/omni_button_event.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "tf2_ros/transform_listener.hpp"
+#include "tf2/LinearMath/Quaternion.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "visualization_msgs/msg/marker.hpp"
 
 // Touch position coordinates are output in millimetres
 const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
@@ -88,13 +76,13 @@ tf2::Quaternion QuaternionLogarithm(tf2::Quaternion quaternion)
 }
 
 tf2::Quaternion GetAngularVelocitySimple(
-    const geometry_msgs::PoseStamped& prevPose,
-    const geometry_msgs::PoseStamped& currentPose,
+    const geometry_msgs::msg::PoseStamped& prevPose,
+    const geometry_msgs::msg::PoseStamped& currentPose,
     const double dt
 )
 {
     // Time difference between the two pose measurements
-    double poseDt = (currentPose.header.stamp - prevPose.header.stamp).toSec();
+    double poseDt = (rclcpp::Time(currentPose.header.stamp) - rclcpp::Time(prevPose.header.stamp)).seconds();
 
     // Convert orientations from quaternion messages to tf2 quaternions
     tf2::Quaternion prevOrientation, currentOrientation;
@@ -117,12 +105,12 @@ tf2::Quaternion GetAngularVelocitySimple(
 
 // Function to calculate the average angular velocity from two timestamped poses and the desired time delta in seconds
 tf2::Quaternion GetAngularVelocity(
-    const geometry_msgs::PoseStamped& prevPose,
-    const geometry_msgs::PoseStamped& currentPose
+    const geometry_msgs::msg::PoseStamped& prevPose,
+    const geometry_msgs::msg::PoseStamped& currentPose
 )
 {
     // Time difference between the two pose measurements
-    double poseDt = (currentPose.header.stamp - prevPose.header.stamp).toSec();
+    double poseDt = (rclcpp::Time(currentPose.header.stamp) - rclcpp::Time(prevPose.header.stamp)).seconds();
 
     // Convert orientations from quaternion messages to tf2 quaternions
     tf2::Quaternion prevOrientation, currentOrientation;
@@ -138,7 +126,7 @@ tf2::Quaternion GetAngularVelocity(
     return output;
 }
 
-void TransformStampedToPoseStamped(const geometry_msgs::TransformStamped& transformStamped, geometry_msgs::PoseStamped& poseStamped)
+void TransformStampedToPoseStamped(const geometry_msgs::msg::TransformStamped& transformStamped, geometry_msgs::msg::PoseStamped& poseStamped)
 {
     poseStamped.header = transformStamped.header;
 
@@ -149,7 +137,7 @@ void TransformStampedToPoseStamped(const geometry_msgs::TransformStamped& transf
     poseStamped.pose.orientation = transformStamped.transform.rotation;
 }
 
-std::string QuaternionToString(geometry_msgs::Quaternion quaternion)
+std::string QuaternionToString(geometry_msgs::msg::Quaternion quaternion)
 {
     std::stringstream output;
 
@@ -181,7 +169,7 @@ std::string QuaternionToString(tf2::Quaternion quaternion)
     return output.str();
 }
 
-std::string PoseToString(geometry_msgs::Pose pose, const double position_unit_scale_factor)
+std::string PoseToString(geometry_msgs::msg::Pose pose, const double position_unit_scale_factor)
 {
     std::stringstream output;
 
@@ -198,7 +186,7 @@ std::string PoseToString(geometry_msgs::Pose pose, const double position_unit_sc
     return output.str();
 }
 
-std::string Vector3ToString(geometry_msgs::Vector3 vector3)
+std::string Vector3ToString(geometry_msgs::msg::Vector3 vector3)
 {
     std::stringstream output;
 
@@ -214,9 +202,9 @@ std::string Vector3ToString(geometry_msgs::Vector3 vector3)
 }
 
 void poseCallback(
-    const geometry_msgs::PoseStamped::ConstPtr& poseStamped,
-    geometry_msgs::PoseStamped& currentPoseStamped,
-    geometry_msgs::PoseStamped& prevPoseStamped,
+    const geometry_msgs::msg::PoseStamped::ConstSharedPtr& poseStamped,
+    geometry_msgs::msg::PoseStamped& currentPoseStamped,
+    geometry_msgs::msg::PoseStamped& prevPoseStamped,
     tf2::Quaternion& angularVelocity
 )
 {
@@ -224,19 +212,20 @@ void poseCallback(
     currentPoseStamped = *poseStamped;
 
     angularVelocity = GetAngularVelocity(prevPoseStamped, currentPoseStamped);
-    ROS_INFO("Received pose, stamp (%d.%d): %s", poseStamped->header.stamp.sec, poseStamped->header.stamp.nsec, PoseToString(poseStamped->pose, 1).c_str());
-    ROS_INFO("Angular velocity: %s", QuaternionToString(angularVelocity).c_str());
+    RCLCPP_INFO(rclcpp::get_logger("android_pose_subscriber"), "Received pose, stamp (%d.%d): %s", poseStamped->header.stamp.sec, poseStamped->header.stamp.nanosec, PoseToString(poseStamped->pose, 1).c_str());
+    RCLCPP_INFO(rclcpp::get_logger("android_pose_subscriber"), "Angular velocity: %s", QuaternionToString(angularVelocity).c_str());
 }
 
 void touchStateCallback(
-    const omni_msgs::OmniState::ConstPtr& omniState,
-    geometry_msgs::PoseStamped& poseStamped,
-    geometry_msgs::PoseStamped& prevPoseStamped,
+    rclcpp::Node::SharedPtr node,
+    const omni_msgs::msg::OmniState::ConstSharedPtr& omniState,
+    geometry_msgs::msg::PoseStamped& poseStamped,
+    geometry_msgs::msg::PoseStamped& prevPoseStamped,
     tf2::Quaternion& angularVelocity
 )
 {
-    prevPoseStamped = geometry_msgs::PoseStamped(poseStamped);
-    poseStamped.header.stamp = ros::Time::now();
+    prevPoseStamped = geometry_msgs::msg::PoseStamped(poseStamped);
+    poseStamped.header.stamp = node->now();
     poseStamped.pose = omniState->pose;
 
     // Scale touch position units to metres
@@ -244,15 +233,15 @@ void touchStateCallback(
     poseStamped.pose.position.y = TOUCH_POSITION_UNIT_SCALE_FACTOR * omniState->pose.position.y;
     poseStamped.pose.position.z = TOUCH_POSITION_UNIT_SCALE_FACTOR * omniState->pose.position.z;
 
-    ROS_INFO_THROTTLE(1, "Current Touch Pose: %s, Prev Touch Pose: %s", PoseToString(poseStamped.pose, 1).c_str(), PoseToString(prevPoseStamped.pose, 1).c_str());
+    RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Current Touch Pose: %s, Prev Touch Pose: %s", PoseToString(poseStamped.pose, 1).c_str(), PoseToString(prevPoseStamped.pose, 1).c_str());
 
     angularVelocity = GetAngularVelocity(prevPoseStamped, poseStamped);
 
-    ROS_INFO_THROTTLE(1, "Current Touch Angular Velocity: x: %.3f, y: %.3f, z: %.3f, w: %.3f", angularVelocity.getX(), angularVelocity.getY(), angularVelocity.getZ(), angularVelocity.getW());
+    RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Current Touch Angular Velocity: x: %.3f, y: %.3f, z: %.3f, w: %.3f", angularVelocity.getX(), angularVelocity.getY(), angularVelocity.getZ(), angularVelocity.getW());
 
-    geometry_msgs::Vector3 current = omniState->current;
+    geometry_msgs::msg::Vector3 current = omniState->current;
 
-    // ROS_INFO_THROTTLE(1, "Touch State:\n\tPose: %s\n\tCurrent: %s\n\tVelocity: %s",
+    // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Touch State:\n\tPose: %s\n\tCurrent: %s\n\tVelocity: %s",
     //     PoseToString(omniState->pose, TOUCH_POSITION_UNIT_SCALE_FACTOR).c_str(),
     //     Vector3ToString(omniState->current).c_str(),
     //     Vector3ToString(omniState->velocity).c_str()
@@ -261,8 +250,8 @@ void touchStateCallback(
 
 int main(int argc, char **argv)
 {
-    geometry_msgs::PoseStamped prevPoseStamped;
-    geometry_msgs::PoseStamped currentPoseStamped;
+    geometry_msgs::msg::PoseStamped prevPoseStamped;
+    geometry_msgs::msg::PoseStamped currentPoseStamped;
     tf2::Quaternion currentAngularVelocity;
 
     prevPoseStamped.pose.orientation.w = 0.5;
@@ -280,43 +269,48 @@ int main(int argc, char **argv)
     currentAngularVelocity.setY(0.5);
     currentAngularVelocity.setZ(0.5);
 
-    ros::init(argc, argv, "android_pose_subscriber");
+    rclcpp::init(argc, argv);
 
-    ros::NodeHandle nodeHandle;
+    auto node = std::make_shared<rclcpp::Node>("android_pose_subscriber");
 
-    // ros::Subscriber poseSubscriber = nodeHandle.subscribe<geometry_msgs::PoseStamped>(
+    // auto poseSubscriber = node->create_subscription<geometry_msgs::msg::PoseStamped>(
     //     "android_pose",
-    //     1,
-    //     boost::bind(
-    //         &poseCallback,
-    //         _1,
-    //         boost::ref(currentPoseStamped),
-    //         boost::ref(prevPoseStamped),
-    //         boost::ref(currentAngularVelocity)
-    //     )
+    //     rclcpp::QoS(1),
+    //     [&](const geometry_msgs::msg::PoseStamped::ConstSharedPtr poseStamped)
+    //     {
+    //         poseCallback(
+    //             poseStamped,
+    //             currentPoseStamped,
+    //             prevPoseStamped,
+    //             currentAngularVelocity
+    //         );
+    //     }
     // );
 
-    ros::Subscriber touchStateSubscriber = nodeHandle.subscribe<omni_msgs::OmniState>(
+    auto touchStateSubscriber = node->create_subscription<omni_msgs::msg::OmniState>(
         "/phantom/state",
-        1,
-        boost::bind(
-            &touchStateCallback,
-            _1,
-            boost::ref(currentPoseStamped),
-            boost::ref(prevPoseStamped),
-            boost::ref(currentAngularVelocity)
-        )
+        rclcpp::QoS(1),
+        [&](const omni_msgs::msg::OmniState::ConstSharedPtr omniState)
+        {
+            touchStateCallback(
+                node,
+                omniState,
+                currentPoseStamped,
+                prevPoseStamped,
+                currentAngularVelocity
+            );
+        }
     );
 
-    ros::Publisher vis_pub = nodeHandle.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+    auto vis_pub = node->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", rclcpp::QoS(10));
 
-    visualization_msgs::Marker marker;
+    visualization_msgs::msg::Marker marker;
     marker.header.frame_id = "base_link";
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time(0, 0);
     marker.ns = "my_namespace";
     marker.id = 0;
-    marker.type = visualization_msgs::Marker::ARROW;
-    marker.action = visualization_msgs::Marker::ADD;
+    marker.type = visualization_msgs::msg::Marker::ARROW;
+    marker.action = visualization_msgs::msg::Marker::ADD;
     marker.pose.position.x = 1;
     marker.pose.position.y = 1;
     marker.pose.position.z = 1;
@@ -331,25 +325,25 @@ int main(int argc, char **argv)
     marker.color.r = 0.0;
     marker.color.g = 1.0;
     marker.color.b = 0.0;
-    vis_pub.publish(marker);
+    vis_pub->publish(marker);
 
-    marker.action = visualization_msgs::Marker::MODIFY;
+    marker.action = visualization_msgs::msg::Marker::MODIFY;
 
-    ros::Rate rate(100);
+    rclcpp::Rate rate(100);
 
-    ROS_INFO("Starting subscriber");
+    RCLCPP_INFO(node->get_logger(), "Starting subscriber");
 
-    while (ros::ok())
+    while (rclcpp::ok())
     {
         if (IsValidQuaternion(currentAngularVelocity))
         {
             tf2::Quaternion markerOrientation;
             tf2::fromMsg(marker.pose.orientation, markerOrientation);
-            ROS_INFO_THROTTLE(1, "Prev marker orientation: %s", QuaternionToString(marker.pose.orientation).c_str());
-            geometry_msgs::Quaternion newOrientation = tf2::toMsg((currentAngularVelocity * 1e-5 * markerOrientation).normalize());
-            ROS_INFO_THROTTLE(1, "New marker orientation: %s", QuaternionToString(newOrientation).c_str());
+            RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Prev marker orientation: %s", QuaternionToString(marker.pose.orientation).c_str());
+            geometry_msgs::msg::Quaternion newOrientation = tf2::toMsg((currentAngularVelocity * 1e-5 * markerOrientation).normalize());
+            RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "New marker orientation: %s", QuaternionToString(newOrientation).c_str());
             marker.pose.orientation = newOrientation;
-            vis_pub.publish(marker);
+            vis_pub->publish(marker);
 
             currentAngularVelocity.setX(0);
             currentAngularVelocity.setY(0);
@@ -357,9 +351,11 @@ int main(int argc, char **argv)
             currentAngularVelocity.setW(1);
         }
 
-        ros::spinOnce();
+        rclcpp::spin_some(node);
         rate.sleep();
     }
+
+    rclcpp::shutdown();
 
     return 0;
 }

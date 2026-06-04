@@ -3,35 +3,32 @@
 #include <vector>
 #include <array>
 #include <math.h>
-#include "ros/ros.h"
-#include "std_msgs/Header.h"
-#include "std_msgs/String.h"
-#include "std_msgs/Int32.h"
-#include "geometry_msgs/Pose.h"
-#include "geometry_msgs/Vector3.h"
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <controller_manager_msgs/LoadController.h>
-#include <controller_manager_msgs/SwitchController.h>
-#include "omni_msgs/OmniState.h"
-#include "omni_msgs/OmniButtonEvent.h"
-#include "sensor_msgs/JointState.h"
-#include "actionlib/client/simple_action_client.h"
-#include "cartesian_control_msgs/FollowCartesianTrajectoryAction.h"
-#include "cartesian_control_msgs/FollowCartesianTrajectoryGoal.h"
-#include "cartesian_control_msgs/CartesianTrajectoryPoint.h"
-#include "boost/bind.hpp"
-#include "boost/thread.hpp"
 #include <memory>
-#include <kdl_parser/kdl_parser.hpp>
-#include <kdl/chain.hpp>
-#include <kdl/chainfksolverpos_recursive.hpp>
-#include <kdl/frames_io.hpp>
-#include <tf2_ros/transform_listener.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <rosbag/bag.h>
+#include <chrono>
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/int32.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/point.hpp"
+#include "controller_manager_msgs/srv/load_controller.hpp"
+#include "controller_manager_msgs/srv/switch_controller.hpp"
+#include "omni_msgs/msg/omni_state.hpp"
+#include "omni_msgs/msg/omni_button_event.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "cartesian_control_msgs/action/follow_cartesian_trajectory.hpp"
+#include "cartesian_control_msgs/msg/cartesian_trajectory_point.hpp"
+#include "tf2_ros/transform_listener.hpp"
+#include "tf2_ros/buffer.hpp"
+#include "tf2/LinearMath/Quaternion.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "../include/Pose.hpp"
+
+using namespace std::chrono_literals;
 
 // Touch position coordinates are output in millimetres, must convert to metres
 const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
@@ -61,7 +58,7 @@ const std::string UR5E_CONTROLLER_NAME = "pose_based_cartesian_traj_controller";
 
 const std::string UR5E_ACTION_CLIENT_NAME = "pose_based_cartesian_traj_controller/follow_cartesian_trajectory";
 
-typedef actionlib::SimpleActionClient<cartesian_control_msgs::FollowCartesianTrajectoryAction> CartesianActionClient;
+using FollowCartesianTrajectory = cartesian_control_msgs::action::FollowCartesianTrajectory;
 
 bool IsZero(double value)
 {
@@ -74,7 +71,7 @@ bool IsValidQuaternion(tf2::Quaternion quaternion)
            (IsZero(quaternion.getX()) && IsZero(quaternion.getY()) && IsZero(quaternion.getZ()) && IsZero(quaternion.getW())));
 }
 
-void TransformStampedToPoseStamped(const geometry_msgs::TransformStamped& transformStamped, geometry_msgs::PoseStamped& poseStamped)
+void TransformStampedToPoseStamped(const geometry_msgs::msg::TransformStamped& transformStamped, geometry_msgs::msg::PoseStamped& poseStamped)
 {
     poseStamped.header = transformStamped.header;
 
@@ -108,7 +105,7 @@ std::string PoseToString(Pose pose, const double position_unit_scale_factor)
     return output.str();
 }
 
-std::string PoseToString(geometry_msgs::Pose pose, const double position_unit_scale_factor)
+std::string PoseToString(geometry_msgs::msg::Pose pose, const double position_unit_scale_factor)
 {
     std::stringstream output;
 
@@ -148,7 +145,7 @@ std::string QuaternionToString(tf2::Quaternion quaternion)
     return output.str();
 }
 
-std::string Vector3ToString(geometry_msgs::Vector3 vector3)
+std::string Vector3ToString(geometry_msgs::msg::Vector3 vector3)
 {
     std::stringstream output;
 
@@ -163,9 +160,9 @@ std::string Vector3ToString(geometry_msgs::Vector3 vector3)
     return output.str();
 }
 
-geometry_msgs::Point Vector3ToPoint(tf2::Vector3 vector)
+geometry_msgs::msg::Point Vector3ToPoint(tf2::Vector3 vector)
 {
-    geometry_msgs::Point point;
+    geometry_msgs::msg::Point point;
     point.x = vector.getX();
     point.y = vector.getY();
     point.z = vector.getZ();
@@ -174,7 +171,7 @@ geometry_msgs::Point Vector3ToPoint(tf2::Vector3 vector)
 }
 
 void touchStateCallback(
-    const omni_msgs::OmniState::ConstPtr& omniState,
+    const omni_msgs::msg::OmniState::ConstSharedPtr& omniState,
     Pose& currentPose
 )
 {
@@ -185,11 +182,11 @@ void touchStateCallback(
 
     tf2::fromMsg(omniState->pose.orientation, currentPose.orientation);
 
-    geometry_msgs::Vector3 current = omniState->current;
+    geometry_msgs::msg::Vector3 current = omniState->current;
 }
 
 void touchButtonCallback(
-    const omni_msgs::OmniButtonEvent::ConstPtr& omniButtonStates,
+    const omni_msgs::msg::OmniButtonEvent::ConstSharedPtr& omniButtonStates,
     bool& isGreyButtonPressed,
     bool& isWhiteButtonPressed,
     Pose& currentUR5EPose,
@@ -212,40 +209,48 @@ void touchButtonCallback(
     isWhiteButtonPressed = (bool)omniButtonStates->white_button;
 }
 
-bool LoadController(ros::NodeHandle& nodeHandle, const std::string controllerName)
+bool LoadController(rclcpp::Node::SharedPtr node, const std::string controllerName)
 {
     // Create a client for the load_controller service
-    ros::ServiceClient loadControllerClient = nodeHandle.serviceClient<controller_manager_msgs::LoadController>("/controller_manager/load_controller");
+    auto loadControllerClient = node->create_client<controller_manager_msgs::srv::LoadController>("/controller_manager/load_controller");
 
     // Create a service request
-    controller_manager_msgs::LoadController loadController;
-    loadController.request.name = controllerName;
+    auto loadController = std::make_shared<controller_manager_msgs::srv::LoadController::Request>();
+    loadController->name = controllerName;
+
+    if (!loadControllerClient->wait_for_service(5s))
+    {
+        RCLCPP_ERROR(node->get_logger(), "Failed to call load_controller service");
+        return false;
+    }
 
     // Call the service to load the controller
-    if (loadControllerClient.call(loadController))
+    auto future = loadControllerClient->async_send_request(loadController);
+
+    if (rclcpp::spin_until_future_complete(node, future) == rclcpp::FutureReturnCode::SUCCESS)
     {
-        if (loadController.response.ok)
+        if (future.get()->ok)
         {
-            ROS_INFO("Successfully loaded controller: %s", controllerName.c_str());
+            RCLCPP_INFO(node->get_logger(), "Successfully loaded controller: %s", controllerName.c_str());
             return true;
         }
 
-        ROS_ERROR("Failed to load controller: %s", controllerName.c_str());
+        RCLCPP_ERROR(node->get_logger(), "Failed to load controller: %s", controllerName.c_str());
     }
     else
     {
-        ROS_ERROR("Failed to call load_controller service");
+        RCLCPP_ERROR(node->get_logger(), "Failed to call load_controller service");
     }
 
     return false;
 }
 
-bool SwitchController(ros::NodeHandle& nodeHandle, const std::string controllerName)
+bool SwitchController(rclcpp::Node::SharedPtr node, const std::string controllerName)
 {
-    ros::ServiceClient switchControllerClient = nodeHandle.serviceClient<controller_manager_msgs::SwitchController>("controller_manager/switch_controller");
+    auto switchControllerClient = node->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller");
 
-    controller_manager_msgs::SwitchController switchController;
-    switchController.request.stop_controllers = ros::V_string
+    auto switchController = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+    switchController->deactivate_controllers = std::vector<std::string>
     {
         "scaled_pos_joint_traj_controller",
         "scaled_vel_joint_traj_controller",
@@ -257,22 +262,30 @@ bool SwitchController(ros::NodeHandle& nodeHandle, const std::string controllerN
         "joint_group_vel_controller",
         "twist_controller"
     };
-    switchController.request.start_controllers.push_back(controllerName);
-    switchController.request.strictness = controller_manager_msgs::SwitchController::Request::BEST_EFFORT;
+    switchController->activate_controllers.push_back(controllerName);
+    switchController->strictness = controller_manager_msgs::srv::SwitchController::Request::BEST_EFFORT;
 
-    if (switchControllerClient.call(switchController))
+    if (!switchControllerClient->wait_for_service(5s))
     {
-        ROS_INFO("Controller started");
+        RCLCPP_ERROR(node->get_logger(), "Failed to start controller");
+        return false;
+    }
+
+    auto future = switchControllerClient->async_send_request(switchController);
+
+    if (rclcpp::spin_until_future_complete(node, future) == rclcpp::FutureReturnCode::SUCCESS)
+    {
+        RCLCPP_INFO(node->get_logger(), "Controller started");
         return true;
     }
 
-    ROS_ERROR("Failed to start controller");
+    RCLCPP_ERROR(node->get_logger(), "Failed to start controller");
     return false;
 }
 
 void UpdateMovementGoal(
-    cartesian_control_msgs::FollowCartesianTrajectoryGoal& goal,
-    cartesian_control_msgs::CartesianTrajectoryPoint& targetPoint,
+    FollowCartesianTrajectory::Goal& goal,
+    cartesian_control_msgs::msg::CartesianTrajectoryPoint& targetPoint,
     Pose& currentUR5EPose,
     Pose& movementPoseDelta
 )
@@ -297,7 +310,7 @@ void UpdateMovementGoal(
             targetPoint.pose.orientation = tf2::toMsg(currentUR5EPose.orientation);
         }
 
-        targetPoint.time_from_start = ros::Duration(i * UR5E_CONTROL_TIME_INCREMENT);
+        targetPoint.time_from_start = rclcpp::Duration::from_seconds(i * UR5E_CONTROL_TIME_INCREMENT);
 
         goal.trajectory.points.push_back(targetPoint);
     }
@@ -317,7 +330,7 @@ int main(int argc, char **argv)
 
     Pose currentTouchPose;
     Pose currentUR5EPose;
-    geometry_msgs::PoseStamped currentUR5EPoseStamped;
+    geometry_msgs::msg::PoseStamped currentUR5EPoseStamped;
 
     Pose touchPoseDelta;
     Pose ur5ePoseDelta;
@@ -327,71 +340,71 @@ int main(int argc, char **argv)
     tf2::Quaternion touchToUR5ERotation;
     touchToUR5ERotation.setRPY(M_PI_2, 0, M_PI_2);
 
-    ros::init(argc, argv, "ur5e_control");
+    rclcpp::init(argc, argv);
 
-    ros::NodeHandle nodeHandle;
+    auto node = std::make_shared<rclcpp::Node>("ur5e_control");
 
     // Load and switch to the desired UR5e position controller
-    LoadController(nodeHandle, UR5E_CONTROLLER_NAME);
+    LoadController(node, UR5E_CONTROLLER_NAME);
 
-    if (!SwitchController(nodeHandle, UR5E_CONTROLLER_NAME))
+    if (!SwitchController(node, UR5E_CONTROLLER_NAME))
     {
         // Failed to switch controller, exit program
+        rclcpp::shutdown();
         return -1;
     }
 
-    cartesian_control_msgs::FollowCartesianTrajectoryGoal goal;
-    cartesian_control_msgs::CartesianTrajectoryPoint targetPoint;
+    FollowCartesianTrajectory::Goal goal;
+    cartesian_control_msgs::msg::CartesianTrajectoryPoint targetPoint;
 
-    CartesianActionClient trajectoryClient(
-        UR5E_ACTION_CLIENT_NAME,
-        true
-    );
+    auto trajectoryClient = rclcpp_action::create_client<FollowCartesianTrajectory>(node, UR5E_ACTION_CLIENT_NAME);
 
     bool isGreyButtonPressed = false;
     bool isWhiteButtonPressed = false;
 
-    ros::Subscriber touchStateSubscriber = nodeHandle.subscribe<omni_msgs::OmniState>(
+    auto touchStateSubscriber = node->create_subscription<omni_msgs::msg::OmniState>(
         "/phantom/state",
-        1,
-        boost::bind(
-            &touchStateCallback,
-            _1,
-            boost::ref(currentTouchPose)
-        )
+        rclcpp::QoS(1),
+        [&](const omni_msgs::msg::OmniState::ConstSharedPtr omniState)
+        {
+            touchStateCallback(omniState, currentTouchPose);
+        }
     );
 
-    ros::Subscriber touchButtonSubscriber = nodeHandle.subscribe<omni_msgs::OmniButtonEvent>(
+    auto touchButtonSubscriber = node->create_subscription<omni_msgs::msg::OmniButtonEvent>(
         "/phantom/button",
-        1,
-        boost::bind(
-            &touchButtonCallback,
-            _1,
-            boost::ref(isGreyButtonPressed),
-            boost::ref(isWhiteButtonPressed),
-            boost::ref(currentUR5EPose),
-            boost::ref(ur5eOriginPose),
-            boost::ref(currentTouchPose),
-            boost::ref(touchOriginPose)
-        )
+        rclcpp::QoS(1),
+        [&](const omni_msgs::msg::OmniButtonEvent::ConstSharedPtr omniButtonStates)
+        {
+            touchButtonCallback(
+                omniButtonStates,
+                isGreyButtonPressed,
+                isWhiteButtonPressed,
+                currentUR5EPose,
+                ur5eOriginPose,
+                currentTouchPose,
+                touchOriginPose
+            );
+        }
     );
 
-    tf2_ros::Buffer tfBuffer;
+    tf2_ros::Buffer tfBuffer(node->get_clock());
     tf2_ros::TransformListener tfListener(tfBuffer);
 
-    while (ros::ok())
+    while (rclcpp::ok())
     {
         try
         {
-            TransformStampedToPoseStamped(tfBuffer.lookupTransform("base", "tool0_controller", ros::Time(0)), currentUR5EPoseStamped);
+            TransformStampedToPoseStamped(tfBuffer.lookupTransform("base", "tool0_controller", tf2::TimePointZero), currentUR5EPoseStamped);
 
             tf2::fromMsg(currentUR5EPoseStamped.pose.position, currentUR5EPose.position);
             tf2::fromMsg(currentUR5EPoseStamped.pose.orientation, currentUR5EPose.orientation);
         }
-        catch (tf2::TransformException& exception)
+        catch (const tf2::TransformException& exception)
         {
-            ROS_WARN_THROTTLE(1, "%s", exception.what());
-            ROS_WARN_THROTTLE(1, "Unable to find UR5e base to TCP transform");
+            RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "%s", exception.what());
+            RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Unable to find UR5e base to TCP transform");
+            rclcpp::spin_some(node);
             continue;
         }
 
@@ -399,7 +412,7 @@ int main(int argc, char **argv)
         // User is pressing the white button on the Touch
         // The current pose of the UR5e is not outdated
         if (isWhiteButtonPressed &&
-            (ros::Time::now() - currentUR5EPoseStamped.header.stamp) <= ros::Duration(UR5E_MAX_POSE_AGE)
+            (node->now() - rclcpp::Time(currentUR5EPoseStamped.header.stamp)) <= rclcpp::Duration::from_seconds(UR5E_MAX_POSE_AGE)
         )
         {
             // Update Touch position delta (in UR5E coordinate frame)
@@ -415,8 +428,10 @@ int main(int argc, char **argv)
             // Final movement position delta is difference between Touch and UR5E position deltas
             movementPoseDelta.position = UR5E_TRANSLATION_SCALE_FACTOR * (touchPoseDelta.position - ur5ePoseDelta.position);
 
-            ROS_INFO_THROTTLE(
-                1,
+            RCLCPP_INFO_THROTTLE(
+                node->get_logger(),
+                *node->get_clock(),
+                1000,
                 "Current Touch Orientation: %s, Touch origin orientation: %s",
                 QuaternionToString(currentTouchPose.orientation).c_str(),
                 QuaternionToString(touchOriginPose.orientation).c_str()
@@ -425,10 +440,12 @@ int main(int argc, char **argv)
             // Update Touch orientation delta (in UR5E coordinate frame)
             touchPoseDelta.orientation = (touchToUR5ERotation * currentTouchPose.orientation) * (touchToUR5ERotation * touchOriginPose.orientation).inverse();
 
-            ROS_INFO_THROTTLE(1, "Touch orientation delta: %s", QuaternionToString(touchPoseDelta.orientation).c_str());
+            RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Touch orientation delta: %s", QuaternionToString(touchPoseDelta.orientation).c_str());
 
-            ROS_INFO_THROTTLE(
-                1,
+            RCLCPP_INFO_THROTTLE(
+                node->get_logger(),
+                *node->get_clock(),
+                1000,
                 "Current UR5e Orientation: %s, UR5e origin orientation: %s",
                 QuaternionToString(currentUR5EPose.orientation).c_str(),
                 QuaternionToString(ur5eOriginPose.orientation).c_str()
@@ -437,12 +454,12 @@ int main(int argc, char **argv)
             // Update UR5E orientation delta
             ur5ePoseDelta.orientation = currentUR5EPose.orientation * ur5eOriginPose.orientation.inverse();
 
-            ROS_INFO_THROTTLE(1, "UR5e orientation delta: %s", QuaternionToString(ur5ePoseDelta.orientation).c_str());
+            RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "UR5e orientation delta: %s", QuaternionToString(ur5ePoseDelta.orientation).c_str());
 
             // Final movement orientation delta is difference between Touch and UR5E orientation deltas
             movementPoseDelta.orientation = touchPoseDelta.orientation * ur5ePoseDelta.orientation.inverse();
 
-            ROS_INFO_THROTTLE(1, "Movement pose delta: %s", PoseToString(movementPoseDelta, 1).c_str());
+            RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Movement pose delta: %s", PoseToString(movementPoseDelta, 1).c_str());
 
             for (int i = 1; i <= UR5E_CONTROL_NUM_SUBDIVISIONS; i++)
             {
@@ -471,28 +488,47 @@ int main(int argc, char **argv)
                 {
                     targetPoint.pose.orientation = currentUR5EPoseStamped.pose.orientation;
                 }
-                // ROS_INFO_THROTTLE(1, "Sending UR5e to Pose: %s", PoseToString(targetPoint.pose, 1).c_str());
-                // ROS_INFO_THROTTLE(1, "Current UR5e Pose: %s", PoseToString(currentUR5EPose.pose, 1).c_str());
+                // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Sending UR5e to Pose: %s", PoseToString(targetPoint.pose, 1).c_str());
+                // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Current UR5e Pose: %s", PoseToString(currentUR5EPose.pose, 1).c_str());
 
-                targetPoint.time_from_start = ros::Duration(i * UR5E_CONTROL_TIME_INCREMENT);
+                targetPoint.time_from_start = rclcpp::Duration::from_seconds(i * UR5E_CONTROL_TIME_INCREMENT);
 
                 goal.trajectory.points.push_back(targetPoint);
             }
 
-            trajectoryClient.waitForServer();
-            trajectoryClient.sendGoal(goal);
-            trajectoryClient.waitForResult(ros::Duration(5.0));
+            trajectoryClient->wait_for_action_server();
+
+            bool succeeded = false;
+
+            auto goalHandleFuture = trajectoryClient->async_send_goal(goal);
+
+            if (rclcpp::spin_until_future_complete(node, goalHandleFuture, 5s) == rclcpp::FutureReturnCode::SUCCESS)
+            {
+                auto goalHandle = goalHandleFuture.get();
+
+                if (goalHandle)
+                {
+                    auto resultFuture = trajectoryClient->async_get_result(goalHandle);
+
+                    if (rclcpp::spin_until_future_complete(node, resultFuture, 5s) == rclcpp::FutureReturnCode::SUCCESS)
+                    {
+                        succeeded = (resultFuture.get().code == rclcpp_action::ResultCode::SUCCEEDED);
+                    }
+                }
+            }
 
             goal.trajectory.points.clear();
 
-            if (trajectoryClient.getState() != actionlib::SimpleClientGoalState::SUCCEEDED)
+            if (!succeeded)
             {
-                ROS_WARN_THROTTLE(1, "Failed to execute trajectory or timed out");
+                RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Failed to execute trajectory or timed out");
             }
         }
 
-        ros::spinOnce();
+        rclcpp::spin_some(node);
     }
+
+    rclcpp::shutdown();
 
     return 0;
 }
