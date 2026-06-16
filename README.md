@@ -196,3 +196,225 @@ Validate controller loading sequence
 Test 1 cm Cartesian motion command
 Re-enable Touch device input
 Integrate full teleoperation loop (Touch → UR5e)
+
+
+🧠 Categories of Errors
+1. ❌ Runtime / system configuration errors (NOT code fixes)
+
+These are environment/robot issues:
+
+🚫 UR5e not connected / controller manager missing
+
+Error:
+
+Failed to call load_controller service
+Could not contact /controller_manager
+
+Cause:
+
+UR driver not running
+robot not in Remote mode
+External Control program not active
+wrong IP / network
+
+Fix (NOT code):
+
+start UR driver first
+ensure robot is running + remote mode enabled
+🚫 UR driver cannot connect to robot
+
+Error:
+
+Failed to connect to robot on IP ...:30001/30002/30004
+
+Cause:
+
+wrong IP
+robot off / not booted
+no network access
+missing UR External Control program
+
+Fix (NOT code):
+
+network setup + robot startup procedure
+🚫 Touch device failure
+
+Error:
+
+Failed to initialize haptic device
+LibUSB Error: Resource busy
+
+Cause:
+
+USB already claimed by another process
+driver conflict
+hardware issue
+
+Fix (NOT code):
+
+kill other processes
+restart driver / unplug device
+2. ⚠️ Build system / dependency issues (PARTLY code-related)
+⚠️ Missing ROS packages (APT / rosdep failures)
+
+Example:
+
+Unable to locate package ros-jazzy-cartesian-control-msgs
+
+Meaning:
+
+dependency not available in binary repo
+
+Fix options:
+
+✔ correct: build from source (you did this)
+✔ OR remove dependency if unused
+
+Code-side improvement:
+
+document clearly in README
+optionally wrap dependency as optional build
+⚠️ Incorrect dependency declarations in package.xml
+Example issue:
+<depend>eigen</depend>
+
+Problem:
+
+eigen is not a ROS package
+
+Fix:
+Replace with:
+
+<build_depend>eigen3_cmake_module</build_depend>
+
+or better:
+
+remove entirely if only used via CMake find_package(Eigen3)
+3. ⚠️ Code-level issues in your thesis package (REAL IMPROVEMENTS)
+
+These are the most important “fix in code” items.
+
+🧩 Issue A — Hard dependency on controller manager at startup
+Problem:
+
+Your node:
+
+immediately tries to call load_controller
+exits if service is unavailable
+Why this is fragile:
+requires strict launch order
+breaks in simulation or partial startup
+causes immediate failure like you saw
+✔ Fix (recommended)
+
+Add service waiting + retry loop:
+
+if (!client->wait_for_service(10s)) {
+    RCLCPP_WARN(node->get_logger(),
+        "Controller manager not ready, retrying...");
+    return;
+}
+
+or better:
+
+async retry timer instead of exit
+🧩 Issue B — No “simulation-safe mode”
+Problem:
+
+ur5e_control assumes:
+
+real controller manager exists
+robot is present
+Fix:
+
+Add parameter:
+
+declare_parameter("use_real_robot", true);
+
+Then:
+
+if (!use_real_robot) {
+    RCLCPP_INFO(..., "Skipping controller setup (simulation mode)");
+    return;
+}
+🧩 Issue C — Tight coupling between Touch + robot startup
+Problem:
+
+System expects both:
+
+/omni/state
+UR controller manager
+
+to exist at the same time.
+
+This caused cascading failure.
+
+✔ Fix:
+
+Split responsibilities:
+
+Touch node = independent publisher
+UR node = independent consumer
+teleop node = bridge only
+
+Add checks:
+
+if (!topic_exists("/omni/state")) {
+    RCLCPP_WARN(..., "Touch not available, running idle mode");
+}
+🧩 Issue D — No graceful degradation on missing inputs
+Problem:
+
+Nodes crash or fail when:
+
+topic missing
+service missing
+robot absent
+✔ Fix:
+
+Use “soft failure” pattern:
+
+never exit immediately
+instead:
+log warning
+keep node alive
+retry periodically
+🧩 Issue E — Hardcoded IP / robot assumptions
+Problem:
+
+Robot IP is often embedded or assumed.
+
+✔ Fix:
+
+Move to parameters:
+
+declare_parameter("robot_ip", "192.168.0.100");
+
+Launch file sets it.
+
+🧩 Issue F — Controller loading not abstracted
+Problem:
+
+Direct calls like:
+
+load_controller()
+switch_controller()
+
+inside main logic.
+
+✔ Fix:
+
+Encapsulate:
+
+class ControllerInterface {
+public:
+    bool load();
+    bool activate();
+    bool ready();
+};
+
+This makes:
+
+simulation support easier
+debugging cleaner
+startup order safer
