@@ -76,7 +76,6 @@ const double DISTAL_JOINT_SEPARATION = 0.001;
 // Length of a distal sub-module, in metres
 const double DISTAL_LENGTH = 0.00288;
 
-// The damping factor, lambda, used in the damped least squares method of Jacobian matrix inversion
 const double LEAST_SQUARES_DAMPING_FACTOR = 1;
 
 typedef std::vector<Eigen::Matrix4d,Eigen::aligned_allocator<Eigen::Matrix4d> > TransformVector;
@@ -199,7 +198,7 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
 
     TransformVector jointTransforms;
 
-    for (int i = 0; i < modules.size(); i++)
+    for (std::size_t i = 0; i < modules.size(); ++i)
     {
         panJointTransform = modules[i].GetPanJointTransform();
         tiltJointTransform = modules[i].GetTiltJointTransform();
@@ -267,7 +266,7 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
     // The number of joint transforms applied to the Jacobian
     int numJointTransformsProcessed = 0;
 
-    for (int i = 0; i < modules.size(); i++)
+    for (std::size_t i = 0; i < modules.size(); ++i)
     {
         modulePanJacobianColumn = Eigen::VectorXd::Zero(6);
         moduleTiltJacobianColumn = Eigen::VectorXd::Zero(6);
@@ -384,7 +383,8 @@ Eigen::MatrixXd GetInverseJacobianDamped(
 
     Eigen::MatrixXd inverseJacobian(jacobian.cols(), jacobian.rows());
 
-    inverseJacobian = (jacobian.transpose() * jacobian + D*D).colPivHouseholderQr().solve(jacobian.transpose());
+    inverseJacobian = (jacobian.transpose() * jacobian + D*D  +
+    leastSquaresDampingFactor * leastSquaresDampingFactor * D * D).colPivHouseholderQr().solve(jacobian.transpose());
 
     return inverseJacobian;
 }
@@ -392,11 +392,6 @@ Eigen::MatrixXd GetInverseJacobianDamped(
 Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& proximal, const ManipulatorModule& distal)
 {
     Eigen::Vector4d motorPositions = Eigen::Vector4d::Zero();
-
-    double test = 2 * proximal.GetCurvatureRadius() * (
-        proximal.GetNumPanJoints() * (cos(proximal.GetHalfCurvatureAngle()) - cos(proximal.GetHalfCurvatureAngle() + (-1 * (int)true) * proximal.GetPanJointAngle() / 2)) +
-        proximal.GetNumTiltJoints() * (1 - cos(proximal.GetTiltJointAngle() / 2))
-    );
 
     // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "test: %.6f", test);
 
@@ -407,9 +402,6 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
 
     motorPositions(0) = proximalPanLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(1) = proximalTiltLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
-
-    double proximalCurvatureRadius = proximal.GetCurvatureRadius();
-    double proximalHalfCurvatureAngle = proximal.GetHalfCurvatureAngle();
 
     // The difference in tendon length change resulting from the angular offset of the distal tendons on the proximal joints
     double distalTendonProximalJointOffset = (2 - sqrt(2)) * proximal.GetCurvatureRadius() * sin(proximal.GetHalfCurvatureAngle()) * (
@@ -515,8 +507,6 @@ void touchStateCallback(
     currentPose.position *= TOUCH_POSITION_UNIT_SCALE_FACTOR;
 
     tf2::fromMsg(omniState->pose.orientation, currentPose.orientation);
-
-    geometry_msgs::msg::Vector3 current = omniState->current;
 }
 
 void touchButtonCallback(
@@ -716,7 +706,7 @@ int main(int argc, char **argv)
     RCLCPP_INFO(node->get_logger(), "Received motor states: %.6f, %.6f, %.6f, %.6f", 
         motorStates(0), motorStates(1), motorStates(2), motorStates(3));
     RCLCPP_INFO(node->get_logger(), "Received motor min angles: %.6f, %.6f, %.6f, %.6f", 
-        motorMinAngles(0), motorMinAngles(1), motorMinAngles(2), motorMaxAngles(3));
+        motorMinAngles(0), motorMinAngles(1), motorMinAngles(2), motorMinAngles(3));
     RCLCPP_INFO(node->get_logger(), "Received motor max angles: %.6f, %.6f, %.6f, %.6f", 
         motorMaxAngles(0), motorMaxAngles(1), motorMaxAngles(2), motorMaxAngles(3));
 
@@ -725,6 +715,8 @@ int main(int argc, char **argv)
     proximal.SetTotalTiltAngle(0.0);
     distal.SetTotalPanAngle(0.0);
     distal.SetTotalTiltAngle(0.0);
+
+    Eigen::Matrix4d baseTransform = Eigen::Matrix4d::Identity();
 
     // Initialize end effector origin rotation to current rotation
     TransformVector initialJointTransforms = GetJointTransforms(baseTransform, endEffectorTransform, proximal, distal);
@@ -757,8 +749,6 @@ int main(int argc, char **argv)
         proximal.GetIsolatedPanLengthDelta(),
         proximal.GetIsolatedTiltLengthDelta()
     );
-
-    Eigen::Matrix4d baseTransform = Eigen::Matrix4d::Identity();
 
     // Fixed transformation quaternion between touch and manipulator frames
     tf2::Quaternion touchToManipulatorRotation;
@@ -812,9 +802,6 @@ int main(int argc, char **argv)
         {
             if (hasReceivedMotorStates && hasReceivedMotorMinAngles && hasReceivedMotorMaxAngles)
             {
-                tf2::Quaternion currentTouchOrientation = touchToManipulatorRotation * currentTouchPose.orientation;
-                tf2::Quaternion touchOriginOrientation = touchToManipulatorRotation * touchOriginPose.orientation;
-
                 // Update Touch orientation delta (in manipulator coordinate frame)
                 touchPoseDelta.orientation = (touchToManipulatorRotation * currentTouchPose.orientation) * (touchToManipulatorRotation * touchOriginPose.orientation).inverse();
 
@@ -843,7 +830,14 @@ int main(int argc, char **argv)
                 Eigen::MatrixXd inverseJacobian = GetInverseJacobianDamped(jacobian, jointPositions, minJointAngles, maxJointAngles, LEAST_SQUARES_DAMPING_FACTOR);
 
                 // Calculate desired pose: origin + scaled Touch movement
-                Eigen::Vector3d desiredPos = endOriginPosition + (currentTouchPose.position - touchOriginPose.position) * 10.0;  // Scale factor for position
+                // Convert tf2::Vector3 to Eigen::Vector3d for position calculation
+                Eigen::Vector3d touchDelta(
+                    currentTouchPose.position.x() - touchOriginPose.position.x(),
+                    currentTouchPose.position.y() - touchOriginPose.position.y(),
+                    currentTouchPose.position.z() - touchOriginPose.position.z()
+                );
+                
+                Eigen::Vector3d desiredPos = endOriginPosition + touchDelta * 10.0;  // Scale factor for position
 
                 Eigen::Matrix3d desiredRot = movementRotation;
 
