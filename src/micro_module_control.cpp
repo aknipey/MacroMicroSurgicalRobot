@@ -527,7 +527,7 @@ void touchButtonCallback(
     Pose& touchOriginPose
 )
 {
-    // Update control origin poses if white button was just pressed
+    // Update control origin poses when grey button is pressed (rising edge)
     if (omniButtonStates->grey_button && !isGreyButtonPressed)
     {
         touchOriginPose.position = currentTouchPose.position;
@@ -615,6 +615,7 @@ int main(int argc, char **argv)
 
     bool isGreyButtonPressed = false;
     bool isWhiteButtonPressed = false;
+    bool wasGreyButtonPressed = false;  // Track previous button state for edge detection
 
     bool hasReceivedMotorStates = false;
     bool hasReceivedMotorMinAngles = false;
@@ -706,10 +707,28 @@ int main(int argc, char **argv)
 
     PrintMatrix(endEffectorTransform, "End Effector");
 
+    // Wait for all required data to be received
+    while (!hasReceivedMotorStates || !hasReceivedMotorMinAngles || !hasReceivedMotorMaxAngles)
+    {
+        rclcpp::spin_some(node);
+    }
+    
+    RCLCPP_INFO(node->get_logger(), "Received motor states: %.6f, %.6f, %.6f, %.6f", 
+        motorStates(0), motorStates(1), motorStates(2), motorStates(3));
+    RCLCPP_INFO(node->get_logger(), "Received motor min angles: %.6f, %.6f, %.6f, %.6f", 
+        motorMinAngles(0), motorMinAngles(1), motorMinAngles(2), motorMaxAngles(3));
+    RCLCPP_INFO(node->get_logger(), "Received motor max angles: %.6f, %.6f, %.6f, %.6f", 
+        motorMaxAngles(0), motorMaxAngles(1), motorMaxAngles(2), motorMaxAngles(3));
+
+    // Initialize joint angles to 0 (equilibrium position will be computed from motor commands)
     proximal.SetTotalPanAngle(0.0);
     proximal.SetTotalTiltAngle(0.0);
     distal.SetTotalPanAngle(0.0);
     distal.SetTotalTiltAngle(0.0);
+
+    // Initialize end effector origin rotation to current rotation
+    TransformVector initialJointTransforms = GetJointTransforms(baseTransform, endEffectorTransform, proximal, distal);
+    endOriginRotation = GetTransformRotation(initialJointTransforms.back());
 
     RCLCPP_INFO(node->get_logger(), "Proximal parameters:\n\tcurvature radius: %.6f\n\tnum pan joints: %d\n\thalf curvature angle: %.6f\n\tpan joint angle: %.6f\n\tnum tilt joints: %d\n\ttilt joint angle: %.6f\n\tpan central separation: %.6f\n\ttilt central separation: %.6f\n\tjoint separation distance: %.6f\n\tisolated pan length delta: %.6f\n\tisolated tilt length delta: %.6f",
         proximal.GetCurvatureRadius(),
@@ -747,6 +766,7 @@ int main(int argc, char **argv)
     touchToManipulatorRotation.setRPY(0, 0, M_PI_4);
 
     Eigen::Vector3d endPosition = Eigen::Vector3d::Zero();
+    Eigen::Vector3d endOriginPosition = Eigen::Vector3d::Zero();
 
     tf2::Quaternion manipulatorOrientation;
     tf2::Quaternion manipulatorOriginOrientation;
@@ -771,51 +791,40 @@ int main(int argc, char **argv)
 
     while (rclcpp::ok())
     {
+        // Process callbacks first to get latest sensor data
+        rclcpp::spin_some(node);
+
         TransformVector jointTransforms = GetJointTransforms(baseTransform, endEffectorTransform, proximal, distal);
 
         endPosition = GetTransformPosition(jointTransforms.back());
         endRotation = GetTransformRotation(jointTransforms.back());
 
+        // Update manipulator origin when grey button is first pressed (rising edge)
+        if (isGreyButtonPressed && !wasGreyButtonPressed)
+        {
+            endOriginPosition = endPosition;
+            endOriginRotation = endRotation;
+            RCLCPP_INFO(node->get_logger(), "Button pressed - updating origin position and rotation");
+        }
+        
         // Enable manipulator teleoperation if user is pressing the grey button on the Touch
         if (isGreyButtonPressed)
         {
             if (hasReceivedMotorStates && hasReceivedMotorMinAngles && hasReceivedMotorMaxAngles)
             {
-                PrintMatrix(motorCommands, "Initial motor commands");
                 tf2::Quaternion currentTouchOrientation = touchToManipulatorRotation * currentTouchPose.orientation;
                 tf2::Quaternion touchOriginOrientation = touchToManipulatorRotation * touchOriginPose.orientation;
-
-                RCLCPP_INFO(node->get_logger(), "touch orienation: %s", QuaternionToString(currentTouchOrientation).c_str());
-                RCLCPP_INFO(node->get_logger(), "touch origin orientation: %s", QuaternionToString(touchOriginOrientation).c_str());
 
                 // Update Touch orientation delta (in manipulator coordinate frame)
                 touchPoseDelta.orientation = (touchToManipulatorRotation * currentTouchPose.orientation) * (touchToManipulatorRotation * touchOriginPose.orientation).inverse();
 
                 RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Touch orientation delta: %s", QuaternionToString(touchPoseDelta.orientation).c_str());
 
-                RCLCPP_INFO_THROTTLE(
-                    node->get_logger(),
-                    *node->get_clock(),
-                    1000,
-                    "Current Maniulator Orientation: %s, Manipulator origin orientation: %s",
-                    QuaternionToString(manipulatorOrientation).c_str(),
-                    QuaternionToString(manipulatorOriginOrientation).c_str()
-                );
-
-                PrintMatrix(endRotation, "End rotation");
-                PrintMatrix(endOriginRotation, "End origin rotation");
-
                 manipulatorOrientation = EigenRotationMatrixToTF2Quaternion(endRotation);
-
-                RCLCPP_INFO(node->get_logger(), "Manipulator orientation: %s", QuaternionToString(manipulatorOrientation).c_str());
 
                 manipulatorOriginOrientation = EigenRotationMatrixToTF2Quaternion(endOriginRotation);
 
-                RCLCPP_INFO(node->get_logger(), "Manipulator origin orientation: %s", QuaternionToString(manipulatorOriginOrientation).c_str());
-
                 manipulatorOrientationDelta = manipulatorOrientation * manipulatorOriginOrientation.inverse();
-
-                RCLCPP_INFO(node->get_logger(), "Manipulator orientation delta: %s", QuaternionToString(manipulatorOrientationDelta).c_str());
 
                 // Final movement orientation delta is difference between Touch and manipulator orientation deltas
                 movementOrientationDelta = manipulatorOrientation.slerp(
@@ -823,41 +832,34 @@ int main(int argc, char **argv)
                     MANIPULATOR_ROTATION_SCALE_FACTOR
                 );
 
-                RCLCPP_INFO(node->get_logger(), "Movement orientation delta: %s", QuaternionToString(movementOrientationDelta).c_str());
+                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Movement orientation delta: %s", QuaternionToString(movementOrientationDelta).c_str());
 
                 movementRotation = tf2QuaternionToEigenRotationMatrix(movementOrientationDelta);
 
                 Eigen::MatrixXd jacobian = GetJacobian(jointTransforms, proximal, distal);
 
-                PrintMatrix(jacobian, "Jacobian");
-
                 jointPositions << proximal.GetPanJointAngle(), proximal.GetTiltJointAngle(), distal.GetPanJointAngle(), distal.GetTiltJointAngle();
 
                 Eigen::MatrixXd inverseJacobian = GetInverseJacobianDamped(jacobian, jointPositions, minJointAngles, maxJointAngles, LEAST_SQUARES_DAMPING_FACTOR);
 
-                PrintMatrix(inverseJacobian, "Inverse Jacobian");
-
-                Eigen::Vector3d desiredPos = endPosition;
+                // Calculate desired pose: origin + scaled Touch movement
+                Eigen::Vector3d desiredPos = endOriginPosition + (currentTouchPose.position - touchOriginPose.position) * 10.0;  // Scale factor for position
 
                 Eigen::Matrix3d desiredRot = movementRotation;
 
                 Eigen::VectorXd poseDelta = GetPoseDelta(endPosition, desiredPos, endRotation, desiredRot);
-
-                PrintMatrix(poseDelta, "Pose delta");
 
                 if (poseDelta.norm() > JOINT_UPDATE_MAX_VELOCITY)
                 {
                     poseDelta = CapVectorMagnitude(poseDelta, JOINT_UPDATE_MAX_VELOCITY).eval();
                 }
 
-                PrintMatrix(poseDelta, "Capped pose delta");
-
                 Eigen::Vector4d jointDeltas = inverseJacobian * poseDelta;
 
-                PrintMatrix(jointDeltas, "Final joint deltas");
-
-                RCLCPP_INFO(
+                RCLCPP_INFO_THROTTLE(
                     node->get_logger(),
+                    *node->get_clock(),
+                    100,
                     "JOINT DELTAS: %.6f %.6f %.6f %.6f",
                     jointDeltas(0),
                     jointDeltas(1),
@@ -871,7 +873,8 @@ int main(int argc, char **argv)
                 if (newPosition >= motorMinAngles(0) &&
                     newPosition <= motorMaxAngles(0))
                 {
-                    proximal.ApplyPanAngleDelta(jointDeltas(0));        
+                    proximal.ApplyPanAngleDelta(jointDeltas(0));
+                    motorCommands(0) = newPosition;
                 }
 
                 newPosition = motorCommands(1) + jointDeltas(1);
@@ -879,7 +882,8 @@ int main(int argc, char **argv)
                 if (newPosition >= motorMinAngles(1) &&
                     newPosition <= motorMaxAngles(1))
                 {
-                    proximal.ApplyTiltAngleDelta(jointDeltas(1));      
+                    proximal.ApplyTiltAngleDelta(jointDeltas(1));
+                    motorCommands(1) = newPosition;
                 }
 
                 newPosition = motorCommands(2) + jointDeltas(2);
@@ -887,7 +891,8 @@ int main(int argc, char **argv)
                 if (newPosition >= motorMinAngles(2) &&
                     newPosition <= motorMaxAngles(2))
                 {
-                    proximal.ApplyPanAngleDelta(jointDeltas(2));        
+                    distal.ApplyPanAngleDelta(jointDeltas(2));
+                    motorCommands(2) = newPosition;
                 }
 
                 newPosition = motorCommands(3) + jointDeltas(3);
@@ -895,19 +900,17 @@ int main(int argc, char **argv)
                 if (newPosition >= motorMinAngles(3) &&
                     newPosition <= motorMaxAngles(3))
                 {
-                    proximal.ApplyTiltAngleDelta(jointDeltas(3));        
+                    distal.ApplyTiltAngleDelta(jointDeltas(3));
+                    motorCommands(3) = newPosition;
                 }
 
-                Eigen::Vector4d stateDelta = GetMotorPositionsFromJointPositions(proximal, distal);
-
-                motorCommands += stateDelta;
-
+                // Clamp motor commands to limits
                 motorCommands(0) = clamp(motorCommands(0), motorMinAngles(0), motorMaxAngles(0));
                 motorCommands(1) = clamp(motorCommands(1), motorMinAngles(1), motorMaxAngles(1));
                 motorCommands(2) = clamp(motorCommands(2), motorMinAngles(2), motorMaxAngles(2));
                 motorCommands(3) = clamp(motorCommands(3), motorMinAngles(3), motorMaxAngles(3));
 
-                RCLCPP_INFO(node->get_logger(), "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
+                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 100, "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
 
                 motor_angles_msg::msg::MotorAngles motorCommandsMsg;
                 motorCommandsMsg.proximal_pan_angle = motorCommands(0);
@@ -917,14 +920,12 @@ int main(int argc, char **argv)
 
                 motorCommandsPublisher->publish(motorCommandsMsg);
             }
-            rate.sleep();
-        }
-        else
-        {
-            endOriginRotation = endRotation;
         }
 
-        rclcpp::spin_some(node);
+        // Update previous button state for next iteration
+        wasGreyButtonPressed = isGreyButtonPressed;
+
+        rate.sleep();
     }
 
     rclcpp::shutdown();
