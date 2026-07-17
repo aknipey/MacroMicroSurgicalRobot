@@ -856,25 +856,46 @@ int main(int argc, char **argv)
 
                 PrintMatrix(jointDeltas, "Final joint deltas");
 
+                RCLCPP_INFO(
+                    node->get_logger(),
+                    "JOINT DELTAS: %.6f %.6f %.6f %.6f",
+                    jointDeltas(0),
+                    jointDeltas(1),
+                    jointDeltas(2),
+                    jointDeltas(3)
+                );
+
                 // Prevent joint updates if motors are at their angular limits
-                if ((motorCommands(0) >= motorMinAngles(0) || jointDeltas(0) >= 0) && (motorCommands(0) <= motorMaxAngles(0) || jointDeltas(0) <= 0))
+                double newPosition = motorCommands(0) + jointDeltas(0);
+
+                if (newPosition >= motorMinAngles(0) &&
+                    newPosition <= motorMaxAngles(0))
                 {
-                    proximal.ApplyPanAngleDelta(jointDeltas(0));
+                    proximal.ApplyPanAngleDelta(jointDeltas(0));        
                 }
 
-                if ((motorCommands(1) >= motorMinAngles(1) || jointDeltas(1) >= 0) && (motorCommands(1) <= motorMaxAngles(1) || jointDeltas(1) <= 0))
+                newPosition = motorCommands(1) + jointDeltas(1);
+
+                if (newPosition >= motorMinAngles(1) &&
+                    newPosition <= motorMaxAngles(1))
                 {
-                    proximal.ApplyTiltAngleDelta(jointDeltas(1));
+                    proximal.ApplyTiltAngleDelta(jointDeltas(1));      
                 }
 
-                if ((motorCommands(2) >= motorMinAngles(2) || jointDeltas(2) >= 0) && (motorCommands(2) <= motorMaxAngles(2) || jointDeltas(2) <= 0))
+                newPosition = motorCommands(2) + jointDeltas(2);
+
+                if (newPosition >= motorMinAngles(2) &&
+                    newPosition <= motorMaxAngles(2))
                 {
-                    distal.ApplyPanAngleDelta(jointDeltas(2));
+                    proximal.ApplyPanAngleDelta(jointDeltas(2));        
                 }
 
-                if ((motorCommands(3) >= motorMinAngles(3) || jointDeltas(3) >= 0) && (motorCommands(3) <= motorMaxAngles(3) || jointDeltas(3) <= 0))
+                newPosition = motorCommands(3) + jointDeltas(3);
+
+                if (newPosition >= motorMinAngles(3) &&
+                    newPosition <= motorMaxAngles(3))
                 {
-                    distal.ApplyTiltAngleDelta(jointDeltas(3));
+                    proximal.ApplyTiltAngleDelta(jointDeltas(3));        
                 }
 
                 Eigen::Vector4d stateDelta = GetMotorPositionsFromJointPositions(proximal, distal);
