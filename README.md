@@ -18,6 +18,10 @@ Additional dependencies and their installation instructions can be found in thes
 | `micro_module_control`      | C++      | Touch → micro-manipulator Jacobian control (Eigen, `motor_angles_msg`).                                                   |
 | `android_pose_subscriber`   | C++      | Touch → rviz marker visualisation.                                                                                        |
 | `android_pose_publisher.py` | Python   | Android-phone websocket → `PoseStamped`.                                                                                  |
+| `ur5e_keyboard_teleop.py`  | Python   | Keyboard → UR5e Cartesian jogging via MoveIt Servo.                                                                       |
+| `ur5e_touch_teleop.py`     | Python   | Touch stylus → UR5e teleoperation via MoveIt Servo (white button = clutch, grey = record).                                |
+| `trajectory_recorder.py`   | Python   | Records UR5e joint + tool-pose trajectories to YAML/CSV, shows the path in RViz.                                           |
+| `trajectory_player.py`     | Python   | Replays a recorded trajectory (or moves to a home pose) via the scaled joint trajectory controller.                        |
 
 ## ROS 2 dependencies & known external gaps
 
@@ -73,6 +77,30 @@ These are **not** part of this repository and must be present in your colcon wor
 
 > ROS 2 has no `roscore`; nodes discover each other automatically. `source ~/ros2_ws/install/setup.bash` in every terminal first.
 
+### The easy way: `launch_system.sh`
+
+`scripts/launch_system.sh` starts every dependency for a given scenario (Touch
+driver, Arduino serial bridge, UR5e driver, control nodes, RViz) with one
+command, in the right order, in the background, with logs collected under
+`log/launch_system/`. Ctrl+C stops everything it started.
+
+```
+cd ~/ros2_ws
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh display                     # RViz only, no hardware
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh keyboard                    # Arduino only, keyboard teleop
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh touch                       # Touch + Arduino, no UR5e
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur5e --robot-ip=192.168.0.100
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh full --robot-ip=192.168.0.100 --arduino-port=/dev/ttyACM1
+```
+
+Run `./src/MacroMicroSurgicalRobot/scripts/launch_system.sh help` for every
+mode and flag (`--arduino-port`, `--calibration-file`, `--baud`, `--with-rviz`,
+`--dry-run`, ...), or `./src/MacroMicroSurgicalRobot/scripts/launch_system.sh
+stop` to kill a run whose terminal you already closed.
+
+The rest of this section documents what the script does under the hood, for
+manual/single-terminal use or debugging.
+
 ### Visualisation only (no hardware)
 
 ```
@@ -91,16 +119,79 @@ ros2 launch ls_thesis display.launch.py
    ```
    ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur5e \
        robot_ip:=192.168.0.100 \
-       kinematics_params_file:=/home/lachlan/lab_ur5e_1_calibration.yaml
+       kinematics_params_file:=~/ros2_ws/src/MacroMicroSurgicalRobot/lab_ur5e_1_calibration.yaml
    ```
 2. Start the LS_ROS_CONTROL program on the UR5e Teach Pendant.
 3. Start the control node: `ros2 run ls_thesis ur5e_control`
+
+> `ur5e_control` is a direct ROS 1 port and asks for a
+> `pose_based_cartesian_traj_controller`, which the ROS 2 UR driver does not
+> provide. Use the keyboard / Touch teleop below instead.
+
+### UR5e teleoperation (keyboard or Touch) and trajectory recording
+
+Motion goes through **MoveIt Servo**: the teleop nodes publish Cartesian
+velocity commands, Servo turns them into joint positions for the UR driver's
+`forward_position_controller`, and stops the arm near singularities, joint
+limits and self-collisions.
+
+```
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur5e-keyboard --robot-ip=192.168.0.100 --with-rviz
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur5e-touch    --robot-ip=192.168.0.100 --with-rviz
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur5e-keyboard --mock --with-rviz   # no robot needed
+```
+
+or by hand:
+
+```
+ros2 launch ls_thesis ur5e_teleop.launch.py robot_ip:=192.168.0.100   # add use_mock_hardware:=true to simulate
+ros2 run ls_thesis ur5e_keyboard_teleop.py                             # second terminal
+# or: ros2 launch ls_thesis ur5e_teleop.launch.py robot_ip:=... input:=touch
+```
+
+On the real robot, start the External Control program on the Teach Pendant
+after the driver is up. The simulated arm starts straight up (a singularity
+Servo refuses to move out of), so first run
+`ros2 run ls_thesis trajectory_player.py home`.
+
+**Keyboard** (`ur5e_keyboard_teleop.py`): `w/s` ±X, `a/d` ±Y, `r/f` ±Z,
+`u/o` `i/k` `j/l` roll/pitch/yaw, `SPACE` stop, `+/-` speed, `t` toggle
+base/tool frame, `[` start recording, `]` stop + save. Hold a key to keep
+moving; the arm stops ~0.15 s after release.
+
+**Touch** (`ur5e_touch_teleop.py`): hold the **white** button to drive the arm
+(it follows the stylus displacement since the press; release to re-centre the
+stylus), press **grey** to start/stop recording. Parameters:
+`translation_scale` (default 1.0), `axis_map` (default `[y, -x, z]`: stylus
+away → robot +X, stylus right → robot −Y, up → up; change if the operator
+stands elsewhere), `enable_rotation` (default false), `max_linear_speed`
+(0.15 m/s). Example:
+`ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p translation_scale:=2.0 -p enable_rotation:=true`
+
+**Trajectories**: `trajectory_recorder.py` (started by the launch file) saves
+each recording to `~/ros2_ws/trajectories/trajectory_<date>_<time>.yaml`
+(joint angles + tool pose at 25 Hz) and a `.csv` of the same data for plotting.
+The path being recorded is shown in RViz (green); recordings can also be
+started/stopped with `ros2 service call /trajectory_recorder/start std_srvs/srv/Trigger`
+(and `/stop`). Replay one with:
+
+```
+ros2 run ls_thesis trajectory_player.py latest --speed 0.5     # or a file path
+ros2 run ls_thesis trajectory_player.py home                   # safe ready pose
+```
+
+The player asks for confirmation, moves to the recording's first pose over
+5 s, replays it (shown in RViz in orange), then hands control back to teleop.
 
 ### Micro Module
 
 1. Add permissions for the Arduino device: `sudo chmod 777 /dev/ttyACM1`
 2. Start the serial bridge for the micro-module microcontroller (micro-ROS agent or serial bridge replacing `rosserial`).
 3. Start the control node: `ros2 run ls_thesis micro_module_control`
+
+Alternatively, `ros2_bridge/keyboard_control.py` drives the servos straight
+from the keyboard (no Touch device needed) — useful for bench-testing; this is
+what `launch_system.sh keyboard` runs.
 
 NOTE: Be sure to manually disable power to the servo motors via the switch on the micro module before unplugging the control USB cable.
 

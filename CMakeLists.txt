@@ -13,6 +13,7 @@ endif()
 
 # Find ament and dependency packages
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -98,11 +99,18 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-## Python node
+## Python nodes
 install(PROGRAMS
   src/android_pose_publisher.py
+  src/ur5e_keyboard_teleop.py
+  src/ur5e_touch_teleop.py
+  src/trajectory_recorder.py
+  src/trajectory_player.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
+## Python helpers shared by the UR5e nodes (import ls_thesis.ur5e_common)
+ament_python_install_package(${PROJECT_NAME})
 
 ## Resources (launch files, model, visualisation, meshes)
 install(DIRECTORY
@@ -111,6 +119,11 @@ install(DIRECTORY
   rviz
   meshes
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(FILES
+  lab_ur5e_1_calibration.yaml
+  DESTINATION share/${PROJECT_NAME}/config
 )
 
 ament_package()
