@@ -26,6 +26,8 @@ from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from ls_thesis import teleop_settings as cfg
+
 UR_JOINTS = [
     "shoulder_pan_joint",
     "shoulder_lift_joint",
@@ -43,7 +45,7 @@ class TrajectoryRecorder(Node):
         self.declare_parameter("output_dir", os.path.expanduser("~/ros2_ws/trajectories"))
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("ee_frame", "tool0")
-        self.declare_parameter("sample_rate", 25.0)     # Hz
+        self.declare_parameter("sample_rate", cfg.RECORDER_SAMPLE_RATE)
 
         self.output_dir = os.path.expanduser(self.get_parameter("output_dir").value)
         self.base_frame = self.get_parameter("base_frame").value

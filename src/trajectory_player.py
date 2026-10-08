@@ -38,19 +38,14 @@ from ls_thesis.ur5e_common import (
     TRAJECTORY_CONTROLLER,
     activate_controller,
 )
+from ls_thesis import teleop_settings as cfg
 
 DEFAULT_DIR = os.path.expanduser("~/ros2_ws/trajectories")
 
-# Elbow-up, tool pointing down - well away from singularities, good for starting teleop
-HOME_POSITIONS = [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
 HOME_JOINTS = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
     "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
 ]
-
-# Recorded samples closer together than this are dropped; the controller
-# interpolates between the rest.
-MIN_POINT_SPACING = 0.04  # s
 
 
 def to_duration(seconds):
@@ -60,7 +55,7 @@ def to_duration(seconds):
 def load_trajectory(name):
     if name == "home":
         # A single point; the approach move is the whole motion
-        sample = {"time": 0.0, "positions": HOME_POSITIONS, "ee_pose": [0, 0, 0, 0, 0, 0, 1]}
+        sample = {"time": 0.0, "positions": cfg.HOME_POSITIONS, "ee_pose": [0, 0, 0, 0, 0, 0, 1]}
         return "home pose", {"joint_names": HOME_JOINTS, "duration": 0.0, "samples": [sample]}
     path = resolve_file(name)
     with open(path) as f:
@@ -109,7 +104,7 @@ class TrajectoryPlayer(Node):
         last_time = None
         for sample in data["samples"]:
             t = approach_time + sample["time"] / speed
-            if last_time is not None and t - last_time < MIN_POINT_SPACING and sample is not data["samples"][-1]:
+            if last_time is not None and t - last_time < cfg.PLAYER_MIN_POINT_SPACING and sample is not data["samples"][-1]:
                 continue
             point = JointTrajectoryPoint()
             point.positions = [float(p) for p in sample["positions"]]
@@ -156,16 +151,17 @@ class TrajectoryPlayer(Node):
 def main():
     parser = argparse.ArgumentParser(description="Replay a recorded UR5e trajectory")
     parser.add_argument("file", help="trajectory YAML from trajectory_recorder, 'latest', or 'home'")
-    parser.add_argument("--speed", type=float, default=1.0, help="playback speed factor (default 1.0)")
-    parser.add_argument("--approach-time", type=float, default=5.0,
-                        help="seconds to move to the start pose (default 5)")
+    parser.add_argument("--speed", type=float, default=cfg.PLAYER_DEFAULT_SPEED,
+                        help=f"playback speed factor (default {cfg.PLAYER_DEFAULT_SPEED})")
+    parser.add_argument("--approach-time", type=float, default=cfg.PLAYER_APPROACH_TIME,
+                        help=f"seconds to move to the start pose (default {cfg.PLAYER_APPROACH_TIME:g})")
     parser.add_argument("--yes", action="store_true", help="don't ask for confirmation")
     parser.add_argument("--no-restore-teleop", action="store_true",
                         help="leave the trajectory controller active afterwards")
     args = parser.parse_args(remove_ros_args(sys.argv)[1:])
 
-    if args.speed <= 0 or args.speed > 2.0:
-        sys.exit("--speed must be in (0, 2]")
+    if args.speed <= 0 or args.speed > cfg.PLAYER_MAX_SPEED:
+        sys.exit(f"--speed must be in (0, {cfg.PLAYER_MAX_SPEED:g}]")
 
     path, data = load_trajectory(args.file)
 

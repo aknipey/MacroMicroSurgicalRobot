@@ -35,8 +35,10 @@ from ls_thesis.ur5e_common import (
     TELEOP_CONTROLLER,
     RecorderClient,
     activate_controller,
+    set_servo_speed_limits,
     start_servo_twist_mode,
 )
+from ls_thesis import teleop_settings as cfg
 
 # omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
 # transposed, so its "offset * rotation" is a right multiply), so the offset cancels
@@ -86,19 +88,19 @@ class TouchTeleop(Node):
         self.declare_parameter("button_topic", "/phantom/button")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("ee_frame", "tool0")
-        self.declare_parameter("mapping", "toward_base")     # or "fixed" (uses axis_map)
-        self.declare_parameter("axis_map", ["y", "-x", "z"])
-        self.declare_parameter("touch_units_to_m", 1e-3)     # omni_state default units are mm
-        self.declare_parameter("translation_scale", 1.0)     # robot metres per stylus metre
-        self.declare_parameter("enable_rotation", True)
-        self.declare_parameter("rotation_scale", 1.0)
-        self.declare_parameter("position_gain", 4.0)         # 1/s
-        self.declare_parameter("rotation_gain", 3.0)         # 1/s
-        self.declare_parameter("max_linear_speed", 0.15)     # m/s
-        self.declare_parameter("max_angular_speed", 0.6)     # rad/s
-        self.declare_parameter("deadband", 3e-4)             # m
-        self.declare_parameter("touch_timeout", 0.1)         # s
-        self.declare_parameter("publish_rate", 100.0)        # Hz
+        self.declare_parameter("mapping", cfg.TOUCH_MAPPING)  # or "fixed" (uses axis_map)
+        self.declare_parameter("axis_map", cfg.TOUCH_AXIS_MAP)
+        self.declare_parameter("touch_units_to_m", cfg.TOUCH_UNITS_TO_M)
+        self.declare_parameter("translation_scale", cfg.TOUCH_TRANSLATION_SCALE)
+        self.declare_parameter("enable_rotation", cfg.TOUCH_ENABLE_ROTATION)
+        self.declare_parameter("rotation_scale", cfg.TOUCH_ROTATION_SCALE)
+        self.declare_parameter("position_gain", cfg.TOUCH_POSITION_GAIN)
+        self.declare_parameter("rotation_gain", cfg.TOUCH_ROTATION_GAIN)
+        self.declare_parameter("max_linear_speed", cfg.TOUCH_MAX_LINEAR_SPEED)
+        self.declare_parameter("max_angular_speed", cfg.TOUCH_MAX_ANGULAR_SPEED)
+        self.declare_parameter("deadband", cfg.TOUCH_DEADBAND)
+        self.declare_parameter("touch_timeout", cfg.TOUCH_TIMEOUT)
+        self.declare_parameter("publish_rate", cfg.TOUCH_PUBLISH_RATE)
         self.declare_parameter("setup_servo", True)
 
         p = lambda name: self.get_parameter(name).value
@@ -146,6 +148,7 @@ class TouchTeleop(Node):
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
+            set_servo_speed_limits(self, self.max_linear, self.max_angular)
 
         self.create_timer(1.0 / p("publish_rate"), self.update)
         self.get_logger().info(

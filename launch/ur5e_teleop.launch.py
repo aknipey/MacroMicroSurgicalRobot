@@ -23,6 +23,8 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+from ls_thesis.teleop_settings import TOUCH_STARTUP_DELAY
+
 
 def generate_launch_description():
     pkg_share = FindPackageShare("ls_thesis")
@@ -99,7 +101,7 @@ def generate_launch_description():
 
     # Give the driver + servo time to come up before the teleop node configures them
     touch_teleop = TimerAction(
-        period=8.0,
+        period=TOUCH_STARTUP_DELAY,
         actions=[Node(
             package="ls_thesis",
             executable="ur5e_touch_teleop.py",

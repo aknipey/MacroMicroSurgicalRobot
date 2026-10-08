@@ -26,8 +26,10 @@ from ls_thesis.ur5e_common import (
     TELEOP_CONTROLLER,
     RecorderClient,
     activate_controller,
+    set_servo_speed_limits,
     start_servo_twist_mode,
 )
+from ls_thesis import teleop_settings as cfg
 
 # key: (twist field, axis, sign)
 KEY_BINDINGS = {
@@ -38,10 +40,6 @@ KEY_BINDINGS = {
     "i": ("angular", "y", +1), "k": ("angular", "y", -1),
     "j": ("angular", "z", +1), "l": ("angular", "z", -1),
 }
-
-# Seconds a key stays "held" after the first press. Covers the OS delay before
-# key auto-repeat kicks in (typically 250-600 ms).
-FIRST_PRESS_HOLD = 0.6
 
 HELP = """
 ==================== UR5e KEYBOARD TELEOP ====================
@@ -58,12 +56,12 @@ class KeyboardTeleop(Node):
     def __init__(self):
         super().__init__("ur5e_keyboard_teleop")
 
-        self.declare_parameter("linear_speed", 0.05)    # m/s
-        self.declare_parameter("angular_speed", 0.3)    # rad/s
+        self.declare_parameter("linear_speed", cfg.KEYBOARD_LINEAR_SPEED)
+        self.declare_parameter("angular_speed", cfg.KEYBOARD_ANGULAR_SPEED)
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("tool_frame", "tool0")
-        self.declare_parameter("hold_time", 0.15)       # s, after auto-repeat presses
-        self.declare_parameter("publish_rate", 50.0)    # Hz
+        self.declare_parameter("hold_time", cfg.KEYBOARD_HOLD_TIME)
+        self.declare_parameter("publish_rate", cfg.KEYBOARD_PUBLISH_RATE)
         self.declare_parameter("setup_servo", True)
 
         self.linear_speed = self.get_parameter("linear_speed").value
@@ -83,6 +81,7 @@ class KeyboardTeleop(Node):
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
+            set_servo_speed_limits(self, cfg.KEYBOARD_MAX_LINEAR_SPEED, cfg.KEYBOARD_MAX_ANGULAR_SPEED)
 
         self.create_timer(1.0 / self.get_parameter("publish_rate").value, self.publish_twist)
 
@@ -94,16 +93,16 @@ class KeyboardTeleop(Node):
         now = time.monotonic()
         if key in KEY_BINDINGS:
             if self.held_until.get(key, 0.0) < now:
-                self.held_until[key] = now + FIRST_PRESS_HOLD
+                self.held_until[key] = now + cfg.KEYBOARD_FIRST_PRESS_HOLD
             else:
                 self.held_until[key] = max(self.held_until[key], now + self.hold_time)
         elif key == " ":
             self.held_until.clear()
             self.get_logger().info("Stop")
         elif key in ("+", "="):
-            self.scale_speed(1.25)
+            self.scale_speed(cfg.KEYBOARD_SPEED_STEP)
         elif key in ("-", "_"):
-            self.scale_speed(0.8)
+            self.scale_speed(1.0 / cfg.KEYBOARD_SPEED_STEP)
         elif key == "t":
             self.held_until.clear()
             self.frame_index = 1 - self.frame_index
@@ -116,8 +115,8 @@ class KeyboardTeleop(Node):
             print(HELP)
 
     def scale_speed(self, factor):
-        self.linear_speed = min(self.linear_speed * factor, 0.25)
-        self.angular_speed = min(self.angular_speed * factor, 1.0)
+        self.linear_speed = min(self.linear_speed * factor, cfg.KEYBOARD_MAX_LINEAR_SPEED)
+        self.angular_speed = min(self.angular_speed * factor, cfg.KEYBOARD_MAX_ANGULAR_SPEED)
         self.get_logger().info(
             f"Speed: {self.linear_speed * 100:.1f} cm/s, {self.angular_speed:.2f} rad/s")
 
