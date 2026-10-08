@@ -162,7 +162,7 @@ The directions assume you stand **in front of the robot**. Pushing the pen away 
 | Terminal 3: `switch_controller not available` | Terminal 1 crashed or isn't running. Restart it (B4), press Play (B5), then restart Terminal 3. |
 | Terminal 3: `Cannot engage: no fresh Touch state` | Terminal 2 (Touch driver) isn't running. Start it (B6). |
 | Terminal 2: `stty: /dev/ttyACM300` / `Failed to initialize haptic device` | Run the Touch setup again (A6). |
-| Robot moves the wrong way | Let go of WHITE. Check you're standing in front of the robot. If it's still wrong, the `axis_map` setting needs changing. |
+| Robot moves the wrong way | Let go of WHITE. Directions are as seen from the tool looking at the robot base: towards the Touch body = towards the base, up = up. For a fixed mapping instead, use `-p mapping:=fixed` and set `axis_map`. |
 | `ros2: command not found` | You forgot to source. Run the two `source` lines. |
 
 ---
@@ -234,10 +234,11 @@ ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p option:=value -p option:=v
 |---|---|---|
 | `max_linear_speed` | `0.15` | Top speed of the robot tool (metres/second). **Start with `0.05`** |
 | `translation_scale` | `1.0` | Robot movement per stylus movement. `0.5` = robot moves half as far as your hand |
-| `enable_rotation` | `false` | `true` = twisting the pen also rotates the robot tool |
+| `enable_rotation` | `true` | Tilting/twisting the pen also rotates the robot wrist. `false` = position only |
 | `rotation_scale` | `1.0` | Robot rotation per stylus rotation |
 | `max_angular_speed` | `0.6` | Top rotation speed (radians/second) |
-| `axis_map` | `['y','-x','z']` | Which stylus direction drives robot X, Y, Z. Change it if directions are wrong |
+| `mapping` | `toward_base` | `toward_base`: towards the Touch body = towards the robot base, up = up, right = right (as seen from the tool), set each time WHITE is pressed. `fixed`: use `axis_map` |
+| `axis_map` | `['y','-x','z']` | With `mapping:=fixed`: which stylus direction drives robot X, Y, Z |
 | `position_gain` | `4.0` | How hard it pulls toward the target position. Higher = snappier |
 | `rotation_gain` | `3.0` | Same, for rotation |
 | `deadband` | `0.0003` | Ignore stylus movements smaller than this (metres) |
@@ -253,13 +254,13 @@ ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p option:=value -p option:=v
 Example with several options:
 
 ```bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5 -p enable_rotation:=true
+ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5 -p enable_rotation:=false
 ```
 
 Example changing `axis_map`:
 
 ```bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p "axis_map:=['x','y','z']"
+ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p mapping:=fixed -p "axis_map:=['x','y','z']"
 ```
 
 ### Keyboard control (instead of the Touch)

@@ -159,14 +159,17 @@ Servo refuses to move out of), so first run
 base/tool frame, `[` start recording, `]` stop + save. Hold a key to keep
 moving; the arm stops ~0.15 s after release.
 
-**Touch** (`ur5e_touch_teleop.py`): hold the **white** button to drive the arm
-(it follows the stylus displacement since the press; release to re-centre the
-stylus), press **grey** to start/stop recording. Parameters:
-`translation_scale` (default 1.0), `axis_map` (default `[y, -x, z]`: stylus
-away → robot +X, stylus right → robot −Y, up → up; change if the operator
-stands elsewhere), `enable_rotation` (default false), `max_linear_speed`
-(0.15 m/s). Example:
-`ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p translation_scale:=2.0 -p enable_rotation:=true`
+**Touch** (`ur5e_touch_teleop.py`): hold the **white** button to drive the arm.
+The stylus pose at the press is the origin; the tool then follows the stylus
+movement and tilt since then (release to re-centre the stylus). Press **grey**
+to start/stop recording. Mapping (`mapping:=toward_base`, the default): up is
+up, stylus towards the Touch body moves the tool horizontally towards the
+robot base, right is right as seen from the tool looking at the base, and pen
+tilts/twists tilt the wrist the same way. Parameters: `translation_scale`
+(default 1.0), `enable_rotation` (default true), `rotation_scale` (1.0),
+`max_linear_speed` (0.15 m/s), `mapping:=fixed` + `axis_map` (default
+`[y, -x, z]`) for a fixed stylus→base_link mapping. Example:
+`ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p translation_scale:=2.0 -p enable_rotation:=false`
 
 **Trajectories**: `trajectory_recorder.py` (started by the launch file) saves
 each recording to `~/ros2_ws/trajectories/trajectory_<date>_<time>.yaml`

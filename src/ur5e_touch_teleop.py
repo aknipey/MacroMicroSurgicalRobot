@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Touch (Geomagic / 3D Systems) stylus teleoperation of the UR5e through MoveIt Servo.
 
-Hold the WHITE button to drive the robot (clutch / deadman). While held, the
-robot tool tries to follow the stylus displacement since the button was
-pressed (scaled by `translation_scale`); releasing it freezes the robot so you
+Hold the WHITE button to drive the robot (clutch / deadman). The stylus pose
+at the moment the button goes down is the origin: while held, the robot tool
+follows the stylus displacement and tilt since then (scaled by
+`translation_scale` / `rotation_scale`); releasing it freezes the robot so you
 can re-centre the stylus and press again.
 
 Press the GREY button to start / stop recording a trajectory (needs
 trajectory_recorder running).
 
 Frames: the omni_state driver publishes the stylus position in millimetres
-with x = right, y = away from the operator, z = up. `axis_map` says which
-stylus axis drives each robot axis of `base_frame`; the default assumes the
-operator stands in front of the robot facing along base_link +X.
+with x = right, y = away from the operator (towards the Touch body), z = up.
+With `mapping` = "toward_base" (default) the Touch is treated as a small copy
+of the robot seen from the tool: up is up, pushing the stylus towards the
+Touch body moves the tool horizontally towards the robot base, and right is
+right from that viewpoint. The direction is frozen when WHITE is pressed.
+With `mapping` = "fixed", `axis_map` says which stylus axis drives each robot
+axis of `base_frame`. Stylus tilts are mapped through the same frame, so the
+wrist tilts the way the pen does.
 """
 
 import numpy as np
@@ -32,11 +38,11 @@ from ls_thesis.ur5e_common import (
     start_servo_twist_mode,
 )
 
-# Orientation published by omni_state = R_OFFSET * R_device (see omni_state.cpp),
-# while its position axes are the device axes rotated by +90 deg about X.
-TOUCH_ROTATION_OFFSET = Rotation.from_euler("z", 90, degrees=True)
+# omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
+# transposed, so its "offset * rotation" is a right multiply), so the offset cancels
+# in R * R0^-1 and the stylus delta comes out in device axes (x right, y up, z
+# towards the operator). Its position axes are those rotated by +90 deg about X.
 TOUCH_POSITION_FRAME = Rotation.from_euler("x", 90, degrees=True)
-TOUCH_ORIENTATION_TO_POSITION_FRAME = TOUCH_POSITION_FRAME * TOUCH_ROTATION_OFFSET.inv()
 
 
 def axis_map_to_matrix(axis_map):
@@ -53,6 +59,20 @@ def axis_map_to_matrix(axis_map):
     return matrix
 
 
+def toward_base_matrix(tool_position):
+    """Columns = robot-frame directions for stylus right, towards the Touch body, up.
+
+    Towards the Touch body maps to horizontally from the tool towards the robot
+    base; None if the tool is (nearly) above the base and that is undefined.
+    """
+    forward = -np.array([tool_position[0], tool_position[1], 0.0])
+    if np.linalg.norm(forward) < 0.05:
+        return None
+    forward /= np.linalg.norm(forward)
+    up = np.array([0.0, 0.0, 1.0])
+    return np.column_stack([np.cross(forward, up), forward, up])
+
+
 def clamp_norm(vector, limit):
     norm = np.linalg.norm(vector)
     return vector * (limit / norm) if norm > limit else vector
@@ -66,10 +86,11 @@ class TouchTeleop(Node):
         self.declare_parameter("button_topic", "/phantom/button")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("ee_frame", "tool0")
+        self.declare_parameter("mapping", "toward_base")     # or "fixed" (uses axis_map)
         self.declare_parameter("axis_map", ["y", "-x", "z"])
         self.declare_parameter("touch_units_to_m", 1e-3)     # omni_state default units are mm
         self.declare_parameter("translation_scale", 1.0)     # robot metres per stylus metre
-        self.declare_parameter("enable_rotation", False)
+        self.declare_parameter("enable_rotation", True)
         self.declare_parameter("rotation_scale", 1.0)
         self.declare_parameter("position_gain", 4.0)         # 1/s
         self.declare_parameter("rotation_gain", 3.0)         # 1/s
@@ -83,8 +104,10 @@ class TouchTeleop(Node):
         p = lambda name: self.get_parameter(name).value
         self.base_frame = p("base_frame")
         self.ee_frame = p("ee_frame")
-        self.axis_matrix = axis_map_to_matrix(p("axis_map"))
-        self.axis_rotation = Rotation.from_matrix(self.axis_matrix)
+        self.mapping = p("mapping")
+        if self.mapping not in ("toward_base", "fixed"):
+            raise ValueError(f"mapping must be 'toward_base' or 'fixed', not {self.mapping!r}")
+        self.fixed_axis_matrix = axis_map_to_matrix(p("axis_map"))
         self.units = p("touch_units_to_m")
         self.translation_scale = p("translation_scale")
         self.enable_rotation = p("enable_rotation")
@@ -112,6 +135,8 @@ class TouchTeleop(Node):
         self.clutched = False
         self.touch_origin = None
         self.robot_origin = None
+        self.axis_matrix = None         # robot_vector = axis_matrix @ touch_vector
+        self.axis_rotation = None
 
         self.create_subscription(OmniState, p("state_topic"), self.on_state, 1)
         self.create_subscription(OmniButtonEvent, p("button_topic"), self.on_button, 10)
@@ -166,6 +191,12 @@ class TouchTeleop(Node):
         if robot is None or not self.touch_is_fresh():
             self.get_logger().warn("Cannot engage: no fresh Touch state or robot pose yet")
             return
+        self.axis_matrix = toward_base_matrix(robot[0]) if self.mapping == "toward_base" else None
+        if self.axis_matrix is None:
+            if self.mapping == "toward_base":
+                self.get_logger().warn("Tool is above the robot base - using axis_map for this stroke")
+            self.axis_matrix = self.fixed_axis_matrix
+        self.axis_rotation = Rotation.from_matrix(self.axis_matrix)
         self.touch_origin = (self.touch_position.copy(), self.touch_orientation)
         self.robot_origin = robot
         self.clutched = True
@@ -199,9 +230,10 @@ class TouchTeleop(Node):
 
         angular = np.zeros(3)
         if self.enable_rotation and self.touch_orientation is not None and touch_origin_orientation is not None:
-            # Stylus rotation since engage, expressed in the stylus position frame, then the robot base frame
+            # Stylus rotation since engage (device axes), expressed in the stylus position frame,
+            # then the robot base frame, and applied about the tool on top of its engage orientation
             delta = self.touch_orientation * touch_origin_orientation.inv()
-            delta = TOUCH_ORIENTATION_TO_POSITION_FRAME * delta * TOUCH_ORIENTATION_TO_POSITION_FRAME.inv()
+            delta = TOUCH_POSITION_FRAME * delta * TOUCH_POSITION_FRAME.inv()
             delta = self.axis_rotation * delta * self.axis_rotation.inv()
             delta = Rotation.from_rotvec(self.rotation_scale * delta.as_rotvec())
             target_orientation = delta * robot_origin_orientation
