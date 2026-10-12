@@ -26,6 +26,8 @@ wrist tilts the way the pen does. Twisting the pen about its own axis
 (`enable_twist`) turns the tool about tool0 z, i.e. the last joint.
 """
 
+from collections import deque
+
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped, TwistStamped
@@ -125,6 +127,7 @@ class TouchTeleop(Node):
         self.declare_parameter("rotation_gain", cfg.TOUCH_ROTATION_GAIN)
         self.declare_parameter("feedforward", cfg.TOUCH_FEEDFORWARD)
         self.declare_parameter("feedforward_filter", cfg.TOUCH_FEEDFORWARD_FILTER)
+        self.declare_parameter("loop_delay", cfg.TOUCH_LOOP_DELAY)
         self.declare_parameter("max_linear_speed", cfg.TOUCH_MAX_LINEAR_SPEED)
         self.declare_parameter("max_angular_speed", cfg.TOUCH_MAX_ANGULAR_SPEED)
         self.declare_parameter("deadband", cfg.TOUCH_DEADBAND)
@@ -149,6 +152,7 @@ class TouchTeleop(Node):
         self.rotation_gain = p("rotation_gain")
         self.feedforward = p("feedforward")
         self.feedforward_filter = p("feedforward_filter")
+        self.loop_delay = p("loop_delay")
         self.max_linear = p("max_linear_speed")
         self.max_angular = p("max_angular_speed")
         self.deadband = p("deadband")
@@ -178,6 +182,7 @@ class TouchTeleop(Node):
         # Feedforward: target as seen by the previous update, and its filtered velocity
         self.previous_target = None
         self.previous_update = None
+        self.target_history = deque()   # (time, target) for the loop-delay comparison
         self.target_linear_velocity = np.zeros(3)
         self.target_angular_velocity = np.zeros(3)
 
@@ -265,6 +270,7 @@ class TouchTeleop(Node):
         self.pen_twist = 0.0
         self.target = self.compute_target()
         self.previous_target = None
+        self.target_history.clear()
         self.target_linear_velocity = np.zeros(3)
         self.target_angular_velocity = np.zeros(3)
         self.clutched = True
@@ -319,8 +325,10 @@ class TouchTeleop(Node):
         if robot is None:
             return
         robot_position, robot_orientation = robot
-        target_position, target_orientation = self.target
         self.update_target_velocity()
+        # The robot pose reflects commands from loop_delay ago, so correct towards
+        # where the target was then; the feedforward term carries the motion since
+        target_position, target_orientation = self.delayed_target()
 
         error = target_position - robot_position
         linear = self.feedforward * self.target_linear_velocity
@@ -335,6 +343,14 @@ class TouchTeleop(Node):
                                  + self.rotation_gain * rotation_error, self.max_angular)
 
         self.publish_twist(linear, angular)
+
+    def delayed_target(self):
+        """The stylus target as it was loop_delay ago (the oldest one kept, early in a stroke)."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self.target_history.append((now, self.target))
+        while len(self.target_history) > 1 and self.target_history[1][0] <= now - self.loop_delay:
+            self.target_history.popleft()
+        return self.target_history[0][1]
 
     def update_target_velocity(self):
         """Low-pass filtered velocity of the stylus target, for the feedforward term."""

@@ -5,10 +5,10 @@
     ros2 run ls_thesis trajectory_player.py latest --speed 0.5
     ros2 run ls_thesis trajectory_player.py home     # move to a ready pose (elbow up, tool down)
 
-1. Switches to the scaled_joint_trajectory_controller (teleop is paused).
+1. Pauses MoveIt Servo (teleop shares the scaled_joint_trajectory_controller) and activates it.
 2. Moves to the first recorded joint configuration over --approach-time seconds.
 3. Plays the recording back, time-scaled by --speed.
-4. Switches back to forward_position_controller so teleop works again.
+4. Re-arms MoveIt Servo on the teleop controller so teleop works again.
 
 The recorded tool path is published on /trajectory_player/path for RViz.
 Asks for confirmation before moving unless --yes is given.
@@ -37,6 +37,7 @@ from ls_thesis.ur5e_common import (
     TRAJECTORY_ACTION,
     TRAJECTORY_CONTROLLER,
     activate_controller,
+    set_servo_paused,
 )
 from ls_thesis import teleop_settings as cfg
 
@@ -182,6 +183,10 @@ def main():
             if answer.strip().lower() != "y":
                 print("Aborted.")
                 return
+        # Teleop streams into the same controller, so stop Servo from overriding the replay
+        servo_paused = set_servo_paused(node, True, timeout=2.0)
+        if not servo_paused:
+            node.get_logger().warn("Could not pause MoveIt Servo - don't touch the teleop input during replay")
         if not activate_controller(node, TRAJECTORY_CONTROLLER):
             return
         node.execute(goal)
@@ -190,6 +195,7 @@ def main():
     finally:
         if not args.no_restore_teleop and rclpy.ok():
             activate_controller(node, TELEOP_CONTROLLER)
+            set_servo_paused(node, False, timeout=2.0)
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

@@ -3,10 +3,12 @@
 UR5e motion in ROS 2 goes through MoveIt Servo:
 
     keyboard / Touch node --TwistStamped--> /servo_node/delta_twist_cmds
-    servo_node --Float64MultiArray--> /forward_position_controller/commands
+    servo_node --JointTrajectory--> /scaled_joint_trajectory_controller/joint_trajectory
 
-Recorded trajectories are replayed through the scaled_joint_trajectory_controller,
-so the active joint controller has to be swapped between teleop and playback.
+Servo must output trajectories, not Float64MultiArray positions: in position mode it
+re-bases every step on the measured joint state, so on the real arm (which takes
+~40 ms to reach a command) the robot only ever moves ~10% of the commanded speed.
+Recorded trajectories are replayed through the same controller's action interface.
 """
 
 from controller_manager_msgs.srv import SwitchController
@@ -22,7 +24,8 @@ SERVO_PAUSE_SERVICE = "/servo_node/pause_servo"
 SERVO_SET_PARAMETERS_SERVICE = "/servo_node/set_parameters"
 
 SWITCH_CONTROLLER_SERVICE = "/controller_manager/switch_controller"
-TELEOP_CONTROLLER = "forward_position_controller"
+TELEOP_CONTROLLER = "scaled_joint_trajectory_controller"
+SERVO_COMMAND_TOPIC = f"/{TELEOP_CONTROLLER}/joint_trajectory"
 TRAJECTORY_CONTROLLER = "scaled_joint_trajectory_controller"
 TRAJECTORY_ACTION = "/scaled_joint_trajectory_controller/follow_joint_trajectory"
 
@@ -95,11 +98,16 @@ def set_servo_speed_limits(node, linear, angular, timeout=10.0):
     return True
 
 
+def set_servo_paused(node, paused, timeout=10.0):
+    """Pause / unpause MoveIt Servo. Paused, it sends nothing to the teleop controller."""
+    request = SetBool.Request()
+    request.data = paused
+    return call_service(node, SetBool, SERVO_PAUSE_SERVICE, request, timeout) is not None
+
+
 def start_servo_twist_mode(node, timeout=30.0):
     """Unpause MoveIt Servo and put it in twist (Cartesian velocity) mode."""
-    pause = SetBool.Request()
-    pause.data = False
-    if call_service(node, SetBool, SERVO_PAUSE_SERVICE, pause, timeout) is None:
+    if not set_servo_paused(node, False, timeout):
         return False
 
     command_type = ServoCommandType.Request()

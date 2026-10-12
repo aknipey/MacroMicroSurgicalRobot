@@ -21,19 +21,28 @@ see everything (full logs are always in ~/.ros/log either way).
 
 import logging
 import sys
+from pathlib import Path
+
+import yaml
 
 import launch.logging
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler, TimerAction,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
 from launch.substitutions import (
     EqualsSubstitution, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution,
 )
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from ament_index_python.packages import get_package_share_directory
+from moveit_configs_utils import MoveItConfigsBuilder
 
-from ls_thesis.teleop_settings import TOUCH_STARTUP_DELAY
+from ls_thesis.teleop_settings import SERVO_LOOKAHEAD, TOUCH_STARTUP_DELAY
+from ls_thesis.ur5e_common import SERVO_COMMAND_TOPIC, TELEOP_CONTROLLER
 
 # Launch's own per-process chatter, hidden unless verbose:=true
 LAUNCH_CHATTER = ("process started with pid", "process has finished cleanly")
@@ -138,20 +147,49 @@ def generate_launch_description():
             "robot_ip": LaunchConfiguration("robot_ip"),
             "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
             "kinematics_params_file": LaunchConfiguration("kinematics_params_file"),
-            # MoveIt Servo streams joint positions to this controller
-            "initial_joint_controller": "forward_position_controller",
+            # MoveIt Servo streams joint trajectories to this controller
+            "initial_joint_controller": TELEOP_CONTROLLER,
             "launch_rviz": "false",
         }.items(),
     )
 
-    moveit_servo = IncludeLaunchDescription(
+    moveit = IncludeLaunchDescription(
         PathJoinSubstitution([FindPackageShare("ur_moveit_config"), "launch", "ur_moveit.launch.py"]),
         launch_arguments={
             "ur_type": ur_type,
-            "launch_servo": "true",
+            "launch_servo": "false",  # started below with our output settings
             "launch_rviz": "false",
         }.items(),
     )
+
+    # MoveIt Servo, as ur_moveit.launch.py would start it but sending JointTrajectory
+    # to the trajectory controller instead of Float64MultiArray positions (see
+    # ur5e_common for why). Its output settings are read-only, hence started here.
+    moveit_config = (
+        MoveItConfigsBuilder(robot_name="ur", package_name="ur_moveit_config")
+        .robot_description_semantic(Path("srdf") / "ur.srdf.xacro", {"name": ur_type})
+        .to_moveit_configs()
+    )
+    servo_yaml_path = Path(get_package_share_directory("ur_moveit_config")) / "config" / "ur_servo.yaml"
+    servo_yaml = yaml.safe_load(servo_yaml_path.read_text())
+    servo_yaml.update({
+        "command_out_type": "trajectory_msgs/JointTrajectory",
+        "command_out_topic": SERVO_COMMAND_TOPIC,
+        "publish_joint_positions": True,
+        # The newest point's velocity is never zero, which the controller rejects
+        "publish_joint_velocities": False,
+        "publish_joint_accelerations": False,
+        "max_expected_latency": SERVO_LOOKAHEAD,
+    })
+    wait_robot_description = Node(package="ur_robot_driver", executable="wait_for_robot_description",
+                                  output="screen")
+    servo_node = Node(
+        package="moveit_servo",
+        executable="servo_node",
+        parameters=[moveit_config.to_dict(), {"moveit_servo": servo_yaml}],
+        output="screen",
+    )
+    servo = RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))
 
     recorder = Node(
         package="ls_thesis",
@@ -186,4 +224,4 @@ def generate_launch_description():
         )],
     )
 
-    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit_servo, recorder, rviz, touch_driver, touch_teleop])
+    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, recorder, rviz, touch_driver, touch_teleop])

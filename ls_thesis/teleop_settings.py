@@ -31,14 +31,14 @@ TOUCH_TWIST_SCALE = 1.0
 
 # Top tool speeds. These are the hard caps: if the robot lags your hand on fast
 # moves, raise these first.
-TOUCH_MAX_LINEAR_SPEED = 2.0    # m/s
-TOUCH_MAX_ANGULAR_SPEED = 40    # rad/s
+TOUCH_MAX_LINEAR_SPEED = 1.2    # m/s
+TOUCH_MAX_ANGULAR_SPEED = 6.0    # rad/s
 
 # How hard the tool is pulled towards the stylus target (1/s). Commanded speed =
 # gain * error, so with gain 4 a 1 cm error gives 4 cm/s. Higher = snappier and
 # less lag on small moves, but too high oscillates.
-TOUCH_POSITION_GAIN = 10.0
-TOUCH_ROTATION_GAIN = 20.0
+TOUCH_POSITION_GAIN = 8.0
+TOUCH_ROTATION_GAIN = 8.0
 
 # Velocity feedforward: also command the stylus's own velocity, so the gains above
 # only correct the remaining error instead of producing all of the motion. Roughly
@@ -47,6 +47,11 @@ TOUCH_FEEDFORWARD = 1.0
 # Low-pass time constant on the stylus velocity estimate (s). Larger = smoother but
 # more lag; smaller = jitter from the stylus encoders reaches the robot.
 TOUCH_FEEDFORWARD_FILTER = 0.02
+# Time (s) between a command and the robot pose showing it (Servo lookahead + driver
+# + robot). The gains compare the robot with where the target was this long ago,
+# so they don't keep pushing for motion that is already on its way (overshoot).
+# 0 = compare with the current target, as before.
+TOUCH_LOOP_DELAY = 0.05
 
 # Position errors smaller than this are ignored (m).
 TOUCH_DEADBAND = 3e-4
@@ -63,6 +68,13 @@ TOUCH_AXIS_MAP = ["y", "-x", "z"]
 
 # Seconds the launch file waits for the driver + Servo before starting the Touch node.
 TOUCH_STARTUP_DELAY = 8.0
+
+# ---------------------------------------------------------------- MoveIt Servo
+# How far ahead (s) each Servo command is scheduled. Servo builds every step on its
+# own previous command while that is still in the future, so this must be longer
+# than one Servo cycle (4 ms), but it is also latency the robot adds to every move.
+# Read when Servo starts: needs a relaunch, not just a node restart.
+SERVO_LOOKAHEAD = 0.05
 
 # -------------------------------------------------------------------- Keyboard
 KEYBOARD_LINEAR_SPEED = 0.05     # m/s, starting speed
@@ -99,7 +111,7 @@ LOG_BAG_TOPICS = [
     "/ur5e_touch_teleop/target_pose",
     "/servo_node/delta_twist_cmds",
     "/servo_node/status",
-    "/forward_position_controller/commands",
+    "/scaled_joint_trajectory_controller/joint_trajectory",
     "/tcp_pose_broadcaster/pose",
     "/joint_states",
     "/speed_scaling_state_broadcaster/speed_scaling",
