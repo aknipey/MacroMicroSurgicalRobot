@@ -38,7 +38,7 @@ TOUCH_MAX_ANGULAR_SPEED = 40    # rad/s
 # gain * error, so with gain 4 a 1 cm error gives 4 cm/s. Higher = snappier and
 # less lag on small moves, but too high oscillates.
 TOUCH_POSITION_GAIN = 10.0
-TOUCH_ROTATION_GAIN = 10.0
+TOUCH_ROTATION_GAIN = 20.0
 
 # Velocity feedforward: also command the stylus's own velocity, so the gains above
 # only correct the remaining error instead of producing all of the motion. Roughly
