@@ -23,17 +23,30 @@ TOUCH_TRANSLATION_SCALE = 1.0
 # Robot radians per stylus radian.
 TOUCH_ROTATION_SCALE = 1.0
 TOUCH_ENABLE_ROTATION = True
+# Twisting the pen about its own axis turns the last joint (wrist 3) instead of
+# being mixed into the tilt. Scale is robot radians per pen radian; make it
+# negative if the wrist turns the opposite way to the pen.
+TOUCH_ENABLE_TWIST = True
+TOUCH_TWIST_SCALE = 1.0
 
 # Top tool speeds. These are the hard caps: if the robot lags your hand on fast
 # moves, raise these first.
-TOUCH_MAX_LINEAR_SPEED = 1.2    # m/s
-TOUCH_MAX_ANGULAR_SPEED = 15    # rad/s
+TOUCH_MAX_LINEAR_SPEED = 2.0    # m/s
+TOUCH_MAX_ANGULAR_SPEED = 40    # rad/s
 
 # How hard the tool is pulled towards the stylus target (1/s). Commanded speed =
 # gain * error, so with gain 4 a 1 cm error gives 4 cm/s. Higher = snappier and
 # less lag on small moves, but too high oscillates.
-TOUCH_POSITION_GAIN = 8.0
-TOUCH_ROTATION_GAIN = 5.0
+TOUCH_POSITION_GAIN = 10.0
+TOUCH_ROTATION_GAIN = 10.0
+
+# Velocity feedforward: also command the stylus's own velocity, so the gains above
+# only correct the remaining error instead of producing all of the motion. Roughly
+# halves the lag on mock hardware. 0 = off, 1 = full stylus velocity.
+TOUCH_FEEDFORWARD = 1.0
+# Low-pass time constant on the stylus velocity estimate (s). Larger = smoother but
+# more lag; smaller = jitter from the stylus encoders reaches the robot.
+TOUCH_FEEDFORWARD_FILTER = 0.02
 
 # Position errors smaller than this are ignored (m).
 TOUCH_DEADBAND = 3e-4
@@ -67,6 +80,32 @@ KEYBOARD_PUBLISH_RATE = 50.0     # Hz
 
 # -------------------------------------------------------------------- Recorder
 RECORDER_SAMPLE_RATE = 25.0      # Hz
+
+# Path logs written while GREY / '[' recording is on: Touch target + raw stylus and
+# the UR's own (RTDE) TCP pose, at full rate, into LOG_DIR/NEW_RUN/. NEW_RUN is
+# deleted when the next recording starts, so rename it to keep a run. With
+# LOG_KEEP_ALL_RUNS every run is also copied to LOG_DIR/runs/<date_time>/.
+LOG_DIR = "~/ros2_ws/src/MacroMicroSurgicalRobot/logs"
+LOG_KEEP_ALL_RUNS = False
+# Without tcp_pose_broadcaster (mock hardware) the UR path falls back to TF
+# base_link -> tool0, sampled at this rate (Hz).
+LOG_TF_FALLBACK_RATE = 200.0
+# Topics also recorded into LOG_DIR/NEW_RUN/rosbag (ros2 bag, mcap) during a
+# recording; an empty list turns the bag off. Topics that do not exist (e.g.
+# the Touch ones in a keyboard run) are simply skipped.
+LOG_BAG_TOPICS = [
+    "/phantom/state",
+    "/phantom/button",
+    "/ur5e_touch_teleop/target_pose",
+    "/servo_node/delta_twist_cmds",
+    "/servo_node/status",
+    "/forward_position_controller/commands",
+    "/tcp_pose_broadcaster/pose",
+    "/joint_states",
+    "/speed_scaling_state_broadcaster/speed_scaling",
+    "/tf",
+    "/tf_static",
+]
 
 # ---------------------------------------------------------------------- Player
 PLAYER_DEFAULT_SPEED = 1.0       # playback speed factor

@@ -69,7 +69,7 @@ def activate_controller(node, controller, timeout=10.0):
     if response is None or not response.ok:
         node.get_logger().error(f"Failed to activate controller {controller}")
         return False
-    node.get_logger().info(f"Active joint controller: {controller}")
+    node.get_logger().debug(f"Active joint controller: {controller}")
     return True
 
 
@@ -91,7 +91,7 @@ def set_servo_speed_limits(node, linear, angular, timeout=10.0):
     if response is None or not all(r.successful for r in response.results):
         node.get_logger().error("Could not set MoveIt Servo speed limits - it stays at ur_servo.yaml values")
         return False
-    node.get_logger().info(f"MoveIt Servo speed limits: {linear:.2f} m/s, {angular:.2f} rad/s")
+    node.get_logger().debug(f"MoveIt Servo speed limits: {linear:.2f} m/s, {angular:.2f} rad/s")
     return True
 
 

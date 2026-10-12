@@ -234,8 +234,10 @@ ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p option:=value -p option:=v
 |---|---|---|
 | `max_linear_speed` | `0.15` | Top speed of the robot tool (metres/second). **Start with `0.05`** |
 | `translation_scale` | `1.0` | Robot movement per stylus movement. `0.5` = robot moves half as far as your hand |
-| `enable_rotation` | `true` | Tilting/twisting the pen also rotates the robot wrist. `false` = position only |
+| `enable_rotation` | `true` | Tilting the pen also tilts the robot tool. `false` = no tilt |
 | `rotation_scale` | `1.0` | Robot rotation per stylus rotation |
+| `enable_twist` | `true` | Twisting the pen about its own axis turns the last robot joint (wrist 3) |
+| `twist_scale` | `1.0` | Wrist turn per pen twist. Negative = turn the other way |
 | `max_angular_speed` | `0.6` | Top rotation speed (radians/second) |
 | `mapping` | `toward_base` | `toward_base`: towards the Touch body = towards the robot base, up = up, right = right (as seen from the tool), set each time WHITE is pressed. `fixed`: use `axis_map` |
 | `axis_map` | `['y','-x','z']` | With `mapping:=fixed`: which stylus direction drives robot X, Y, Z |
