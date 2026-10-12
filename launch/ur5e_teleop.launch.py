@@ -7,6 +7,11 @@
     # Real robot, Touch stylus
     ros2 launch ls_thesis ur5e_teleop.launch.py robot_ip:=192.168.0.100 input:=touch
 
+    # Replay a logged run's stylus instead of the Touch (same hand motion every time)
+    ros2 launch ls_thesis ur5e_teleop.launch.py input:=replay replay_run:=V2/Up_10CM
+    # ...or input:=replay alone, then in a second terminal (repeat as often as you like):
+    ros2 run ls_thesis stylus_replay.py V2/Up_10CM
+
     # No robot: simulated (mock) hardware, same commands otherwise
     ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true
 
@@ -111,6 +116,10 @@ Node.execute = _execute_quietly
 def generate_launch_description():
     pkg_share = FindPackageShare("ls_thesis")
     use_touch = IfCondition(EqualsSubstitution(LaunchConfiguration("input"), "touch"))
+    # The teleop node runs for the real Touch and for a replayed one; the driver only for the real one
+    use_stylus = IfCondition(PythonExpression(["'", LaunchConfiguration("input"), "' in ('touch', 'replay')"]))
+    auto_replay = IfCondition(PythonExpression([
+        "'", LaunchConfiguration("input"), "' == 'replay' and '", LaunchConfiguration("replay_run"), "' != ''"]))
 
     ur_type = LaunchConfiguration("ur_type")
 
@@ -131,9 +140,14 @@ def generate_launch_description():
                               description="Simulate the UR5e instead of connecting to it"),
         DeclareLaunchArgument("kinematics_params_file",
                               default_value=default_kinematics),
-        DeclareLaunchArgument("input", default_value="keyboard", choices=["keyboard", "touch", "none"],
+        DeclareLaunchArgument("input", default_value="keyboard", choices=["keyboard", "touch", "replay", "none"],
                               description="'touch' also starts the Touch driver and stylus teleop node. "
-                                          "Keyboard teleop must be run in its own terminal."),
+                                          "'replay' starts the teleop node without the driver, for "
+                                          "stylus_replay.py. Keyboard teleop must be run in its own terminal."),
+        DeclareLaunchArgument("replay_run", default_value="",
+                              description="With input:=replay: run folder to replay once the stack is up "
+                                          "(e.g. V2/Up_10CM, relative to logs/). Moves the robot to the "
+                                          "run's start pose without asking."),
         DeclareLaunchArgument("launch_rviz", default_value="true"),
         DeclareLaunchArgument("trajectory_dir", default_value="~/ros2_ws/trajectories"),
         DeclareLaunchArgument("verbose", default_value="false",
@@ -220,8 +234,21 @@ def generate_launch_description():
             executable="ur5e_touch_teleop.py",
             name="ur5e_touch_teleop",
             output="screen",
-            condition=use_touch,
+            condition=use_stylus,
         )],
     )
 
-    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, recorder, rviz, touch_driver, touch_teleop])
+    # After the teleop node has configured Servo (it needs a few seconds after it starts)
+    stylus_replay = TimerAction(
+        period=TOUCH_STARTUP_DELAY + 5.0,
+        actions=[Node(
+            package="ls_thesis",
+            executable="stylus_replay.py",
+            name="stylus_replay",
+            output="screen",
+            arguments=[LaunchConfiguration("replay_run"), "--yes"],
+            condition=auto_replay,
+        )],
+    )
+
+    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, recorder, rviz, touch_driver, touch_teleop, stylus_replay])

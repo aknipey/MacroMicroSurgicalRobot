@@ -140,3 +140,10 @@ PLAYER_APPROACH_TIME = 5.0       # s to move to the first recorded pose
 PLAYER_MIN_POINT_SPACING = 0.04
 # 'home' pose: elbow up, tool pointing down - away from singularities.
 HOME_POSITIONS = [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+
+# --------------------------------------------------------------- Stylus replay
+# stylus_replay.py: seconds the stylus is held still after the recording starts
+# (ros2 bag record takes up to ~1 s to subscribe) and after the replay ends (so the
+# robot settling is in the logs).
+REPLAY_LEAD_IN = 1.5
+REPLAY_TAIL = 1.5

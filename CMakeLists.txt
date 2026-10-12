@@ -106,6 +106,7 @@ install(PROGRAMS
   src/ur5e_touch_teleop.py
   src/trajectory_recorder.py
   src/trajectory_player.py
+  src/stylus_replay.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
