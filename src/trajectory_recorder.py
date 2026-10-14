@@ -38,6 +38,7 @@ import os
 import shutil
 import signal
 import subprocess
+from collections import deque
 from datetime import datetime
 
 import numpy as np
@@ -70,6 +71,13 @@ UR_JOINTS = [
 POSE_COLUMNS = ["x", "y", "z", "qx", "qy", "qz", "qw"]
 # RTDE samples compared with TF to measure the pendant TCP offset at recording start
 TCP_OFFSET_SAMPLES = 50
+# Afterwards every TCP_CHECK_EVERY-th RTDE sample is compared again: the offset is rigid,
+# so drifting by more than TCP_CHECK_TOLERANCE means TF's kinematics are not this arm's
+# (e.g. launched with the wrong ur_type)
+TCP_CHECK_EVERY = 25
+TCP_CHECK_TOLERANCE = 0.005     # m
+# RTDE samples wait this long (s) for TF to reach their stamp before being dropped
+TCP_QUEUE_AGE = 1.0
 RUN_FOLDER = "NEW_RUN"
 
 
@@ -138,6 +146,9 @@ class TrajectoryRecorder(Node):
         # rows wait in pending_tcp_rows until it is known
         self.tcp_offset = None
         self.tcp_offset_samples = []
+        self.tcp_check_errors = []      # m, offset drift at each later check
+        self.tcp_queue = deque()        # (stamp, values) RTDE samples waiting for TF
+        self.tcp_messages = 0
         self.pending_tcp_rows = []
         self.bag = None                 # `ros2 bag record` process while recording
         self.create_subscription(OmniState, self.get_parameter("stylus_topic").value,
@@ -224,6 +235,9 @@ class TrajectoryRecorder(Node):
         self.last_tcp_msg = self.get_clock().now()
         self.tcp_offset = None
         self.tcp_offset_samples = []
+        self.tcp_check_errors = []
+        self.tcp_queue = deque()
+        self.tcp_messages = 0
         self.pending_tcp_rows = []
         stamped = ["t", "stamp"]
         self.start_bag()
@@ -243,6 +257,12 @@ class TrajectoryRecorder(Node):
             for row, values in self.pending_tcp_rows:
                 self.logs["ur"].write(row[:2] + ["rtde_tcp", self.base_frame] + values)
             self.pending_tcp_rows = []
+        drift = max(self.tcp_check_errors, default=0.0)
+        if drift > TCP_CHECK_TOLERANCE:
+            self.get_logger().error(
+                f"Pendant TCP vs TF {self.ee_frame} drifted up to {drift * 1000:.1f} mm during the run: "
+                "TF's kinematics are not this arm's (wrong ur_type or kinematics_params_file?), "
+                "so the teleop and UR_PATH are both off")
         logs, self.logs = self.logs, None
         for stream in logs.values():
             stream.close()
@@ -275,7 +295,9 @@ class TrajectoryRecorder(Node):
                     "UR_PATH": "source rtde = tcp_pose_broadcaster (pendant TCP, tool0_controller) "
                                "moved back to ee_frame by tcp_offset, tf = TF ee_frame fallback, "
                                "rtde_tcp = pendant TCP (offset not measured); all in base_frame",
-                    "tcp_offset": "ee_frame -> pendant TCP, measured against TF at recording start",
+                    "tcp_offset": "ee_frame -> pendant TCP, measured against TF at recording start; "
+                                  "check_max_mm = largest drift from it in later checks during the "
+                                  "run (should be ~0: more means TF uses the wrong arm kinematics)",
                 },
                 "settings": settings,
             }, f, default_flow_style=None, sort_keys=False)
@@ -338,27 +360,53 @@ class TrajectoryRecorder(Node):
         row = [self.host_time(), stamp_to_sec(msg.header.stamp), "rtde", self.base_frame]
         if self.tcp_offset is None:
             self.pending_tcp_rows.append((row, values))
-            self.measure_tcp_offset(msg.header.stamp, values)
-            if self.tcp_offset is None:
-                return
+        self.tcp_messages += 1
+        if self.tcp_offset is None or self.tcp_messages % TCP_CHECK_EVERY == 0:
+            self.tcp_queue.append((Time.from_msg(msg.header.stamp), values))
+        self.process_tcp_queue()
+        if self.tcp_offset is None:
+            return
+        if self.pending_tcp_rows:   # holds this row too
             for pending_row, pending_values in self.pending_tcp_rows:
                 self.logs["ur"].write(pending_row + self.tcp_to_ee(pending_values))
             self.pending_tcp_rows = []
             return
         self.logs["ur"].write(row + self.tcp_to_ee(values))
 
-    def measure_tcp_offset(self, stamp, tcp_values):
-        """Pendant TCP relative to TF ee_frame at the same stamp, averaged over TCP_OFFSET_SAMPLES."""
-        try:
-            tf = self.tf_buffer.lookup_transform(self.base_frame, self.ee_frame, Time.from_msg(stamp))
-        except TransformException:
-            return      # TF not there yet for this stamp - try the next sample
+    def process_tcp_queue(self):
+        """Compare queued RTDE samples with TF ee_frame at their stamps, oldest first.
+
+        robot_state_publisher's TF trails the 500 Hz RTDE stream (it publishes at ~20 Hz),
+        so a lookup at a fresh RTDE stamp is always in TF's future; samples wait here until
+        TF has caught up, or are dropped after TCP_QUEUE_AGE."""
+        while self.tcp_queue:
+            stamp, values = self.tcp_queue[0]
+            try:
+                tf = self.tf_buffer.lookup_transform(self.base_frame, self.ee_frame, stamp)
+            except TransformException:
+                if (self.tcp_queue[-1][0] - stamp).nanoseconds * 1e-9 <= TCP_QUEUE_AGE:
+                    return      # TF not there yet - retry on the next RTDE message
+                self.tcp_queue.popleft()
+                continue
+            self.tcp_queue.popleft()
+            self.add_tcp_offset_sample(tf, values)
+
+    def add_tcp_offset_sample(self, tf, tcp_values):
+        """Pendant TCP relative to TF ee_frame: averaged over the first TCP_OFFSET_SAMPLES
+        into tcp_offset, later ones only checked against it."""
         t, r = tf.transform.translation, tf.transform.rotation
         ee_rotation = Rotation.from_quat([r.x, r.y, r.z, r.w])
         tcp_rotation = Rotation.from_quat(tcp_values[3:])
-        self.tcp_offset_samples.append((
-            ee_rotation.inv() * tcp_rotation,
-            ee_rotation.inv().apply(np.array(tcp_values[:3]) - [t.x, t.y, t.z])))
+        translation = ee_rotation.inv().apply(np.array(tcp_values[:3]) - [t.x, t.y, t.z])
+        if self.tcp_offset is not None:
+            error = float(np.linalg.norm(translation - self.tcp_offset[1]))
+            self.tcp_check_errors.append(error)
+            if error > TCP_CHECK_TOLERANCE:
+                self.get_logger().warn(
+                    f"Pendant TCP vs TF {self.ee_frame} offset moved {error * 1000:.1f} mm - "
+                    "wrong ur_type or kinematics file?", throttle_duration_sec=2.0)
+            return
+        self.tcp_offset_samples.append((ee_rotation.inv() * tcp_rotation, translation))
         if len(self.tcp_offset_samples) < TCP_OFFSET_SAMPLES:
             return
         rotations, translations = zip(*self.tcp_offset_samples)
@@ -379,7 +427,9 @@ class TrajectoryRecorder(Node):
             return None
         rotation, translation = self.tcp_offset
         return {"xyz_mm": [round(float(v) * 1000, 2) for v in translation],
-                "rotvec_deg": [round(float(v), 3) for v in np.degrees(rotation.as_rotvec())]}
+                "rotvec_deg": [round(float(v), 3) for v in np.degrees(rotation.as_rotvec())],
+                "checks": len(self.tcp_check_errors),
+                "check_max_mm": round(max(self.tcp_check_errors, default=0.0) * 1000, 2)}
 
     def to_base_frame(self, frame, values):
         """Pose [x y z qx qy qz qw] in `frame` -> base_frame (static transform, looked up once)."""

@@ -436,6 +436,10 @@ def analyse(run, args, plot):
               + (f" (replay of {info['replay_of']})" if info["replay_of"] else ""))
     else:
         print(f"{name}: no Touch target rows (keyboard run, or WHITE never held) - UR path only")
+    drift = (read_yaml(os.path.join(run, "META.yaml")).get("tcp_offset") or {}).get("check_max_mm")
+    if drift is not None and drift > 5.0:
+        print(f"  WARNING: pendant TCP vs TF drifted {drift} mm during the run - TF used the wrong arm "
+              "kinematics (ur_type?), so the robot was driven on a wrong model: re-record it")
     ur_t, ur_xyz, ur_quat = ur[:3]
     if touch is not None and ur_is_pendant_tcp(run, ur):
         ur_xyz, ur_quat = tcp_to_tool0(ur, touch)
