@@ -14,6 +14,8 @@
 
     # No robot: simulated (mock) hardware, same commands otherwise
     ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true
+    # ...with the real arm's delays added (ur_emulator.py), for latency testing
+    ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true emulate_ur:=true
 
     # Other UR models (e.g. a UR16e): pass ur_type, ideally with its own calibration
     ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur16e robot_ip:=<ip> kinematics_params_file:=<file>
@@ -25,6 +27,7 @@ see everything (full logs are always in ~/.ros/log either way).
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -33,7 +36,8 @@ import yaml
 import launch.logging
 from launch import LaunchDescription
 from launch.actions import (
-    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler, TimerAction,
+    DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler,
+    TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
@@ -43,11 +47,17 @@ from launch.substitutions import (
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
-from ls_thesis.teleop_settings import SERVO_LOOKAHEAD, TOUCH_STARTUP_DELAY
-from ls_thesis.ur5e_common import SERVO_COMMAND_TOPIC, TELEOP_CONTROLLER
+from ls_thesis.teleop_settings import SERVO_LOOKAHEAD, SERVO_OUTPUT, TOUCH_STARTUP_DELAY
+from ls_thesis.ur5e_common import (
+    EMULATOR_CONTROLLER, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC, SERVO_COMMAND_TOPIC,
+    SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
+)
+
+if SERVO_OUTPUT not in ("trajectory", "velocity"):
+    raise ValueError(f"SERVO_OUTPUT must be 'trajectory' or 'velocity', not {SERVO_OUTPUT!r}")
 
 # Launch's own per-process chatter, hidden unless verbose:=true
 LAUNCH_CHATTER = ("process started with pid", "process has finished cleanly")
@@ -150,6 +160,9 @@ def generate_launch_description():
                                           "run's start pose without asking."),
         DeclareLaunchArgument("launch_rviz", default_value="true"),
         DeclareLaunchArgument("trajectory_dir", default_value="~/ros2_ws/trajectories"),
+        DeclareLaunchArgument("emulate_ur", default_value="false",
+                              description="With use_mock_hardware:=true: add the real UR's delays "
+                                          "(ur_emulator.py between Servo and the mock joints)"),
         DeclareLaunchArgument("verbose", default_value="false",
                               description="Show INFO output from the UR driver, MoveIt and launch itself"),
     ]
@@ -161,8 +174,10 @@ def generate_launch_description():
             "robot_ip": LaunchConfiguration("robot_ip"),
             "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
             "kinematics_params_file": LaunchConfiguration("kinematics_params_file"),
-            # MoveIt Servo streams joint trajectories to this controller
-            "initial_joint_controller": TELEOP_CONTROLLER,
+            # The controller MoveIt Servo streams to
+            "initial_joint_controller": PythonExpression([
+                "'", EMULATOR_CONTROLLER, "' if '", LaunchConfiguration("emulate_ur"), "' == 'true' else '",
+                VELOCITY_CONTROLLER if SERVO_OUTPUT == "velocity" else TELEOP_CONTROLLER, "'"]),
             "launch_rviz": "false",
         }.items(),
     )
@@ -186,24 +201,51 @@ def generate_launch_description():
     )
     servo_yaml_path = Path(get_package_share_directory("ur_moveit_config")) / "config" / "ur_servo.yaml"
     servo_yaml = yaml.safe_load(servo_yaml_path.read_text())
-    servo_yaml.update({
-        "command_out_type": "trajectory_msgs/JointTrajectory",
-        "command_out_topic": SERVO_COMMAND_TOPIC,
-        "publish_joint_positions": True,
-        # The newest point's velocity is never zero, which the controller rejects
-        "publish_joint_velocities": False,
-        "publish_joint_accelerations": False,
-        "max_expected_latency": SERVO_LOOKAHEAD,
-    })
+    if SERVO_OUTPUT == "velocity":
+        servo_yaml.update({
+            "command_out_type": "std_msgs/Float64MultiArray",
+            "command_out_topic": SERVO_VELOCITY_TOPIC,
+            "publish_joint_positions": False,
+            "publish_joint_velocities": True,
+            "publish_joint_accelerations": False,
+        })
+    else:
+        servo_yaml.update({
+            "command_out_type": "trajectory_msgs/JointTrajectory",
+            "command_out_topic": SERVO_COMMAND_TOPIC,
+            "publish_joint_positions": True,
+            # The newest point's velocity is never zero, which the controller rejects
+            "publish_joint_velocities": False,
+            "publish_joint_accelerations": False,
+            "max_expected_latency": SERVO_LOOKAHEAD,
+        })
     wait_robot_description = Node(package="ur_robot_driver", executable="wait_for_robot_description",
                                   output="screen")
-    servo_node = Node(
-        package="moveit_servo",
-        executable="servo_node",
-        parameters=[moveit_config.to_dict(), {"moveit_servo": servo_yaml}],
-        output="screen",
-    )
-    servo = RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))
+
+    def start_servo(context):
+        servo_params = dict(servo_yaml)
+        if context.launch_configurations.get("emulate_ur") == "true":
+            servo_params["command_out_topic"] = (
+                EMULATOR_VELOCITY_TOPIC if SERVO_OUTPUT == "velocity" else EMULATOR_TRAJECTORY_TOPIC)
+        servo_node = Node(
+            package="moveit_servo",
+            executable="servo_node",
+            parameters=[moveit_config.to_dict(), {"moveit_servo": servo_params}],
+            output="screen",
+        )
+        return [RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))]
+
+    servo = OpaqueFunction(function=start_servo)
+
+    # Installed node, or straight from the source tree before the next colcon build
+    emulator_condition = IfCondition(LaunchConfiguration("emulate_ur"))
+    if os.path.exists(os.path.join(get_package_prefix("ls_thesis"), "lib", "ls_thesis", "ur_emulator.py")):
+        ur_emulator = Node(package="ls_thesis", executable="ur_emulator.py", name="ur_emulator",
+                           output="screen", condition=emulator_condition)
+    else:
+        source = Path(__file__).resolve().parent.parent / "src" / "ur_emulator.py"
+        ur_emulator = ExecuteProcess(cmd=["python3", str(source)], name="ur_emulator", output="screen",
+                                     condition=emulator_condition)
 
     recorder = Node(
         package="ls_thesis",
@@ -251,4 +293,4 @@ def generate_launch_description():
         )],
     )
 
-    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, recorder, rviz, touch_driver, touch_teleop, stylus_replay])
+    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, ur_emulator, recorder, rviz, touch_driver, touch_teleop, stylus_replay])

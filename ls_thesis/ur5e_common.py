@@ -4,17 +4,20 @@ UR5e motion in ROS 2 goes through MoveIt Servo:
 
     keyboard / Touch node --TwistStamped--> /servo_node/delta_twist_cmds
     servo_node --JointTrajectory--> /scaled_joint_trajectory_controller/joint_trajectory
+    (or, with SERVO_OUTPUT "velocity", Float64MultiArray joint velocities to
+    /forward_velocity_controller/commands)
 
-Servo must output trajectories, not Float64MultiArray positions: in position mode it
-re-bases every step on the measured joint state, so on the real arm (which takes
-~40 ms to reach a command) the robot only ever moves ~10% of the commanded speed.
+Servo must not output Float64MultiArray positions: in position mode it re-bases every
+step on the measured joint state, so on the real arm (which takes ~40 ms to reach a
+command) the robot only ever moves ~10% of the commanded speed.
 Recorded trajectories are replayed through the same controller's action interface.
 """
 
 from controller_manager_msgs.srv import SwitchController
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
-from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.srv import GetParameters, SetParameters
 from moveit_msgs.srv import ServoCommandType
+from std_msgs.msg import Float64MultiArray
 from std_srvs.srv import SetBool, Trigger
 import rclpy
 
@@ -22,10 +25,21 @@ SERVO_TWIST_TOPIC = "/servo_node/delta_twist_cmds"
 SERVO_COMMAND_TYPE_SERVICE = "/servo_node/switch_command_type"
 SERVO_PAUSE_SERVICE = "/servo_node/pause_servo"
 SERVO_SET_PARAMETERS_SERVICE = "/servo_node/set_parameters"
+SERVO_GET_PARAMETERS_SERVICE = "/servo_node/get_parameters"
 
 SWITCH_CONTROLLER_SERVICE = "/controller_manager/switch_controller"
 TELEOP_CONTROLLER = "scaled_joint_trajectory_controller"
 SERVO_COMMAND_TOPIC = f"/{TELEOP_CONTROLLER}/joint_trajectory"
+VELOCITY_CONTROLLER = "forward_velocity_controller"
+SERVO_VELOCITY_TOPIC = f"/{VELOCITY_CONTROLLER}/commands"
+# ur_emulator.py (mock hardware with the real arm's delays) takes Servo's output here
+# and drives the mock joints through forward_position_controller
+EMULATOR_TRAJECTORY_TOPIC = "/ur_emulator/joint_trajectory"
+EMULATOR_VELOCITY_TOPIC = "/ur_emulator/commands"
+EMULATOR_CONTROLLER = "forward_position_controller"
+# forward_velocity_controller keeps its last command until a new one arrives, so the
+# arm would keep moving if Servo died mid-motion: VelocityWatchdog zeroes it after this (s)
+VELOCITY_WATCHDOG_TIMEOUT = 0.05
 TRAJECTORY_CONTROLLER = "scaled_joint_trajectory_controller"
 TRAJECTORY_ACTION = "/scaled_joint_trajectory_controller/follow_joint_trajectory"
 
@@ -76,6 +90,26 @@ def activate_controller(node, controller, timeout=10.0):
     return True
 
 
+def servo_command_topic(node, timeout=10.0):
+    """MoveIt Servo's command_out_topic, or "" if Servo can't be asked."""
+    request = GetParameters.Request(names=["moveit_servo.command_out_topic"])
+    response = call_service(node, GetParameters, SERVO_GET_PARAMETERS_SERVICE, request, timeout)
+    return response.values[0].string_value if response is not None and response.values else ""
+
+
+def servo_controller(node, timeout=10.0):
+    """The joint controller MoveIt Servo's output goes to (from its command_out_topic),
+    i.e. the one to activate for teleop. TELEOP_CONTROLLER if Servo can't be asked."""
+    topic = servo_command_topic(node, timeout)
+    if topic.startswith("/ur_emulator/"):
+        return EMULATOR_CONTROLLER
+    controller = topic.strip("/").split("/")[0]
+    if controller in JOINT_CONTROLLERS:
+        return controller
+    node.get_logger().warn(f"Could not tell Servo's controller from '{topic}' - using {TELEOP_CONTROLLER}")
+    return TELEOP_CONTROLLER
+
+
 def set_servo_speed_limits(node, linear, angular, timeout=10.0):
     """Set MoveIt Servo's own Cartesian speed caps (m/s, rad/s).
 
@@ -117,6 +151,41 @@ def start_servo_twist_mode(node, timeout=30.0):
         node.get_logger().error("MoveIt Servo refused to switch to TWIST commands")
         return False
     return True
+
+
+class VelocityWatchdog:
+    """Stops the arm if MoveIt Servo goes quiet while commanding joint velocities.
+
+    With SERVO_OUTPUT "velocity", forward_velocity_controller (and the UR's speedj)
+    keeps the last velocity until a new command arrives. Servo itself sends zeros when
+    its input stops, but if Servo crashes nothing would. This watches Servo's output
+    and publishes zeros once if it stops for VELOCITY_WATCHDOG_TIMEOUT mid-motion.
+    Does nothing unless Servo outputs velocities."""
+
+    def __init__(self, node):
+        self.node = node
+        self.topic = servo_command_topic(node)
+        self.enabled = self.topic in (SERVO_VELOCITY_TOPIC, EMULATOR_VELOCITY_TOPIC)
+        self.last_command = None    # node time (s) of Servo's last nonzero command
+        if not self.enabled:
+            return
+        self.publisher = node.create_publisher(Float64MultiArray, self.topic, 10)
+        node.create_subscription(Float64MultiArray, self.topic, self.on_command, 10)
+        node.create_timer(0.01, self.check)
+
+    def now(self):
+        return self.node.get_clock().now().nanoseconds * 1e-9
+
+    def on_command(self, msg):
+        moving = any(abs(v) > 1e-9 for v in msg.data)
+        self.last_command = self.now() if moving else None
+
+    def check(self):
+        if self.last_command is not None and self.now() - self.last_command > VELOCITY_WATCHDOG_TIMEOUT:
+            self.last_command = None
+            self.publisher.publish(Float64MultiArray(data=[0.0] * 6))
+            self.node.get_logger().error(
+                f"MoveIt Servo stopped sending joint velocities mid-motion - zeroed {self.topic}")
 
 
 class RecorderClient:

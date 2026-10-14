@@ -33,10 +33,10 @@ from rclpy.utilities import remove_ros_args
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from ls_thesis.ur5e_common import (
-    TELEOP_CONTROLLER,
     TRAJECTORY_ACTION,
     TRAJECTORY_CONTROLLER,
     activate_controller,
+    servo_controller,
     set_servo_paused,
 )
 from ls_thesis import teleop_settings as cfg
@@ -194,7 +194,7 @@ def main():
         pass
     finally:
         if not args.no_restore_teleop and rclpy.ok():
-            activate_controller(node, TELEOP_CONTROLLER)
+            activate_controller(node, servo_controller(node))
             set_servo_paused(node, False, timeout=2.0)
         node.destroy_node()
         if rclpy.ok():

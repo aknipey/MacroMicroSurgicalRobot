@@ -33,6 +33,7 @@ wrist tilts the way the pen does. Twisting the pen about its own axis
 (`enable_twist`) turns the tool about tool0 z, i.e. the last joint.
 """
 
+import xml.etree.ElementTree as ET
 from collections import deque
 
 import numpy as np
@@ -43,14 +44,16 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
-from std_msgs.msg import Bool, Float64
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool, Float64, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from ls_thesis.ur5e_common import (
     SERVO_TWIST_TOPIC,
-    TELEOP_CONTROLLER,
     RecorderClient,
+    VelocityWatchdog,
     activate_controller,
+    servo_controller,
     set_servo_speed_limits,
     start_servo_twist_mode,
 )
@@ -68,6 +71,42 @@ PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 # back of the pen); tool0 z points out of the flange towards the tool tip, so the
 # same visual twist is a rotation of opposite sign.
 PEN_AXIS_TO_TOOL_Z_SIGN = -1.0
+
+
+class UrdfChain:
+    """Forward kinematics base_frame -> ee_frame from a URDF string, so the tool pose can
+    be computed from each /joint_states message (500 Hz) instead of waiting for
+    robot_state_publisher's TF (20 Hz, so up to 50 ms old)."""
+
+    def __init__(self, urdf, base_frame, ee_frame):
+        joints = {}     # child link -> (joint name, type, parent, origin (xyz, Rotation), axis)
+        for joint in ET.fromstring(urdf).findall("joint"):     # not the ros2_control ones
+            origin = joint.find("origin")
+            xyz = [float(v) for v in (origin.get("xyz", "0 0 0") if origin is not None else "0 0 0").split()]
+            rpy = [float(v) for v in (origin.get("rpy", "0 0 0") if origin is not None else "0 0 0").split()]
+            axis = joint.find("axis")
+            joints[joint.find("child").get("link")] = (
+                joint.get("name"), joint.get("type"), joint.find("parent").get("link"),
+                (np.array(xyz), Rotation.from_euler("xyz", rpy)),
+                np.array([float(v) for v in axis.get("xyz").split()]) if axis is not None else np.array([0, 0, 1.0]))
+        self.chain = []
+        link = ee_frame
+        while link != base_frame:
+            if link not in joints:
+                raise ValueError(f"No joint chain from {base_frame} to {ee_frame} in the URDF")
+            self.chain.insert(0, joints[link])
+            link = joints[link][2]
+        self.joint_names = [j[0] for j in self.chain if j[1] in ("revolute", "continuous")]
+
+    def pose(self, positions):
+        """(position, Rotation) of ee_frame in base_frame for {joint name: angle}."""
+        position, rotation = np.zeros(3), Rotation.identity()
+        for name, kind, _, (xyz, rpy), axis in self.chain:
+            position = position + rotation.apply(xyz)
+            rotation = rotation * rpy
+            if kind in ("revolute", "continuous"):
+                rotation = rotation * Rotation.from_rotvec(axis * positions[name])
+        return position, rotation
 
 
 def axis_map_to_matrix(axis_map):
@@ -143,6 +182,7 @@ class TouchTeleop(Node):
         self.declare_parameter("deadband", cfg.TOUCH_DEADBAND)
         self.declare_parameter("touch_timeout", cfg.TOUCH_TIMEOUT)
         self.declare_parameter("publish_rate", cfg.TOUCH_PUBLISH_RATE)
+        self.declare_parameter("pose_source", cfg.TOUCH_POSE_SOURCE)
         self.declare_parameter("setup_servo", True)
 
         p = lambda name: self.get_parameter(name).value
@@ -175,6 +215,15 @@ class TouchTeleop(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.pose_source = p("pose_source")
+        if self.pose_source not in ("tf", "joint_states"):
+            raise ValueError(f"pose_source must be 'tf' or 'joint_states', not {self.pose_source!r}")
+        self.urdf_chain = None
+        self.joint_positions = None     # {name: angle} from the newest /joint_states
+        if self.pose_source == "joint_states":
+            latched_description = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.create_subscription(String, "/robot_description", self.on_robot_description, latched_description)
+            self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
 
         self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
         self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
@@ -216,7 +265,8 @@ class TouchTeleop(Node):
         self.create_subscription(Bool, PROGRAM_RUNNING_TOPIC, self.on_program_running, latched)
 
         if p("setup_servo"):
-            activate_controller(self, TELEOP_CONTROLLER)
+            activate_controller(self, servo_controller(self))
+            self.velocity_watchdog = VelocityWatchdog(self)
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
@@ -283,7 +333,21 @@ class TouchTeleop(Node):
         self.get_logger().info(
             f"Motion scale 1:{1.0 / step:g} (rotation 1:{1.0 / rotation_step:.3g})")
 
+    def on_robot_description(self, msg):
+        try:
+            self.urdf_chain = UrdfChain(msg.data, self.base_frame, self.ee_frame)
+        except (ET.ParseError, ValueError) as exc:
+            self.get_logger().error(f"Cannot use /robot_description for the tool pose ({exc}) - using TF")
+
+    def on_joint_states(self, msg):
+        self.joint_positions = dict(zip(msg.name, msg.position))
+
     def lookup_robot_pose(self):
+        if self.urdf_chain is not None and self.joint_positions is not None:
+            try:
+                return self.urdf_chain.pose(self.joint_positions)
+            except KeyError:
+                pass        # joint missing from this message - fall back to TF
         try:
             tf = self.tf_buffer.lookup_transform(self.base_frame, self.ee_frame, Time())
         except TransformException as exc:

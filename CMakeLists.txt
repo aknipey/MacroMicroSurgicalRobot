@@ -107,6 +107,7 @@ install(PROGRAMS
   src/trajectory_recorder.py
   src/trajectory_player.py
   src/stylus_replay.py
+  src/ur_emulator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

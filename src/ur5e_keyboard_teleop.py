@@ -23,9 +23,10 @@ from rclpy.node import Node
 
 from ls_thesis.ur5e_common import (
     SERVO_TWIST_TOPIC,
-    TELEOP_CONTROLLER,
     RecorderClient,
+    VelocityWatchdog,
     activate_controller,
+    servo_controller,
     set_servo_speed_limits,
     start_servo_twist_mode,
 )
@@ -77,7 +78,8 @@ class KeyboardTeleop(Node):
         self.held_until = {}
 
         if self.get_parameter("setup_servo").value:
-            activate_controller(self, TELEOP_CONTROLLER)
+            activate_controller(self, servo_controller(self))
+            self.velocity_watchdog = VelocityWatchdog(self)
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")

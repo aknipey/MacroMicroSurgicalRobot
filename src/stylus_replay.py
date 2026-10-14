@@ -51,10 +51,10 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 from ls_thesis.ur5e_common import (
     RECORDER_START_SERVICE,
     RECORDER_STOP_SERVICE,
-    TELEOP_CONTROLLER,
     TRAJECTORY_ACTION,
     TRAJECTORY_CONTROLLER,
     activate_controller,
+    servo_controller,
     call_service,
     set_servo_paused,
 )
@@ -313,7 +313,7 @@ def main():
             if not set_servo_paused(node, True, timeout=2.0):
                 node.get_logger().warn("Could not pause MoveIt Servo")
             ok = activate_controller(node, TRAJECTORY_CONTROLLER) and node.move_to(recorded["joints"], args.approach_time)
-            activate_controller(node, TELEOP_CONTROLLER)
+            activate_controller(node, servo_controller(node))
             set_servo_paused(node, False, timeout=2.0)
             if not ok:
                 return

@@ -71,6 +71,10 @@ TOUCH_DEADBAND = 3e-4
 TOUCH_TIMEOUT = 0.1
 # Rate twist commands are sent to Servo (Hz).
 TOUCH_PUBLISH_RATE = 100.0
+# Where the robot's tool pose comes from: "tf" = robot_state_publisher's TF (20 Hz,
+# so up to 50 ms old) or "joint_states" = computed from each /joint_states message
+# (500 Hz) with the URDF on /robot_description.
+TOUCH_POSE_SOURCE = "tf"
 # omni_state publishes millimetres.
 TOUCH_UNITS_TO_M = 1e-3
 
@@ -85,8 +89,14 @@ TOUCH_STARTUP_DELAY = 8.0
 # How far ahead (s) each Servo command is scheduled. Servo builds every step on its
 # own previous command while that is still in the future, so this must be longer
 # than one Servo cycle (4 ms), but it is also latency the robot adds to every move.
+# Servo refuses to start below 3 x its 4 ms publish period (0.012).
 # Read when Servo starts: needs a relaunch, not just a node restart.
 SERVO_LOOKAHEAD = 0.05
+# What Servo sends the robot: "trajectory" = joint trajectories to
+# scaled_joint_trajectory_controller (the UR tracks positions, adding SERVO_LOOKAHEAD
+# and its own servoj lag), "velocity" = joint velocities to forward_velocity_controller
+# (the UR runs speedj, no lookahead). Read when Servo starts: needs a relaunch.
+SERVO_OUTPUT = "trajectory"
 
 # -------------------------------------------------------------------- Keyboard
 KEYBOARD_LINEAR_SPEED = 0.05     # m/s, starting speed
