@@ -27,6 +27,7 @@ from ls_thesis.ur5e_common import (
     VelocityWatchdog,
     activate_controller,
     servo_controller,
+    set_servo_singularity_thresholds,
     set_servo_speed_limits,
     start_servo_twist_mode,
 )
@@ -84,6 +85,8 @@ class KeyboardTeleop(Node):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
             set_servo_speed_limits(self, cfg.KEYBOARD_MAX_LINEAR_SPEED, cfg.KEYBOARD_MAX_ANGULAR_SPEED)
+            # Back to Servo's own singularity check, in case the Touch node raised it
+            set_servo_singularity_thresholds(self, cfg.SERVO_SINGULARITY_SLOWDOWN, cfg.SERVO_SINGULARITY_STOP)
 
         self.create_timer(1.0 / self.get_parameter("publish_rate").value, self.publish_twist)
 

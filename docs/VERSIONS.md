@@ -21,6 +21,7 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V3 | `v3` | 2026-10-12 | Selectable motion scaling (1:1 / 1:5 / 1:20) | Finer control: hand motion scaled down 5× or 20× | ~140 ms / ~140 ms |
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
 | V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
+| V6 | (not tagged yet) | 2026-10-15 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck | Not run on the real arm yet |
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
 target path (`scripts/plot_paths.py`). Each version's section below has the full
@@ -881,3 +882,85 @@ the tool's translation slows too.
 - ~~Add the other V4 suggestions (250 Hz publish, `joint_states` pose)~~: done,
   see the real-arm tests above. `TOUCH_LOOP_DELAY` is still 0.05 (the V4 sim's
   best with a fresh pose was 0.03, but the command filter adds ~28 ms).
+
+---
+
+## V6 — Singularity guard
+
+**Code:** not committed or tagged yet. Only the Touch node uses the guard; keyboard,
+player and stylus replay are unchanged apart from the keyboard node resetting Servo's
+thresholds.
+
+**Why:** strokes ran the arm into singularities (wrist 2 through 0, elbow straight).
+MoveIt Servo's own check (`ur_servo.yaml`: slow from condition number 100, halt at
+200) has two problems:
+
+1. It scales the *whole* twist, so a stroke with any small component towards the
+   singularity stalls completely.
+2. Above the hard stop it halts every command, even one leading straight out. On
+   the mock arm (UR16e, emulator, velocity mode): driven outward with the guard off,
+   Servo stopped with "Very close to a singularity, emergency stop" at c = 554 and
+   stayed there whatever was commanded. Raising
+   `leaving_singularity_threshold_multiplier` did not release it.
+
+Before it halts, J⁻¹ also turns a small tool speed into a large wrist speed: at
+c = 100, a joint moves ~50x faster than the tool's speed suggests, the pattern
+behind the V4/V5 wrist overspeed faults.
+
+**Implemented** (`SingularityGuard` in `ls_thesis/ur5e_common.py`, the last stage of
+`ur5e_touch_teleop.update`, after the command filter):
+
+- Each cycle the node computes the arm's geometric Jacobian from `/joint_states`
+  (`UrdfChain.jacobian`, plain numpy). This is the same matrix Servo checks,
+  ~8 at HOME. The guard works in joint space, q' = J⁻¹ v:
+  - below `TOUCH_SINGULARITY_SLOW` (30) nothing changes;
+  - from 30 to `TOUCH_SINGULARITY_STOP` (60), damped least squares (damping
+    rising to `TOUCH_SINGULARITY_DAMPING` 0.05) bounds joint speeds, and the part
+    of q' that heads into the singularity is scaled down, all of it gone at 60.
+    Motion along or away from it is kept, so the tool slides along the edge
+    instead of stalling;
+  - above 60, an escape joint velocity straight out (≤ 0.2 rad/s) is added, so
+    the arm settles at 60 and backs out if pushed or started past it. It only
+    acts while WHITE is held.
+- "Into the singularity" is the gradient of m = (Σ σᵢ⁻²)^-½ (≈ σ_min), computed
+  analytically from J. The gradient of σ_min itself flips between the two modes
+  every cycle where two singularities meet: in a sim this made a 1.36 per-cycle
+  twist jump, versus 0.026 with m. At an exactly singular pose (mock hardware's
+  all-zero start) the analytic gradient cancels to 0, so the guard then probes
+  each joint 0.02 rad one way, scored by Σ log σᵢ.
+- The twist goes back to Servo as v = J q', which Servo turns into exactly that q'.
+- While the guard runs, the Touch node raises Servo's thresholds to 1e4 / 1e6
+  (`SERVO_SINGULARITY_*_GUARDED`), so Servo no longer halts the arm the guard is
+  backing out. `joint_velocity_limiter` still caps every joint. The keyboard
+  node sets them back to 100 / 200 when it starts.
+- Log messages when it engages ("Near the wrist singularity ... slowed", "At the
+  elbow singularity limit ... backing out"), with 10% hysteresis. The condition
+  number is published on `~/condition_number` and added to `LOG_BAG_TOPICS`.
+- Cost: ~0.12 ms per cycle when clear, ~0.2 ms when active.
+
+**Tests:**
+
+- **Kinematic sim** (UR16e URDF, Servo modelled as q' = J⁺v, 500 Hz):
+  - Tool driven outward at 0.1 m/s. Unguarded: c reached 29 578 and 1 050 rad/s.
+    Guarded: held at c = 60, ≤ 1 rad/s, still moving along the edge.
+  - Started at c = 821 with no input: backed out to 60 at 0.2 rad/s.
+  - 40 random strokes: c ≤ 67, per-cycle twist change ≤ 0.026, never stuck.
+- **Full stack on mock hardware** (`emulate_ur:=true`, velocity mode, private
+  ROS domain):
+  - Dragged outward from HOME: c went 8.5 → 36 → 60.3 and held while the stylus
+    kept pulling; Servo status "No warnings" throughout.
+  - From Servo's emergency stop at c = 554: holding WHITE backed out to c = 60
+    within ~1 s, then the arm followed the stylus along the edge until Servo's
+    collision check slowed it near the table.
+
+**Notes for the real arm:**
+
+- At the reach limit the tool slides along the edge of the workspace: pulling
+  further out moves it round the reach sphere, e.g. downwards. Release and
+  re-engage to reset the target.
+- To compare with Servo's behaviour alone: `TOUCH_SINGULARITY_GUARD = False`
+  (the Touch node then sets Servo back to 100 / 200).
+- If the guard feels too restrictive, raise `TOUCH_SINGULARITY_SLOW` / `_STOP`
+  (e.g. 40 / 80 lets wrist 2 get to ~6° from 0), but keep STOP well below where
+  joint speeds blow up (~100+).
+

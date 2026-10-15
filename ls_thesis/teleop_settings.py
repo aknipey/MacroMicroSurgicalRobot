@@ -99,6 +99,28 @@ TOUCH_KALMAN_ROTATION_NOISE = 0.01       # rad
 # 0 = compare with the current target, as before.
 TOUCH_LOOP_DELAY = 0.05
 
+# Singularity guard (SingularityGuard in ur5e_common): works on each twist before Servo,
+# using the condition number c of the arm Jacobian (the number Servo uses; ~8 at HOME).
+# On a UR5e/UR16e, c = 30 / 60 is wrist 2 about 15 / 8 deg from 0 (or 180), or the
+# elbow about 18 / 11 deg from straight. From SLOW, motion *into* the singularity is
+# slowed (all of it gone at STOP) and joint speeds are damped; along or away from it is
+# still free, so the tool slides along the edge instead of stalling. Past STOP the arm
+# is pushed back out (at most ESCAPE_SPEED rad/s), as long as WHITE is held. While it is
+# on, Servo's own all-or-nothing check is moved out of the way (SERVO_SINGULARITY_*_GUARDED).
+# Needs TOUCH_POSE_SOURCE "joint_states". False = off (Servo's check only).
+TOUCH_SINGULARITY_GUARD = True
+TOUCH_SINGULARITY_SLOW = 30.0
+TOUCH_SINGULARITY_STOP = 60.0
+# Largest damped-least-squares damping (in Jacobian singular value units, ~m). Caps the
+# joint speed at 1 / (2 x this) rad/s per m/s (or rad/s) of tool speed. In a kinematic
+# sim of random strokes into singularities, 0.03 -> 0.05 cut the biggest cycle-to-cycle
+# twist step from 0.12 to 0.03 and followed the stylus more closely (stronger damping
+# needs less of the blunt toward-the-singularity cut).
+TOUCH_SINGULARITY_DAMPING = 0.05
+# Back-off joint speed (rad/s) per unit of c / STOP - 1, and its cap.
+TOUCH_SINGULARITY_ESCAPE_GAIN = 1.0
+TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
+
 # Position errors smaller than this are ignored (m, at 1:1 - shrinks with the
 # double-click motion scale so fine moves are not swallowed).
 TOUCH_DEADBAND = 3e-4
@@ -139,6 +161,17 @@ SERVO_LOOKAHEAD = 0.05
 # and its own servoj lag), "velocity" = joint velocities to forward_velocity_controller
 # (the UR runs speedj, no lookahead). Read when Servo starts: needs a relaunch.
 SERVO_OUTPUT = "velocity"
+# Servo's own singularity check (condition number thresholds): it scales the whole
+# twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
+# even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
+# so once there the arm is stuck. The keyboard node sets these (ur_servo.yaml's values);
+# the Touch node raises them to the _GUARDED pair while its singularity guard runs, so
+# the guard decides (joint_velocity_limiter still caps every joint). Set at node start,
+# no relaunch needed.
+SERVO_SINGULARITY_SLOWDOWN = 100.0
+SERVO_SINGULARITY_STOP = 200.0
+SERVO_SINGULARITY_SLOWDOWN_GUARDED = 1e4
+SERVO_SINGULARITY_STOP_GUARDED = 1e6
 
 # ------------------------------------------------------- Velocity mode (only)
 # Servo's cycle in velocity mode (Hz). 500 = the UR's own 2 ms control cycle, so the
@@ -203,6 +236,7 @@ LOG_BAG_TOPICS = [
     "/phantom/joint_states",    # Touch encoder angles: shows a sticking/skipping joint directly
     "/ur5e_touch_teleop/target_pose",
     "/ur5e_touch_teleop/motion_scale",
+    "/ur5e_touch_teleop/condition_number",     # singularity guard: arm Jacobian condition number
     "/servo_node/delta_twist_cmds",
     "/servo_node/status",
     "/scaled_joint_trajectory_controller/joint_trajectory",

@@ -31,6 +31,12 @@ With `mapping` = "fixed", `axis_map` says which stylus axis drives each robot
 axis of `base_frame`. Stylus tilts are mapped through the same frame, so the
 wrist tilts the way the pen does. Twisting the pen about its own axis
 (`enable_twist`) turns the tool about tool0 z, i.e. the last joint.
+
+Singularities (`singularity_guard`): near one (wrist 2 near 0 / 180 deg, elbow
+straight, wrist centre over the base) the part of the motion heading into it is
+slowed and then removed, so the tool slides along the edge instead of stalling,
+and if the arm is past the limit (or starts there) holding WHITE backs it out.
+The arm's condition number is published on ~/condition_number.
 """
 
 import xml.etree.ElementTree as ET
@@ -52,11 +58,14 @@ from ls_thesis.ur5e_common import (
     SERVO_TWIST_TOPIC,
     LowPass,
     RecorderClient,
+    SingularityGuard,
     VelocityWatchdog,
     activate_controller,
     servo_controller,
+    set_servo_singularity_thresholds,
     set_servo_speed_limits,
     start_servo_twist_mode,
+    ur_singularity_name,
 )
 from ls_thesis import teleop_settings as cfg
 
@@ -98,6 +107,23 @@ class UrdfChain:
             self.chain.insert(0, joints[link])
             link = joints[link][2]
         self.joint_names = [j[0] for j in self.chain if j[1] in ("revolute", "continuous")]
+        self.matrices = [(xyz, rpy.as_matrix()) for _, _, _, (xyz, rpy), _ in self.chain]
+
+    def jacobian(self, positions):
+        """Geometric Jacobian (6 x joints: linear velocity of the ee_frame origin, then
+        angular velocity, both in base_frame) for {joint name: angle} - the one MoveIt
+        Servo uses. Plain numpy (~0.1 ms), as it runs every update."""
+        position, rotation, columns = np.zeros(3), np.eye(3), []
+        for (name, kind, _, _, axis), (xyz, rpy) in zip(self.chain, self.matrices):
+            position = position + rotation @ xyz
+            rotation = rotation @ rpy
+            if kind in ("revolute", "continuous"):
+                columns.append((position, rotation @ axis))
+                # Rodrigues: rotation about the (unit) joint axis
+                k = np.array([[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]])
+                angle = positions[name]
+                rotation = rotation @ (np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * (k @ k))
+        return np.array([np.concatenate([np.cross(z, position - p), z]) for p, z in columns]).T
 
     def pose(self, positions):
         """(position, Rotation) of ee_frame in base_frame for {joint name: angle}."""
@@ -256,6 +282,12 @@ class TouchTeleop(Node):
         self.declare_parameter("touch_timeout", cfg.TOUCH_TIMEOUT)
         self.declare_parameter("publish_rate", cfg.TOUCH_PUBLISH_RATE)
         self.declare_parameter("pose_source", cfg.TOUCH_POSE_SOURCE)
+        self.declare_parameter("singularity_guard", cfg.TOUCH_SINGULARITY_GUARD)
+        self.declare_parameter("singularity_slow", cfg.TOUCH_SINGULARITY_SLOW)
+        self.declare_parameter("singularity_stop", cfg.TOUCH_SINGULARITY_STOP)
+        self.declare_parameter("singularity_damping", cfg.TOUCH_SINGULARITY_DAMPING)
+        self.declare_parameter("singularity_escape_gain", cfg.TOUCH_SINGULARITY_ESCAPE_GAIN)
+        self.declare_parameter("singularity_escape_speed", cfg.TOUCH_SINGULARITY_ESCAPE_SPEED)
         self.declare_parameter("setup_servo", True)
 
         p = lambda name: self.get_parameter(name).value
@@ -314,11 +346,23 @@ class TouchTeleop(Node):
             latched_description = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.create_subscription(String, "/robot_description", self.on_robot_description, latched_description)
             self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
+        # Needs the joint angles, so only with pose_source "joint_states"
+        self.singularity_guard = None
+        if p("singularity_guard"):
+            if self.pose_source == "joint_states":
+                self.singularity_guard = SingularityGuard(
+                    self.jacobian_at, p("singularity_slow"), p("singularity_stop"), p("singularity_damping"),
+                    p("singularity_escape_gain"), p("singularity_escape_speed"))
+            else:
+                self.get_logger().warn("singularity_guard needs pose_source 'joint_states' - "
+                                       "only MoveIt Servo's own singularity check is active")
+        self.singularity_state = 0      # 0 clear, 1 limiting, 2 backing out (for the log messages)
 
         self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
         self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.scale_pub = self.create_publisher(Float64, "~/motion_scale", latched)
+        self.condition_pub = self.create_publisher(Float64, "~/condition_number", 10)
         self.recorder = RecorderClient(self)
 
         self.touch_position = None      # metres, stylus frame
@@ -361,6 +405,13 @@ class TouchTeleop(Node):
                 self.get_logger().error(
                     "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
             set_servo_speed_limits(self, self.max_linear, self.max_angular)
+            # With the guard on, Servo's own check would only halt the arm where the guard
+            # is trying to back it out; without it, Servo's check is all there is
+            if self.singularity_guard is not None:
+                set_servo_singularity_thresholds(
+                    self, cfg.SERVO_SINGULARITY_SLOWDOWN_GUARDED, cfg.SERVO_SINGULARITY_STOP_GUARDED)
+            else:
+                set_servo_singularity_thresholds(self, cfg.SERVO_SINGULARITY_SLOWDOWN, cfg.SERVO_SINGULARITY_STOP)
 
         self.create_timer(1.0 / p("publish_rate"), self.update)
         self.get_logger().info(
@@ -443,6 +494,10 @@ class TouchTeleop(Node):
     def on_joint_states(self, msg):
         self.joint_positions = dict(zip(msg.name, msg.position))
 
+    def jacobian_at(self, positions):
+        """Arm Jacobian for joint positions in urdf_chain.joint_names order."""
+        return self.urdf_chain.jacobian(dict(zip(self.urdf_chain.joint_names, positions)))
+
     def lookup_robot_pose(self):
         if self.urdf_chain is not None and self.joint_positions is not None:
             try:
@@ -478,6 +533,7 @@ class TouchTeleop(Node):
         self.touch_origin = (self.touch_position.copy(), self.touch_orientation)
         self.robot_origin = robot
         self.pen_twist = 0.0
+        self.singularity_state = 0      # report it again if this stroke starts near one
         self.target = self.compute_target()
         self.previous_target = None
         self.target_history.clear()
@@ -561,7 +617,46 @@ class TouchTeleop(Node):
             linear = clamp_norm(filtered[:3], self.max_linear)
             angular = clamp_norm(filtered[3:], self.max_angular)
 
+        # Last, so it sees the twist Servo will get and the filter cannot smear its limits
+        if self.singularity_guard is not None:
+            linear, angular = self.guard_singularity(linear, angular)
+
         self.publish_twist(linear, angular)
+
+    def guard_singularity(self, linear, angular):
+        """The twist with motion into a singularity removed (and a push back out of one)."""
+        if self.urdf_chain is None or self.joint_positions is None:
+            return linear, angular
+        try:
+            positions = [self.joint_positions[name] for name in self.urdf_chain.joint_names]
+        except KeyError:
+            return linear, angular
+        guard = self.singularity_guard
+        twist = guard(np.concatenate([linear, angular]), positions)
+        self.condition_pub.publish(Float64(data=float(guard.condition)))
+
+        # 2 = backing out, 1 = limiting, 0 = clear; with 10% hysteresis, as the guard
+        # holds the arm right at `stop`, where it would flip every cycle
+        condition, previous = guard.condition, self.singularity_state
+        if guard.escaping or (previous == 2 and condition > 0.9 * guard.stop):
+            state = 2
+        elif guard.limiting > 0.0 or (previous >= 1 and condition > 0.9 * guard.slow):
+            state = 1
+        else:
+            state = 0
+        if state > previous:
+            what = ur_singularity_name(positions) if len(positions) == 6 else "a singularity"
+            if state == 1:
+                self.get_logger().warn(f"Near the {what} singularity (condition {condition:.0f}) - "
+                                       "motion towards it is slowed, along / away from it is free")
+            else:
+                self.get_logger().warn(f"At the {what} singularity limit (condition {condition:.0f}) - "
+                                       "backing out; keep holding WHITE, or move the stylus away")
+        elif state == 0 and previous > 0:
+            self.get_logger().info("Clear of the singularity")
+        self.singularity_state = state
+        # Servo's own speed caps still apply, so keep within them
+        return clamp_norm(twist[:3], self.max_linear), clamp_norm(twist[3:], self.max_angular)
 
     def delayed_target(self):
         """The stylus target as it was loop_delay ago (the oldest one kept, early in a stroke)."""

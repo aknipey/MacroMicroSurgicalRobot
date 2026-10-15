@@ -142,6 +142,25 @@ def servo_controller(node, timeout=10.0):
     return TELEOP_CONTROLLER
 
 
+def double_param(name, value):
+    return Parameter(name=name, value=ParameterValue(type=ParameterType.PARAMETER_DOUBLE,
+                                                     double_value=float(value)))
+
+
+def set_servo_singularity_thresholds(node, slowdown, stop, timeout=10.0):
+    """Set the condition numbers at which MoveIt Servo slows / halts for a singularity
+    (see SERVO_SINGULARITY_* in teleop_settings). Takes effect immediately."""
+    request = SetParameters.Request()
+    request.parameters = [double_param("moveit_servo.lower_singularity_threshold", slowdown),
+                          double_param("moveit_servo.hard_stop_singularity_threshold", stop)]
+    response = call_service(node, SetParameters, SERVO_SET_PARAMETERS_SERVICE, request, timeout)
+    if response is None or not all(r.successful for r in response.results):
+        node.get_logger().error("Could not set MoveIt Servo singularity thresholds")
+        return False
+    node.get_logger().debug(f"MoveIt Servo singularity thresholds: {slowdown:g} / {stop:g}")
+    return True
+
+
 def set_servo_speed_limits(node, linear, angular, timeout=10.0):
     """Set MoveIt Servo's own Cartesian speed caps (m/s, rad/s).
 
@@ -149,10 +168,6 @@ def set_servo_speed_limits(node, linear, angular, timeout=10.0):
     (ur_servo.yaml: 0.6 m/s, 0.3 rad/s), on top of whatever the teleop node sends.
     Servo re-reads its parameters every cycle, so this takes effect immediately.
     """
-    def double_param(name, value):
-        return Parameter(name=name, value=ParameterValue(type=ParameterType.PARAMETER_DOUBLE,
-                                                         double_value=float(value)))
-
     request = SetParameters.Request()
     request.parameters = [double_param("moveit_servo.scale.linear", linear),
                           double_param("moveit_servo.scale.rotational", angular)]
@@ -242,6 +257,120 @@ class LowPass:
         self.inputs = np.array([value, self.inputs[0]])
         self.outputs = np.array([out, self.outputs[0]])
         return out
+
+
+def jacobian_derivatives(jacobian):
+    """dJ/dq_k for each joint k of a serial chain of revolute joints, from its geometric
+    Jacobian alone (columns [z_j x (p_ee - p_j); z_j], base to tip). Turning joint k
+    rotates everything after it about z_k: for k <= j the column turns with it
+    (dJ_j = [z_k x Jv_j; z_k x z_j]); for k > j only p_ee moves (dJv_j = z_j x Jv_k)."""
+    linear, axes = jacobian[:3].T, jacobian[3:].T       # rows = joints
+    n = len(axes)
+    later = np.triu(np.ones((n, n), dtype=bool))[:, :, None]       # [k, j]: k <= j
+    turned_linear = np.cross(axes[:, None], linear[None, :])        # [k, j] = z_k x Jv_j
+    moved_linear = np.cross(axes[None, :], linear[:, None])         # [k, j] = z_j x Jv_k
+    turned_axes = np.cross(axes[:, None], axes[None, :]) * later    # [k, j] = z_k x z_j
+    derivatives = np.concatenate([np.where(later, turned_linear, moved_linear), turned_axes], axis=2)
+    return derivatives.transpose(0, 2, 1)       # [k, row, j]
+
+
+class SingularityGuard:
+    """Keeps a Cartesian twist command away from arm singularities, and backs out of them.
+
+    MoveIt Servo's own handling scales the *whole* twist to zero as soon as any part of
+    it heads into a singularity, and past its hard stop halts every command, even one
+    leading out, so the arm gets stuck. Before it gets there,
+    J^-1 lets a small tool speed become a huge wrist speed (the wrist overspeed faults).
+
+    This works on the twist before Servo, in joint space (q' = J^-1 v), with the
+    condition number c = s_max / s_min of the same 6x6 Jacobian Servo uses:
+      * c < slow: the twist passes unchanged.
+      * above slow: damped least squares (damping grows from 0 to `damping` as s_min
+        falls), so joint speeds stay bounded, and the part of q' that heads into the singularity is
+        scaled down, from none at `slow` to all of it at `stop`. Motion along or away
+        from the singularity is kept, so the tool slides along the boundary.
+      * above stop: also an escape joint velocity straight away from it (0 at `stop`,
+        `escape_gain` rad/s per unit of c/stop - 1, capped at `escape_speed`), so the
+        arm settles at c = stop and backs out if it was ever pushed (or started) past it.
+    The result goes back to a twist (v = J q'), which Servo turns into exactly that q'.
+
+    `jacobian_fn(positions)` gives the 6x6 geometric Jacobian (linear rows first) for
+    joint positions in base-to-tip order.
+    """
+
+    # One-sided joint offset (rad) for finding the way out where the gradient vanishes
+    PROBE_STEP = 0.02
+
+    def __init__(self, jacobian_fn, slow, stop, damping, escape_gain, escape_speed):
+        if not 1.0 < slow < stop:
+            raise ValueError(f"Singularity thresholds need 1 < slow < stop, not {slow}, {stop}")
+        self.jacobian_fn = jacobian_fn
+        self.slow, self.stop = slow, stop
+        self.damping = damping
+        self.escape_gain, self.escape_speed = escape_gain, escape_speed
+        self.condition = 1.0
+        self.limiting = 0.0     # 0 = untouched, 1 = all motion into the singularity removed
+        self.escaping = False
+
+    @staticmethod
+    def measure(singular_values):
+        """m = (sum s_i^-2)^-1/2: ~ the smallest singular value, 0 when singular."""
+        return np.sum(np.maximum(singular_values, 1e-12) ** -2) ** -0.5
+
+    def __call__(self, twist, positions):
+        """Filtered copy of twist (6: linear, angular; same frame and point as the Jacobian)."""
+        positions = np.asarray(positions, dtype=float)
+        jacobian = self.jacobian_fn(positions)
+        u, s, vt = np.linalg.svd(jacobian)
+        self.condition = s[0] / s[-1] if s[-1] > 0.0 else np.inf
+        self.limiting, self.escaping = 0.0, False
+        if self.condition < self.slow:
+            return twist
+
+        # Damped least squares: damping from 0 at c = slow to `damping` at s_min = 0
+        threshold = s[0] / self.slow
+        damping_sq = self.damping ** 2 * (1.0 - (s[-1] / threshold) ** 2)
+        joint_velocity = vt.T @ ((s / (s ** 2 + damping_sq)) * (u.T @ twist))
+
+        # Joint-space direction away from the singularity: the gradient of
+        # m = (sum s_i^-2)^-1/2 (ds_i = u_i^T dJ v_i). m ~ s_min, but stays smooth where
+        # the two smallest s_i cross (two singularities at once, e.g. elbow + shoulder);
+        # the gradient of s_min itself flips between them every cycle there.
+        derivatives = jacobian_derivatives(jacobian)
+        ds = np.diagonal(u.T @ derivatives @ vt.T, axis1=1, axis2=2)     # [k, i] = ds_i / dq_k
+        safe = np.maximum(s, 1e-12)
+        gradient = self.measure(s) ** 3 * (ds @ safe ** -3)
+        norm_sq = gradient @ gradient
+        if not norm_sq > 1e-12 and self.condition > self.stop:
+            # Exactly on a singularity (e.g. mock hardware's all-zero start) m is like |x|
+            # and the analytic gradient can cancel to 0: step each joint one way instead.
+            # Scored by log(s_1 ... s_6), which rises when any one of two singularities
+            # at once is relieved (m stays 0 until both are).
+            def score(values):
+                return np.sum(np.log(np.maximum(values, 1e-12)))
+            base = score(s)
+            gradient = np.array([
+                score(np.linalg.svd(self.jacobian_fn(positions + self.PROBE_STEP * step), compute_uv=False))
+                - base for step in np.eye(len(positions))]) / self.PROBE_STEP
+            norm_sq = gradient @ gradient
+        if norm_sq > 1e-12:
+            self.limiting = min(1.0, (self.condition - self.slow) / (self.stop - self.slow))
+            towards = gradient @ joint_velocity
+            if towards < 0.0:
+                joint_velocity -= self.limiting * towards / norm_sq * gradient
+            if self.condition > self.stop:
+                speed = min(self.escape_speed, self.escape_gain * (self.condition / self.stop - 1.0))
+                joint_velocity += speed * gradient / np.sqrt(norm_sq)
+                self.escaping = speed > 0.0
+        return jacobian @ joint_velocity
+
+
+def ur_singularity_name(positions):
+    """Which UR singularity a joint configuration (UR_JOINTS order) is nearest."""
+    wrist, elbow = abs(np.sin(positions[4])), abs(np.sin(positions[2]))
+    if min(wrist, elbow) > 0.35:
+        return "shoulder (wrist centre near the base axis)"
+    return "wrist (wrist 2 near 0 / 180 deg)" if wrist < elbow else "elbow (arm stretched out)"
 
 
 class RecorderClient:
