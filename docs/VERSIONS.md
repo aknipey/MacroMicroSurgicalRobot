@@ -20,7 +20,7 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V2 | `v2` | 2026-10-12 | Servo `JointTrajectory` -> scaled trajectory controller | V1 lagged badly: Servo re-based every step on the lagging measured state, so the arm ran at ~10% of the commanded speed | - / 128-158 ms (302 ms twist) |
 | V3 | `v3` | 2026-10-12 | Selectable motion scaling (1:1 / 1:5 / 1:20) | Finer control: hand motion scaled down 5× or 20× | ~140 ms / ~140 ms |
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
-| V5 | (not yet committed) | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
+| V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
 target path (`scripts/plot_paths.py`). Each version's section below has the full
@@ -343,9 +343,13 @@ re-run the velocity-mode benchmarks at 1:1 until there is a joint speed margin**
 
 ## V5 — Smoothing for velocity mode
 
-**Code:** on top of `v4`, not yet committed or tagged. Checked offline against
-recorded runs, then run by hand on the real arm (tests below, 10:18-10:45). The
-500 Hz chain and the joint velocity limiter have been checked in the sim only.
+**Code:** tag `v5` (commit `5a7b1af` holds the code; the tag sits on the following
+docs-only commit). The V5 runs were recorded before the commit, so their META.yaml
+says `code_version: ccb0ee8-dirty`. The final benchmark runs
+(`V5/LongBenchmarkTuned`, `V5/ShortBenchmarkTuned`, 12:20-12:21) ran on exactly the
+code and settings in `v5`: no code or settings file changed between those runs and
+the commit, only docs. Earlier V5 runs (10:18-12:15) used intermediate states,
+described in the test sections below together with their settings.
 
 **Why:** velocity mode vibrated on the real arm, because the command reaching the
 arm is unfiltered in that mode and it was noisy (see V4 "Why velocity mode
