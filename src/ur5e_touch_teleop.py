@@ -50,6 +50,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from ls_thesis.ur5e_common import (
     SERVO_TWIST_TOPIC,
+    LowPass,
     RecorderClient,
     VelocityWatchdog,
     activate_controller,
@@ -153,6 +154,70 @@ def clamp_norm(vector, limit):
     return vector * (limit / norm) if norm > limit else vector
 
 
+class ConstantVelocityKalman:
+    """Kalman filter for a stylus position (3-vector) or orientation (scipy Rotation)
+    moving at a roughly constant velocity.
+
+    omni_state publishes at 1 kHz, but the pose only changes every ~4 ms (up to 12 ms);
+    the samples in between repeat the last one. Differencing that staircase at the
+    teleop rate makes the feedforward velocity jump with how many real updates fell
+    in each window. This filter is fed only the real updates and predicts in
+    between, so its estimate moves smoothly and does not lag the stylus.
+    For an orientation the error is the rotation vector between measurement and
+    estimate, applied back multiplicatively (an error-state / extended Kalman filter).
+    All three axes share one 2x2 covariance: same noise, same update times.
+    """
+
+    # A sample repeated for this long (s) means the stylus has stopped, so it is used as
+    # a measurement too; while it moves, real updates arrive every ~4 ms.
+    HOLD_TIME = 0.008
+
+    def __init__(self, accel_noise, measurement_noise, rotation=False):
+        self.accel_noise = accel_noise              # process noise, (unit/s^2)^2 * s
+        self.measurement_variance = measurement_noise ** 2
+        self.rotation = rotation
+        self.clear()
+
+    def clear(self):
+        """Forget the estimate; the next sample starts the filter again at rest."""
+        self.value = None
+        self.raw = None
+
+    def feed(self, value, raw, stamp):
+        """Update on a new sample (raw, an array, changed) or a repeat after HOLD_TIME,
+        then return the estimate at stamp."""
+        if self.value is None or not np.array_equal(raw, self.raw) or stamp - self.stamp >= self.HOLD_TIME:
+            self.update(value, stamp)
+            self.raw = raw
+        return self.predict(stamp)
+
+    def reset(self, value, stamp):
+        self.value, self.velocity, self.stamp = value, np.zeros(3), stamp
+        self.covariance = np.diag([self.measurement_variance, 1.0])
+
+    def update(self, value, stamp):
+        if self.value is None:
+            self.reset(value, stamp)
+            return
+        dt = max(stamp - self.stamp, 0.0)
+        self.value, self.stamp = self.predict(stamp), stamp
+        transition = np.array([[1.0, dt], [0.0, 1.0]])
+        process = self.accel_noise * np.array([[dt ** 3 / 3.0, dt ** 2 / 2.0], [dt ** 2 / 2.0, dt]])
+        self.covariance = transition @ self.covariance @ transition.T + process
+        gain = self.covariance[:, 0] / (self.covariance[0, 0] + self.measurement_variance)
+        error = (value * self.value.inv()).as_rotvec() if self.rotation else value - self.value
+        self.value = self.apply(self.value, gain[0] * error)
+        self.velocity = self.velocity + gain[1] * error
+        self.covariance = self.covariance - np.outer(gain, self.covariance[0])
+
+    def predict(self, stamp):
+        """Estimate at stamp (s), extrapolated from the last update at constant velocity."""
+        return self.apply(self.value, self.velocity * (stamp - self.stamp))
+
+    def apply(self, value, step):
+        return Rotation.from_rotvec(step) * value if self.rotation else value + step
+
+
 class TouchTeleop(Node):
     def __init__(self):
         super().__init__("ur5e_touch_teleop")
@@ -174,8 +239,16 @@ class TouchTeleop(Node):
         self.declare_parameter("twist_scale", cfg.TOUCH_TWIST_SCALE)
         self.declare_parameter("position_gain", cfg.TOUCH_POSITION_GAIN)
         self.declare_parameter("rotation_gain", cfg.TOUCH_ROTATION_GAIN)
+        self.declare_parameter("max_correction_speed", cfg.TOUCH_MAX_CORRECTION_SPEED)
+        self.declare_parameter("max_correction_angular_speed", cfg.TOUCH_MAX_CORRECTION_ANGULAR_SPEED)
         self.declare_parameter("feedforward", cfg.TOUCH_FEEDFORWARD)
         self.declare_parameter("feedforward_filter", cfg.TOUCH_FEEDFORWARD_FILTER)
+        self.declare_parameter("kalman", cfg.TOUCH_KALMAN)
+        self.declare_parameter("kalman_accel_noise", cfg.TOUCH_KALMAN_ACCEL_NOISE)
+        self.declare_parameter("kalman_position_noise", cfg.TOUCH_KALMAN_POSITION_NOISE)
+        self.declare_parameter("kalman_angular_accel_noise", cfg.TOUCH_KALMAN_ANGULAR_ACCEL_NOISE)
+        self.declare_parameter("kalman_rotation_noise", cfg.TOUCH_KALMAN_ROTATION_NOISE)
+        self.declare_parameter("command_filter", cfg.TOUCH_COMMAND_FILTER)
         self.declare_parameter("loop_delay", cfg.TOUCH_LOOP_DELAY)
         self.declare_parameter("max_linear_speed", cfg.TOUCH_MAX_LINEAR_SPEED)
         self.declare_parameter("max_angular_speed", cfg.TOUCH_MAX_ANGULAR_SPEED)
@@ -205,9 +278,26 @@ class TouchTeleop(Node):
         self.base_twist_scale = p("twist_scale")
         self.position_gain = p("position_gain")
         self.rotation_gain = p("rotation_gain")
+        # Caps on the gain terms alone (0 = none), so catching up after the robot fell
+        # behind (a speed cap or the joint limiter held it back) is gradual, not a surge
+        self.max_correction = p("max_correction_speed") or np.inf
+        self.max_angular_correction = p("max_correction_angular_speed") or np.inf
         self.feedforward = p("feedforward")
         self.feedforward_filter = p("feedforward_filter")
+        # Kalman filters on the raw stylus pose (metres / Rotation), or None when off
+        self.position_kalman = self.orientation_kalman = None
+        if p("kalman"):
+            self.position_kalman = ConstantVelocityKalman(
+                p("kalman_accel_noise"), p("kalman_position_noise"))
+            self.orientation_kalman = ConstantVelocityKalman(
+                p("kalman_angular_accel_noise"), p("kalman_rotation_noise"), rotation=True)
         self.loop_delay = p("loop_delay")
+        # Low-pass on the outgoing twist (linear + angular), or None when off
+        command_filter, publish_rate = p("command_filter"), p("publish_rate")
+        if command_filter >= publish_rate / 2.0:
+            raise ValueError(f"command_filter ({command_filter} Hz) must be below half "
+                             f"publish_rate ({publish_rate} Hz)")
+        self.command_filter = LowPass(command_filter, publish_rate, 6) if command_filter > 0.0 else None
         self.max_linear = p("max_linear_speed")
         self.max_angular = p("max_angular_speed")
         self.base_deadband = p("deadband")
@@ -293,9 +383,20 @@ class TouchTeleop(Node):
     def on_state(self, msg):
         pos = msg.pose.position
         ori = msg.pose.orientation
-        self.touch_position = np.array([pos.x, pos.y, pos.z]) * self.units
-        quat = [ori.x, ori.y, ori.z, ori.w]
-        self.touch_orientation = Rotation.from_quat(quat) if np.linalg.norm(quat) > 1e-6 else None
+        position = np.array([pos.x, pos.y, pos.z]) * self.units
+        quat = np.array([ori.x, ori.y, ori.z, ori.w])
+        orientation = Rotation.from_quat(quat) if np.linalg.norm(quat) > 1e-6 else None
+        if self.position_kalman is None:
+            self.touch_position, self.touch_orientation = position, orientation
+        else:
+            if not self.touch_is_fresh():   # first sample, or after a gap: start again at rest
+                self.position_kalman.clear()
+                self.orientation_kalman.clear()
+            now = self.get_clock().now()
+            stamp = (Time.from_msg(msg.header.stamp).nanoseconds or now.nanoseconds) * 1e-9
+            self.touch_position = self.position_kalman.feed(position, position, stamp)
+            self.touch_orientation = (None if orientation is None
+                                      else self.orientation_kalman.feed(orientation, quat, stamp))
         self.touch_stamp = self.get_clock().now()
         if self.clutched:
             self.target = self.compute_target()
@@ -382,6 +483,8 @@ class TouchTeleop(Node):
         self.target_history.clear()
         self.target_linear_velocity = np.zeros(3)
         self.target_angular_velocity = np.zeros(3)
+        if self.command_filter is not None:
+            self.command_filter.reset()     # start from rest, as the robot is
         self.clutched = True
         self.get_logger().debug("Engaged - robot follows the stylus")
 
@@ -442,14 +545,21 @@ class TouchTeleop(Node):
         error = target_position - robot_position
         linear = self.feedforward * self.target_linear_velocity
         if np.linalg.norm(error) >= self.deadband:
-            linear = linear + self.position_gain * error
+            linear = linear + clamp_norm(self.position_gain * error, self.max_correction)
         linear = clamp_norm(linear, self.max_linear)
 
         angular = np.zeros(3)
         if target_orientation is not None:
             rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
-            angular = clamp_norm(self.feedforward * self.target_angular_velocity
-                                 + self.rotation_gain * rotation_error, self.max_angular)
+            correction = clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction)
+            angular = clamp_norm(self.feedforward * self.target_angular_velocity + correction, self.max_angular)
+
+        if self.command_filter is not None:
+            # Release still sends an unfiltered zero, so the robot stops at once.
+            # Clamped again as the Butterworth can overshoot a step by ~4%.
+            filtered = self.command_filter(np.concatenate([linear, angular]))
+            linear = clamp_norm(filtered[:3], self.max_linear)
+            angular = clamp_norm(filtered[3:], self.max_angular)
 
         self.publish_twist(linear, angular)
 

@@ -5,7 +5,7 @@ UR5e motion in ROS 2 goes through MoveIt Servo:
     keyboard / Touch node --TwistStamped--> /servo_node/delta_twist_cmds
     servo_node --JointTrajectory--> /scaled_joint_trajectory_controller/joint_trajectory
     (or, with SERVO_OUTPUT "velocity", Float64MultiArray joint velocities to
-    /forward_velocity_controller/commands)
+    /joint_velocity_limiter/commands -> /forward_velocity_controller/commands)
 
 Servo must not output Float64MultiArray positions: in position mode it re-bases every
 step on the measured joint state, so on the real arm (which takes ~40 ms to reach a
@@ -19,6 +19,8 @@ from rcl_interfaces.srv import GetParameters, SetParameters
 from moveit_msgs.srv import ServoCommandType
 from std_msgs.msg import Float64MultiArray
 from std_srvs.srv import SetBool, Trigger
+from scipy.signal import butter
+import numpy as np
 import rclpy
 
 SERVO_TWIST_TOPIC = "/servo_node/delta_twist_cmds"
@@ -37,6 +39,20 @@ SERVO_VELOCITY_TOPIC = f"/{VELOCITY_CONTROLLER}/commands"
 EMULATOR_TRAJECTORY_TOPIC = "/ur_emulator/joint_trajectory"
 EMULATOR_VELOCITY_TOPIC = "/ur_emulator/commands"
 EMULATOR_CONTROLLER = "forward_position_controller"
+# joint_velocity_limiter.py (velocity mode) sits between Servo and the velocity
+# controller (or ur_emulator): Servo publishes here, the limiter's output_topic
+# parameter says where the limited velocities go
+LIMITER_NODE = "joint_velocity_limiter"
+LIMITER_INPUT_TOPIC = f"/{LIMITER_NODE}/commands"
+LIMITER_GET_PARAMETERS_SERVICE = f"/{LIMITER_NODE}/get_parameters"
+UR_JOINTS = [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint",
+]
 # forward_velocity_controller keeps its last command until a new one arrives, so the
 # arm would keep moving if Servo died mid-motion: VelocityWatchdog zeroes it after this (s)
 VELOCITY_WATCHDOG_TIMEOUT = 0.05
@@ -90,17 +106,33 @@ def activate_controller(node, controller, timeout=10.0):
     return True
 
 
-def servo_command_topic(node, timeout=10.0):
-    """MoveIt Servo's command_out_topic, or "" if Servo can't be asked."""
-    request = GetParameters.Request(names=["moveit_servo.command_out_topic"])
-    response = call_service(node, GetParameters, SERVO_GET_PARAMETERS_SERVICE, request, timeout)
+def string_parameter(node, service, name, timeout=10.0):
+    """A string parameter of another node (through its get_parameters service), or ""."""
+    request = GetParameters.Request(names=[name])
+    response = call_service(node, GetParameters, service, request, timeout)
     return response.values[0].string_value if response is not None and response.values else ""
 
 
-def servo_controller(node, timeout=10.0):
-    """The joint controller MoveIt Servo's output goes to (from its command_out_topic),
-    i.e. the one to activate for teleop. TELEOP_CONTROLLER if Servo can't be asked."""
+def servo_command_topic(node, timeout=10.0):
+    """MoveIt Servo's command_out_topic, or "" if Servo can't be asked."""
+    return string_parameter(node, SERVO_GET_PARAMETERS_SERVICE, "moveit_servo.command_out_topic", timeout)
+
+
+def servo_output_topic(node, timeout=10.0):
+    """The topic Servo's commands finally reach a controller (or ur_emulator) on: its
+    command_out_topic, or joint_velocity_limiter's output_topic when Servo feeds the
+    limiter."""
     topic = servo_command_topic(node, timeout)
+    if topic == LIMITER_INPUT_TOPIC:
+        topic = string_parameter(node, LIMITER_GET_PARAMETERS_SERVICE, "output_topic", timeout)
+    return topic
+
+
+def servo_controller(node, timeout=10.0):
+    """The joint controller MoveIt Servo's output goes to (from its command_out_topic,
+    through the velocity limiter if there is one), i.e. the one to activate for teleop.
+    TELEOP_CONTROLLER if Servo can't be asked."""
+    topic = servo_output_topic(node, timeout)
     if topic.startswith("/ur_emulator/"):
         return EMULATOR_CONTROLLER
     controller = topic.strip("/").split("/")[0]
@@ -158,13 +190,14 @@ class VelocityWatchdog:
 
     With SERVO_OUTPUT "velocity", forward_velocity_controller (and the UR's speedj)
     keeps the last velocity until a new command arrives. Servo itself sends zeros when
-    its input stops, but if Servo crashes nothing would. This watches Servo's output
-    and publishes zeros once if it stops for VELOCITY_WATCHDOG_TIMEOUT mid-motion.
-    Does nothing unless Servo outputs velocities."""
+    its input stops, but if Servo (or joint_velocity_limiter) crashes nothing would.
+    This watches the controller's command topic and publishes zeros once if it stops
+    for VELOCITY_WATCHDOG_TIMEOUT mid-motion. Does nothing unless Servo outputs
+    velocities."""
 
     def __init__(self, node):
         self.node = node
-        self.topic = servo_command_topic(node)
+        self.topic = servo_output_topic(node)
         self.enabled = self.topic in (SERVO_VELOCITY_TOPIC, EMULATOR_VELOCITY_TOPIC)
         self.last_command = None    # node time (s) of Servo's last nonzero command
         if not self.enabled:
@@ -186,6 +219,29 @@ class VelocityWatchdog:
             self.publisher.publish(Float64MultiArray(data=[0.0] * 6))
             self.node.get_logger().error(
                 f"MoveIt Servo stopped sending joint velocities mid-motion - zeroed {self.topic}")
+
+
+class LowPass:
+    """2nd-order Butterworth low-pass on a vector, sampled at a fixed rate."""
+
+    def __init__(self, cutoff, rate, size):
+        self.b, self.a = butter(2, cutoff, fs=rate)
+        self.size = size
+        self.reset()
+
+    def reset(self, value=None):
+        """Start at rest (zeros), or settled at value."""
+        start = np.zeros(self.size) if value is None else np.asarray(value, dtype=float)
+        self.inputs = np.array([start, start])      # previous two inputs, newest first
+        self.outputs = np.array([start, start])     # previous two outputs, newest first
+
+    def __call__(self, value):
+        b, a = self.b, self.a
+        out = (b[0] * value + b[1] * self.inputs[0] + b[2] * self.inputs[1]
+               - a[1] * self.outputs[0] - a[2] * self.outputs[1])
+        self.inputs = np.array([value, self.inputs[0]])
+        self.outputs = np.array([out, self.outputs[0]])
+        return out
 
 
 class RecorderClient:

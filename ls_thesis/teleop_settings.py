@@ -43,13 +43,24 @@ TOUCH_TWIST_SCALE = 1.0
 # Top tool speeds. These are the hard caps: if the robot lags your hand on fast
 # moves, raise these first.
 TOUCH_MAX_LINEAR_SPEED = 1.2    # m/s
-TOUCH_MAX_ANGULAR_SPEED = 6.0    # rad/s
+# In velocity mode joint_velocity_limiter caps each joint, so the angular cap only
+# needs to bound the tool: 2.0 clipped 16-26% of the V5 benchmarks; 3.0 cut their
+# angle error (lag removed) from 15.8 to 9.6 deg in the sim.
+TOUCH_MAX_ANGULAR_SPEED = 3.0    # rad/s
 
 # How hard the tool is pulled towards the stylus target (1/s). Commanded speed =
 # gain * error, so with gain 4 a 1 cm error gives 4 cm/s. Higher = snappier and
 # less lag on small moves, but too high oscillates.
 TOUCH_POSITION_GAIN = 8.0
 TOUCH_ROTATION_GAIN = 8.0
+# Caps on what the gains alone may add (m/s, rad/s; 0 = no cap). When the robot falls
+# behind - a speed cap or the joint velocity limiter held it back during a fast pen
+# twist - the error grows, and gain x error then asks for a surge to catch up (up to
+# 1.7 rad/s extra on the real arm), which feels jerky. Normal tracking needs far less
+# (99% of linear corrections < 0.015 m/s, 90% of angular < 0.11 rad/s), so only the
+# catch-up is slowed.
+TOUCH_MAX_CORRECTION_SPEED = 0.05           # m/s
+TOUCH_MAX_CORRECTION_ANGULAR_SPEED = 0.5    # rad/s
 
 # Velocity feedforward: also command the stylus's own velocity, so the gains above
 # only correct the remaining error instead of producing all of the motion. Roughly
@@ -58,6 +69,30 @@ TOUCH_FEEDFORWARD = 1.0
 # Low-pass time constant on the stylus velocity estimate (s). Larger = smoother but
 # more lag; smaller = jitter from the stylus encoders reaches the robot.
 TOUCH_FEEDFORWARD_FILTER = 0.02
+# Low-pass cutoff (Hz) on the whole twist sent to Servo (feedforward + gains), as a
+# 2nd-order Butterworth. In velocity mode Servo's own smoothing filter only touches the
+# positions it no longer sends, so without this the stylus and loop jitter (~20 Hz)
+# reaches the arm unfiltered and shakes it. Lower = smoother but more lag. Sim, on a
+# real 1:1 hand run: 8 Hz -> 6 Hz cut tool jerk by a quarter for ~2-4 ms more lag;
+# 5 Hz cut it by a half for ~5 ms more; on the V5 benchmarks 6 -> 5 Hz cut the 5-15 Hz
+# jitter by 13%. Must be below half TOUCH_PUBLISH_RATE. 0 = off.
+TOUCH_COMMAND_FILTER = 5.0
+# Kalman filter on the raw stylus pose (constant-velocity model; the orientation is an
+# extended/error-state version). omni_state repeats each pose for ~4 ms between real
+# updates, which makes the feedforward velocity jump; the filter uses only the real
+# updates and predicts in between. On the V3 benchmarks it cuts the feedforward noise
+# by 17-42% without adding lag (it is 0.5-2 ms ahead), unlike TOUCH_COMMAND_FILTER.
+# True = on.
+TOUCH_KALMAN = True
+# How quickly the hand's velocity may change (process noise). Lower = smoother, but the
+# target runs on past a sudden stop: at 1:1 a stop from 200 mm/s overshoots 0.13 mm
+# with 2.0 but 1.2 mm with 0.1; from 3 rad/s 0.6 deg with 30 (1.0 deg with 10).
+TOUCH_KALMAN_ACCEL_NOISE = 2.0           # (m/s^2)^2 s
+TOUCH_KALMAN_ANGULAR_ACCEL_NOISE = 30.0  # (rad/s^2)^2 s
+# How much a single stylus reading is trusted (measurement noise, 1 sigma). Higher =
+# smoother but follows each reading less closely (and overshoots more).
+TOUCH_KALMAN_POSITION_NOISE = 5e-4       # m
+TOUCH_KALMAN_ROTATION_NOISE = 0.01       # rad
 # Time (s) between a command and the robot pose showing it (Servo lookahead + driver
 # + robot). The gains compare the robot with where the target was this long ago,
 # so they don't keep pushing for motion that is already on its way (overshoot).
@@ -69,12 +104,17 @@ TOUCH_LOOP_DELAY = 0.05
 TOUCH_DEADBAND = 3e-4
 # Stop if no stylus data arrives for this long (s).
 TOUCH_TIMEOUT = 0.1
-# Rate twist commands are sent to Servo (Hz).
-TOUCH_PUBLISH_RATE = 100.0
+# Rate twist commands are sent to Servo (Hz). Match Servo's cycle (SERVO_VELOCITY_RATE
+# in velocity mode): slower, Servo holds each command for several cycles and the arm
+# feels every velocity step as a kick (a ~100 Hz buzz at 100 Hz, ~250 Hz at 250 Hz).
+TOUCH_PUBLISH_RATE = 500.0
 # Where the robot's tool pose comes from: "tf" = robot_state_publisher's TF (20 Hz,
 # so up to 50 ms old) or "joint_states" = computed from each /joint_states message
-# (500 Hz) with the URDF on /robot_description.
-TOUCH_POSE_SOURCE = "tf"
+# (500 Hz) with the URDF on /robot_description. Use "joint_states" in velocity mode:
+# the 20 Hz TF staircase puts a 20 Hz sawtooth (+ 40/60 Hz) into the correction term,
+# which velocity mode passes straight to the arm. (In trajectory mode "tf" lagged a
+# little less, see VERSIONS.md V4.)
+TOUCH_POSE_SOURCE = "joint_states"
 # omni_state publishes millimetres.
 TOUCH_UNITS_TO_M = 1e-3
 
@@ -83,6 +123,8 @@ TOUCH_MAPPING = "toward_base"
 TOUCH_AXIS_MAP = ["y", "-x", "z"]
 
 # Seconds the launch file waits for the driver + Servo before starting the Touch node.
+# The node switches on Servo's controller at startup: at 0 the controllers are not
+# loaded yet, so in velocity mode no controller is active and the robot never moves.
 TOUCH_STARTUP_DELAY = 8.0
 
 # ---------------------------------------------------------------- MoveIt Servo
@@ -96,7 +138,35 @@ SERVO_LOOKAHEAD = 0.05
 # scaled_joint_trajectory_controller (the UR tracks positions, adding SERVO_LOOKAHEAD
 # and its own servoj lag), "velocity" = joint velocities to forward_velocity_controller
 # (the UR runs speedj, no lookahead). Read when Servo starts: needs a relaunch.
-SERVO_OUTPUT = "trajectory"
+SERVO_OUTPUT = "velocity"
+
+# ------------------------------------------------------- Velocity mode (only)
+# Servo's cycle in velocity mode (Hz). 500 = the UR's own 2 ms control cycle, so the
+# joint speed set point changes every robot cycle in small steps. At 250 the set point
+# held for 2 cycles and then jumped, and the wrists chattered at 250 Hz (torque noise
+# 15-20x trajectory mode, highest right before every joint fault). Trajectory mode
+# keeps ur_servo.yaml's 250 Hz. Read when Servo starts: needs a relaunch.
+SERVO_VELOCITY_RATE = 500.0
+# joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
+# limits each joint's speed and acceleration. True = on.
+VELOCITY_LIMITER = True
+# Joint speed cap, as a fraction of each joint's URDF limit (UR16e: 120 deg/s base and
+# shoulder, 180 deg/s elbow and wrists). Servo itself scales to exactly 1.0, and the
+# benchmark faults happened with a wrist right at its limit. All joints are scaled
+# together, so the tool keeps its direction.
+VELOCITY_LIMITER_SPEED_FRACTION = 0.8
+# Joint acceleration caps (rad/s^2), in UR joint order: shoulder pan, shoulder lift,
+# elbow, wrist 1, wrist 2, wrist 3. The UR's speedj ramps at 40 rad/s^2; every
+# velocity-mode fault happened with a wrist at 28-43 rad/s^2, i.e. switching between
+# full acceleration and full deceleration. The wrist cap is near the 99th percentile
+# of the V3 benchmarks (25-33 rad/s^2), so only the hardest reversals are slowed.
+VELOCITY_LIMITER_MAX_ACCELERATION = [8.0, 8.0, 15.0, 25.0, 25.0, 25.0]
+# Smoothing after the limits (s): two first-order stages with this time constant each
+# (critically damped, ~2x this in lag). It rounds the corners the caps make when they
+# engage and the steps left when a command arrives late (the laptop is not real-time),
+# and, unlike a Butterworth, it can never take the output past the speed or
+# acceleration caps. 0 = off.
+VELOCITY_LIMITER_SMOOTHING = 0.003
 
 # -------------------------------------------------------------------- Keyboard
 KEYBOARD_LINEAR_SPEED = 0.05     # m/s, starting speed
@@ -130,11 +200,14 @@ LOG_TF_FALLBACK_RATE = 200.0
 LOG_BAG_TOPICS = [
     "/phantom/state",
     "/phantom/button",
+    "/phantom/joint_states",    # Touch encoder angles: shows a sticking/skipping joint directly
     "/ur5e_touch_teleop/target_pose",
     "/ur5e_touch_teleop/motion_scale",
     "/servo_node/delta_twist_cmds",
     "/servo_node/status",
     "/scaled_joint_trajectory_controller/joint_trajectory",
+    "/joint_velocity_limiter/commands",         # Servo's joint velocities (velocity mode)
+    "/forward_velocity_controller/commands",    # what the arm is sent (velocity mode)
     "/tcp_pose_broadcaster/pose",
     "/joint_states",
     "/speed_scaling_state_broadcaster/speed_scaling",

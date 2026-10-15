@@ -108,6 +108,7 @@ install(PROGRAMS
   src/trajectory_player.py
   src/stylus_replay.py
   src/ur_emulator.py
+  src/joint_velocity_limiter.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

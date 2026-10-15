@@ -50,10 +50,12 @@ from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
-from ls_thesis.teleop_settings import SERVO_LOOKAHEAD, SERVO_OUTPUT, TOUCH_STARTUP_DELAY
+from ls_thesis.teleop_settings import (
+    SERVO_LOOKAHEAD, SERVO_OUTPUT, SERVO_VELOCITY_RATE, TOUCH_STARTUP_DELAY, VELOCITY_LIMITER,
+)
 from ls_thesis.ur5e_common import (
-    EMULATOR_CONTROLLER, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC, SERVO_COMMAND_TOPIC,
-    SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
+    EMULATOR_CONTROLLER, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC, LIMITER_INPUT_TOPIC, LIMITER_NODE,
+    SERVO_COMMAND_TOPIC, SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
 )
 
 if SERVO_OUTPUT not in ("trajectory", "velocity"):
@@ -121,6 +123,20 @@ def _execute_quietly(self, context):
 
 
 Node.execute = _execute_quietly
+
+
+def package_node(script, name, **kwargs):
+    """Node for one of this package's scripts: the installed one, or straight from the
+    source tree before the next colcon build."""
+    if os.path.exists(os.path.join(get_package_prefix("ls_thesis"), "lib", "ls_thesis", script)):
+        return Node(package="ls_thesis", executable=script, name=name, output="screen", **kwargs)
+    source = Path(__file__).resolve().parent.parent / "src" / script
+    parameters = kwargs.pop("parameters", [])
+    arguments = ["--ros-args", "-r", f"__node:={name}"]
+    for group in parameters:
+        for key, value in group.items():
+            arguments += ["-p", f"{key}:={value}"]
+    return ExecuteProcess(cmd=["python3", str(source)] + arguments, name=name, output="screen", **kwargs)
 
 
 def generate_launch_description():
@@ -201,10 +217,14 @@ def generate_launch_description():
     )
     servo_yaml_path = Path(get_package_share_directory("ur_moveit_config")) / "config" / "ur_servo.yaml"
     servo_yaml = yaml.safe_load(servo_yaml_path.read_text())
+    use_limiter = SERVO_OUTPUT == "velocity" and VELOCITY_LIMITER
     if SERVO_OUTPUT == "velocity":
         servo_yaml.update({
             "command_out_type": "std_msgs/Float64MultiArray",
-            "command_out_topic": SERVO_VELOCITY_TOPIC,
+            # Through joint_velocity_limiter.py when it is on
+            "command_out_topic": LIMITER_INPUT_TOPIC if use_limiter else SERVO_VELOCITY_TOPIC,
+            # One new joint speed per UR control cycle (see SERVO_VELOCITY_RATE)
+            "publish_period": 1.0 / SERVO_VELOCITY_RATE,
             "publish_joint_positions": False,
             "publish_joint_velocities": True,
             "publish_joint_accelerations": False,
@@ -224,16 +244,22 @@ def generate_launch_description():
 
     def start_servo(context):
         servo_params = dict(servo_yaml)
-        if context.launch_configurations.get("emulate_ur") == "true":
+        emulate = context.launch_configurations.get("emulate_ur") == "true"
+        velocity_out = EMULATOR_VELOCITY_TOPIC if emulate else SERVO_VELOCITY_TOPIC
+        if emulate and not use_limiter:
             servo_params["command_out_topic"] = (
-                EMULATOR_VELOCITY_TOPIC if SERVO_OUTPUT == "velocity" else EMULATOR_TRAJECTORY_TOPIC)
+                velocity_out if SERVO_OUTPUT == "velocity" else EMULATOR_TRAJECTORY_TOPIC)
         servo_node = Node(
             package="moveit_servo",
             executable="servo_node",
             parameters=[moveit_config.to_dict(), {"moveit_servo": servo_params}],
             output="screen",
         )
-        return [RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))]
+        actions = [RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))]
+        if use_limiter:
+            actions.append(package_node("joint_velocity_limiter.py", LIMITER_NODE,
+                                        parameters=[{"output_topic": velocity_out}]))
+        return actions
 
     servo = OpaqueFunction(function=start_servo)
 
