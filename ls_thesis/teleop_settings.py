@@ -121,6 +121,34 @@ TOUCH_SINGULARITY_DAMPING = 0.05
 TOUCH_SINGULARITY_ESCAPE_GAIN = 1.0
 TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 
+# RCM (remote centre of motion) mode: hold WHITE and click GREY to latch the tool tip
+# as a fixed pivot point (the port / incision); do it again (tool retracted) to leave.
+# While on, the stylus drives the tool tip, the arm pivots the shaft about the RCM
+# point to put it there, and pen twist rolls the tool about the shaft (pen tilt is
+# ignored). The tool is described here only - keep the pendant TCP at zero.
+# Shaft geometry in the tool0 frame (z out of the flange): the shaft starts at
+# SHAFT_START (the end at the holder), runs along SHAFT_DIRECTION (normalised) and
+# ends at the tip SHAFT_LENGTH further on. Only points on that segment can be the RCM.
+# Current tool: tip 0.54 m straight out of the flange (shaft start still a guess).
+TOUCH_RCM_SHAFT_START = [0.0, 0.0, 0.05]     # m
+TOUCH_RCM_SHAFT_DIRECTION = [0.0, 0.0, 1.0]
+TOUCH_RCM_SHAFT_LENGTH = 0.262                # m (tip at 0.05 + 0.49 = 0.54 m)
+# Closest the shaft start (holder / collar) may come to the RCM point (m), so the
+# deepest insertion is SHAFT_LENGTH - this.
+TOUCH_RCM_DEPTH_MARGIN = 0.02
+# Below this insertion depth (m) the stylus's sideways motion is faded out (fully
+# off at depth 0), so the tool goes in and out straight: with the tip at the RCM a
+# small sideways move would need a huge pivot.
+TOUCH_RCM_MIN_PIVOT_DEPTH = 0.01
+# RCM mode can only be left with the tip within this depth (m) of the RCM point.
+TOUCH_RCM_EXIT_DEPTH = 0.003
+# How hard the shaft is pulled back onto the RCM point when it drifts off (1/s),
+# capped at TOUCH_MAX_CORRECTION_SPEED like the position correction.
+TOUCH_RCM_GAIN = 8.0
+# If the shaft is ever this far (m) from the RCM point, the robot holds still and
+# RCM mode may be left at any depth.
+TOUCH_RCM_MAX_ERROR = 0.005
+
 # Position errors smaller than this are ignored (m, at 1:1 - shrinks with the
 # double-click motion scale so fine moves are not swallowed).
 TOUCH_DEADBAND = 3e-4
@@ -237,6 +265,11 @@ LOG_BAG_TOPICS = [
     "/ur5e_touch_teleop/target_pose",
     "/ur5e_touch_teleop/motion_scale",
     "/ur5e_touch_teleop/condition_number",     # singularity guard: arm Jacobian condition number
+    "/ur5e_touch_teleop/rcm_active",           # RCM mode on / off
+    "/ur5e_touch_teleop/rcm_point",            # latched RCM point (base frame)
+    "/ur5e_touch_teleop/rcm_error",            # distance shaft line -> RCM point (m)
+    "/ur5e_touch_teleop/insertion_depth",      # tip depth past the RCM point (m)
+    "/ur5e_touch_teleop/tool_tip",             # tool tip pose (shaft axis = its z)
     "/servo_node/delta_twist_cmds",
     "/servo_node/status",
     "/scaled_joint_trajectory_controller/joint_trajectory",

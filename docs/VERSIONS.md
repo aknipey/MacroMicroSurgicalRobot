@@ -22,6 +22,7 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
 | V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
 | V6 | (not tagged yet) | 2026-10-15 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck | Not run on the real arm yet |
+| V7 | (not tagged yet) | 2026-10-15 | RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point; the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Laparoscopic-style work: the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots; not run on the real arm yet |
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
 target path (`scripts/plot_paths.py`). Each version's section below has the full
@@ -964,3 +965,115 @@ behind the V4/V5 wrist overspeed faults.
   (e.g. 40 / 80 lets wrist 2 get to ~6° from 0), but keep STOP well below where
   joint speeds blow up (~100+).
 
+
+## V7 — RCM (remote centre of motion) mode
+
+**Code:** not committed or tagged yet. Touch node only (`ur5e_touch_teleop.py`, and
+`RcmTool` in `ls_thesis/ur5e_common.py`). Free-motion teleop is unchanged; RCM is a
+mode that is switched on and off with the buttons.
+
+**Why:** with the micro module out of action, laparoscopic-style work has to come
+from the UR alone. The tool's skinny shaft must pivot about a fixed entry point (a
+port), so the arm gives up 2 of its 6 DOF. The tool can only pivot (2), insert, and
+roll about the shaft.
+
+**Use:**
+- Put the tool tip at the port and hold WHITE + click GREY: the tip becomes the RCM point.
+- Hold WHITE + click GREY again to leave. This only works once the tool is pulled back
+  to `TOUCH_RCM_EXIT_DEPTH` (3 mm), so the shaft cannot be swept sideways while it is
+  inserted.
+- GREY on its own still toggles recording. While WHITE is held, GREY is the chord and
+  never toggles recording, so nothing has to wait to tell a click from a chord.
+
+**Tool geometry** (`TOUCH_RCM_SHAFT_*`, in the tool0 frame):
+- The shaft starts at `SHAFT_START`, runs along `SHAFT_DIRECTION` (any direction, for
+  a tilted mount) and ends at the tip `SHAFT_LENGTH` further on.
+- The deepest insertion is the length minus `TOUCH_RCM_DEPTH_MARGIN`, so the holder
+  never reaches the port.
+- The tool lives only in these settings. The pendant TCP stays at zero, so
+  `tcp_pose_broadcaster` and the recorder's TCP/TF drift check keep meaning tool0.
+- The defaults are placeholders.
+
+**Mapping: the stylus drives the tool tip** (pen twist → roll, pen tilt ignored):
+- The tip target is the tip at engage plus the scaled stylus motion. The shaft is aimed
+  from the RCM point at that target, and the insertion depth is their distance.
+- This is the usual laparoscopic / da Vinci arrangement: the user steers the tip, and
+  the fulcrum reversal outside is the arm's problem.
+- The catch: right after latching, the tip *is* at the RCM point, so a small sideways
+  move would need an unbounded pivot. Below `TOUCH_RCM_MIN_PIVOT_DEPTH` (10 mm) the
+  sideways part is faded out by (depth / 10 mm)². The pivot angle then starts at 0
+  and grows smoothly (the largest step in a 0-30 mm sweep was 0.03°), and the tool
+  first goes in straight.
+- The alternative (pen tilt pivots the shaft) has no singularity, but the tip moves
+  against the hand. It was rejected for that reason.
+
+**Control: the twist is built about the RCM point, not tracked per axis.**
+- Free mode tracks tool0 position and orientation separately, so any lag would move
+  the shaft sideways off the point.
+- In RCM mode, the angular velocity ω (feedforward + `rotation_gain` correction to the
+  target orientation) and an insertion speed (depth feedforward + `position_gain`
+  correction) are turned into tool0's velocity `v = insertion·axis + ω × (p − q)`.
+  Here q is the shaft point at the RCM point. A rigid motion like this keeps the shaft
+  through the point to first order, however it is scaled.
+- Drift is pulled back across the shaft at `TOUCH_RCM_GAIN` (8 /s, capped at
+  `TOUCH_MAX_CORRECTION_SPEED`).
+
+Three details mattered (offline kinematic sim, 12 s of fast pivots + insertion + roll,
+peak 169°/s):
+1. **Speed caps scale linear and angular together** (`cap_together`). Clamping them
+   separately, as free mode does, changes the twist's shape and breaks the pivot.
+2. **The command filter runs on (insertion, ω), and the lever arm is formed after it
+   from the newest pose.** Filtering the finished tool0 twist delayed it by the
+   filter's ~45 ms group delay, and by then the lever arm had turned. Result: 5.8 mm
+   off the point (centripetal error ~ |ω|² |lever| delay).
+3. **The twist is built for the pose `TOUCH_LOOP_DELAY` ahead** (turned about the
+   pivot and slid along the shaft), as that is when the arm carries it out. With the
+   lever only: 2.6 / 4.2 mm at 30 / 50 ms arm delay. With the full pose prediction:
+   0.45 mm when the delay matches `TOUCH_LOOP_DELAY` (50 ms), 1.3 mm at 30 ms and
+   2.8 mm at 80 ms. **`TOUCH_LOOP_DELAY` matching the real arm matters more here
+   than in free mode.**
+
+**Interaction with other stages:**
+- The singularity guard reshapes the twist in joint space and adds a back-off, which
+  would move the shaft off the point. In RCM mode only the fraction it lets through
+  (`command · guarded / |command|²`, clipped to 0-1) is kept, applied to the whole
+  twist. Motion into the singularity is slowed and motion away is free, but the arm
+  does not back out on its own. The log says so.
+- `joint_velocity_limiter` scales all joints together, so it already keeps the pivot.
+
+**Safety:** if the shaft is ever more than `TOUCH_RCM_MAX_ERROR` (5 mm) off the point,
+the robot holds still and RCM mode may be left at any depth.
+
+**Logging** (all added to `LOG_BAG_TOPICS`): `~/rcm_active` and `~/rcm_point`
+(latched), `~/rcm_error` (shaft line → point, the accuracy metric),
+`~/insertion_depth` and `~/tool_tip` (z = shaft axis, for RViz). Recorded
+trajectories are joint paths, so replays reproduce the RCM motion unchanged.
+
+**Tests:**
+- **Offline:** tool geometry, `align`, the depth cap, continuity of the min-pivot
+  fade, and the closed loop above.
+- **Full stack on mock hardware** (UR16e, `emulate_ur:=true`, velocity mode, private
+  ROS domain), with a scripted stylus from HOME:
+
+| Phase | Shaft off point (max / mean) | Depth |
+|---|---|---|
+| Chord on, insert 80 mm | 0.019 / 0.013 mm | 0 → 78 mm |
+| 0.5 Hz circles up to 30 mm + ±30° twist | 1.35 / 0.39 mm | 78-86 mm, shaft tilted up to 21° |
+| Exit chord at 80 mm | refused ("Retract the tool ...") | - |
+| Retract, exit chord | 0.021 mm; exit accepted at 0.1 mm | 80 → 0 mm (1.8 mm overshoot out of the port) |
+
+  The chord never toggled the (running) recorder. There were no Servo or singularity
+  warnings.
+
+**Not in this version:**
+- Haptic walls. The Touch driver already listens on `/phantom/force_feedback` (N; it
+  can only push the tip in x/y/z, ~0.9 N continuous). This is left for its own version
+  so its effect can be compared in the logs.
+- Calibrating the shaft offset and direction (e.g. a pivot calibration).
+- RCM for the keyboard node.
+
+**Notes for the real arm:** measure the tool and set `TOUCH_RCM_SHAFT_*` first. Start
+at 1:5 scale with low speed caps and no tool contact, and watch `~/rcm_error`. If it
+grows on fast pivots, `TOUCH_LOOP_DELAY` is off from the arm's real delay. Pivoting
+about a fixed point uses much more arm motion than free teleop and reaches wrist
+singularities sooner, so choose the port position with that in mind.

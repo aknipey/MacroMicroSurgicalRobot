@@ -136,6 +136,12 @@ Wait for **`Touch teleop ready`**.
 2. **Hold the WHITE button** → the robot follows your hand.
 3. **Let go of WHITE** → the robot stops. Move your hand back to the middle and hold WHITE again.
 4. **GREY button** → start or stop recording the path. Recordings are saved in `~/ros2_ws/trajectories`.
+5. **RCM mode** (pivot about a port): put the tool tip at the port, then **hold WHITE and click GREY**. The tip is now the fixed pivot point:
+   - Moving the stylus moves the tool tip. The arm pivots the shaft about the point, and pushing down inserts the tool.
+   - Twisting the pen rolls the tool. Tilting the pen does nothing.
+   - The first ~10 mm of insertion is straight in.
+   - To leave, pull the tool back out to the port, then **hold WHITE and click GREY** again. It refuses while the tool is inserted.
+   - The tool's size is set in `teleop_settings.py` (`TOUCH_RCM_*`). Measure it before using RCM mode, and leave the pendant TCP at zero.
 
 The directions assume you stand **in front of the robot**. Pushing the pen away from you moves the robot away from you.
 
@@ -164,6 +170,8 @@ The directions assume you stand **in front of the robot**. Pushing the pen away 
 | Terminal 2: `stty: /dev/ttyACM300` / `Failed to initialize haptic device` | Run the Touch setup again (A6). |
 | Robot moves the wrong way | Let go of WHITE. Directions are as seen from the tool looking at the robot base: towards the Touch body = towards the base, up = up. For a fixed mapping instead, use `-p mapping:=fixed` and set `axis_map`. |
 | `ros2: command not found` | You forgot to source. Run the two `source` lines. |
+| `Retract the tool before leaving RCM mode` | Pull the stylus back until the tool tip is at the port (depth ≤ 3 mm), then hold WHITE + click GREY again. |
+| `Shaft is ... mm off the RCM point - holding still` | The tool has drifted off the pivot point. The robot stays still, and hold WHITE + click GREY leaves RCM mode at any depth. Check that `TOUCH_LOOP_DELAY` matches the arm. |
 
 ---
 

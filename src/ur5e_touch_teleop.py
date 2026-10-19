@@ -17,6 +17,17 @@ scale is published latched on ~/motion_scale for the logs.
 Press the GREY button to start / stop recording a trajectory and the
 Touch / UR path logs (needs trajectory_recorder running).
 
+RCM (remote centre of motion) mode: while holding WHITE, click GREY. The tool tip
+(the `rcm_shaft_*` tool, see teleop_settings) is latched as a fixed pivot point,
+e.g. a port. From then on the stylus drives the tool tip: the arm pivots the shaft
+about that point to aim it at the tip target, the distance past it is the insertion
+depth (capped at shaft length - `rcm_depth_margin`), pen twist rolls the tool about
+the shaft and pen tilt is ignored. Close to the point (`rcm_min_pivot_depth`) the
+sideways motion fades out, so the tool first goes in straight. Hold WHITE + click
+GREY again to leave, which needs the tool retracted to `rcm_exit_depth`. The RCM
+state is published on ~/rcm_active, ~/rcm_point, ~/rcm_error (shaft line to the
+point), ~/insertion_depth and ~/tool_tip.
+
 While engaged, the stylus pose mapped into the robot frame (the tool0 pose the
 robot is being pulled towards) is published on ~/target_pose, once per stylus
 sample and stamped with the stylus sample's own stamp, for the logger.
@@ -44,7 +55,7 @@ from collections import deque
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
 from omni_msgs.msg import OmniButtonEvent, OmniState
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
@@ -57,6 +68,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from ls_thesis.ur5e_common import (
     SERVO_TWIST_TOPIC,
     LowPass,
+    RcmTool,
     RecorderClient,
     SingularityGuard,
     VelocityWatchdog,
@@ -288,6 +300,14 @@ class TouchTeleop(Node):
         self.declare_parameter("singularity_damping", cfg.TOUCH_SINGULARITY_DAMPING)
         self.declare_parameter("singularity_escape_gain", cfg.TOUCH_SINGULARITY_ESCAPE_GAIN)
         self.declare_parameter("singularity_escape_speed", cfg.TOUCH_SINGULARITY_ESCAPE_SPEED)
+        self.declare_parameter("rcm_shaft_start", cfg.TOUCH_RCM_SHAFT_START)
+        self.declare_parameter("rcm_shaft_direction", cfg.TOUCH_RCM_SHAFT_DIRECTION)
+        self.declare_parameter("rcm_shaft_length", cfg.TOUCH_RCM_SHAFT_LENGTH)
+        self.declare_parameter("rcm_depth_margin", cfg.TOUCH_RCM_DEPTH_MARGIN)
+        self.declare_parameter("rcm_min_pivot_depth", cfg.TOUCH_RCM_MIN_PIVOT_DEPTH)
+        self.declare_parameter("rcm_exit_depth", cfg.TOUCH_RCM_EXIT_DEPTH)
+        self.declare_parameter("rcm_gain", cfg.TOUCH_RCM_GAIN)
+        self.declare_parameter("rcm_max_error", cfg.TOUCH_RCM_MAX_ERROR)
         self.declare_parameter("setup_servo", True)
 
         p = lambda name: self.get_parameter(name).value
@@ -358,11 +378,26 @@ class TouchTeleop(Node):
                                        "only MoveIt Servo's own singularity check is active")
         self.singularity_state = 0      # 0 clear, 1 limiting, 2 backing out (for the log messages)
 
+        self.rcm_tool = RcmTool(p("rcm_shaft_start"), p("rcm_shaft_direction"), p("rcm_shaft_length"))
+        self.rcm_max_depth = self.rcm_tool.length - p("rcm_depth_margin")
+        if not self.rcm_max_depth > 0.0:
+            raise ValueError(f"rcm_depth_margin ({p('rcm_depth_margin')} m) must be shorter than "
+                             f"rcm_shaft_length ({self.rcm_tool.length} m)")
+        self.rcm_min_pivot_depth = p("rcm_min_pivot_depth")
+        self.rcm_exit_depth = p("rcm_exit_depth")
+        self.rcm_gain = p("rcm_gain")
+        self.rcm_max_error = p("rcm_max_error")
+
         self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
         self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.scale_pub = self.create_publisher(Float64, "~/motion_scale", latched)
         self.condition_pub = self.create_publisher(Float64, "~/condition_number", 10)
+        self.rcm_active_pub = self.create_publisher(Bool, "~/rcm_active", latched)
+        self.rcm_point_pub = self.create_publisher(PointStamped, "~/rcm_point", latched)
+        self.rcm_error_pub = self.create_publisher(Float64, "~/rcm_error", 10)
+        self.insertion_depth_pub = self.create_publisher(Float64, "~/insertion_depth", 10)
+        self.tool_tip_pub = self.create_publisher(PoseStamped, "~/tool_tip", 10)
         self.recorder = RecorderClient(self)
 
         self.touch_position = None      # metres, stylus frame
@@ -391,6 +426,15 @@ class TouchTeleop(Node):
         self.target_history = deque()   # (time, target) for the loop-delay comparison
         self.target_linear_velocity = np.zeros(3)
         self.target_angular_velocity = np.zeros(3)
+        self.target_depth_velocity = 0.0
+
+        # RCM mode: the latched point (base frame) or None when off; tip and shaft axis
+        # captured when WHITE goes down
+        self.rcm_point = None
+        self.rcm_fault = False          # shaft beyond rcm_max_error: holding still
+        self.tip_origin = None
+        self.shaft_axis_origin = None
+        self.rcm_active_pub.publish(Bool(data=False))
 
         self.create_subscription(OmniState, p("state_topic"), self.on_state, 1)
         self.create_subscription(OmniButtonEvent, p("button_topic"), self.on_button, 10)
@@ -416,7 +460,7 @@ class TouchTeleop(Node):
         self.create_timer(1.0 / p("publish_rate"), self.update)
         self.get_logger().info(
             "Touch teleop ready: hold WHITE to move, double-click WHITE to change scale, "
-            "GREY to start/stop recording "
+            "GREY to start/stop recording, hold WHITE + click GREY for RCM mode "
             f"(tilt {'on' if self.enable_rotation else 'off'}, twist {'on' if self.enable_twist else 'off'}, "
             f"max {self.max_linear:.2f} m/s)")
 
@@ -468,8 +512,41 @@ class TouchTeleop(Node):
             self.white_click_time = self.white_press_time if short else None
             self.release()
         if grey and not self.grey_pressed:
-            self.recorder.toggle()
+            # With WHITE held GREY is the RCM chord, so a chord never starts a recording
+            if white:
+                self.toggle_rcm()
+            else:
+                self.recorder.toggle()
         self.white_pressed, self.grey_pressed = white, grey
+
+    def toggle_rcm(self):
+        """Latch the tool tip as the RCM point, or leave RCM mode if the tool is retracted."""
+        robot = self.lookup_robot_pose()
+        if robot is None:
+            self.get_logger().warn("Cannot switch RCM mode: no robot pose yet")
+            return
+        if self.rcm_point is None:
+            self.rcm_point = self.rcm_tool.shaft(*robot)[2]
+            self.rcm_fault = False
+            msg = PointStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = self.base_frame
+            msg.point.x, msg.point.y, msg.point.z = (float(v) for v in self.rcm_point)
+            self.rcm_point_pub.publish(msg)
+            self.get_logger().info(
+                "RCM mode ON at tip ({:.4f}, {:.4f}, {:.4f}) m - the stylus now drives the tip, "
+                "max depth {:.0f} mm".format(*self.rcm_point, 1e3 * self.rcm_max_depth))
+        else:
+            depth = self.rcm_tool.depth(*robot, self.rcm_point)
+            if depth > self.rcm_exit_depth and not self.rcm_fault:
+                self.get_logger().warn(f"Retract the tool before leaving RCM mode (depth {1e3 * depth:.1f} mm, "
+                                       f"needs <= {1e3 * self.rcm_exit_depth:.1f} mm)")
+                return
+            self.rcm_point = None
+            self.get_logger().info("RCM mode OFF - free motion")
+        self.rcm_active_pub.publish(Bool(data=self.rcm_point is not None))
+        if self.clutched:
+            self.engage()       # restart the stroke from here in the new mode
 
     def set_scale(self, index):
         """Select scale_steps[index] (wrapping); only call while not clutched or right before engage."""
@@ -532,6 +609,13 @@ class TouchTeleop(Node):
         self.axis_rotation = Rotation.from_matrix(self.axis_matrix)
         self.touch_origin = (self.touch_position.copy(), self.touch_orientation)
         self.robot_origin = robot
+        if self.rcm_point is not None:
+            # The tip as if the shaft ran exactly through the RCM point, so a small drift
+            # is corrected rather than becoming part of the target
+            _, axis, _ = self.rcm_tool.shaft(*robot)
+            depth = np.clip(self.rcm_tool.depth(*robot, self.rcm_point), 0.0, self.rcm_max_depth)
+            self.shaft_axis_origin = axis
+            self.tip_origin = self.rcm_point + depth * axis
         self.pen_twist = 0.0
         self.singularity_state = 0      # report it again if this stroke starts near one
         self.target = self.compute_target()
@@ -539,6 +623,7 @@ class TouchTeleop(Node):
         self.target_history.clear()
         self.target_linear_velocity = np.zeros(3)
         self.target_angular_velocity = np.zeros(3)
+        self.target_depth_velocity = 0.0
         if self.command_filter is not None:
             self.command_filter.reset()     # start from rest, as the robot is
         self.clutched = True
@@ -560,13 +645,15 @@ class TouchTeleop(Node):
         target_position = robot_origin_position + self.translation_scale * touch_delta
 
         have_orientation = self.touch_orientation is not None and touch_origin_orientation is not None
+        if have_orientation:
+            # Stylus rotation since engage in its own body frame, split into tilt of the pen
+            # axis (swing) and twist about it
+            swing, twist = split_twist(touch_origin_orientation.inv() * self.touch_orientation)
+            self.pen_twist += wrap_angle(twist - wrap_angle(self.pen_twist))
+        if self.rcm_point is not None:
+            return self.rcm_target(touch_delta)
         if not (self.enable_rotation or self.enable_twist) or not have_orientation:
             return target_position, None
-
-        # Stylus rotation since engage in its own body frame, split into tilt of the pen
-        # axis (swing) and twist about it
-        swing, twist = split_twist(touch_origin_orientation.inv() * self.touch_orientation)
-        self.pen_twist += wrap_angle(twist - wrap_angle(self.pen_twist))
 
         target_orientation = robot_origin_orientation
         if self.enable_rotation:
@@ -583,14 +670,33 @@ class TouchTeleop(Node):
             target_orientation = target_orientation * Rotation.from_rotvec([0.0, 0.0, tool_twist])
         return target_position, target_orientation
 
+    def rcm_target(self, touch_delta):
+        """Tool0 target in RCM mode: the shaft through the RCM point, aimed at the stylus tip
+        target, rolled about itself by the pen twist (pen tilt is not used)."""
+        tip_target = self.tip_origin + self.translation_scale * touch_delta
+        axis, depth = self.rcm_tool.target_shaft(tip_target, self.rcm_point, self.shaft_axis_origin,
+                                                 self.rcm_min_pivot_depth, self.rcm_max_depth)
+        orientation = RcmTool.align(self.shaft_axis_origin, axis) * self.robot_origin[1]
+        if self.enable_twist:
+            roll = PEN_AXIS_TO_TOOL_Z_SIGN * self.twist_scale * self.pen_twist
+            orientation = orientation * Rotation.from_rotvec(roll * self.rcm_tool.direction)
+        return self.rcm_tool.tool0_position(self.rcm_point + depth * axis, orientation), orientation
+
     def update(self):
+        if not self.clutched and self.rcm_point is None:
+            return
+        robot = self.lookup_robot_pose()
+        if robot is not None and self.rcm_point is not None:
+            self.publish_rcm_state(robot)
         if not self.clutched:
             return
         if not self.touch_is_fresh():
             self.get_logger().warn("Touch state is stale - holding still", throttle_duration_sec=1.0)
             return
-        robot = self.lookup_robot_pose()
         if robot is None:
+            return
+        if self.rcm_point is not None and self.rcm_fault:
+            self.publish_twist(np.zeros(3), np.zeros(3))
             return
         robot_position, robot_orientation = robot
         self.update_target_velocity()
@@ -598,30 +704,88 @@ class TouchTeleop(Node):
         # where the target was then; the feedforward term carries the motion since
         target_position, target_orientation = self.delayed_target()
 
-        error = target_position - robot_position
-        linear = self.feedforward * self.target_linear_velocity
-        if np.linalg.norm(error) >= self.deadband:
-            linear = linear + clamp_norm(self.position_gain * error, self.max_correction)
-        linear = clamp_norm(linear, self.max_linear)
+        if self.rcm_point is not None:
+            # [insertion speed, 0, 0] + angular velocity here; the filter below works on these
+            linear, angular = self.rcm_pivot_twist(robot, (target_position, target_orientation))
+        else:
+            error = target_position - robot_position
+            linear = self.feedforward * self.target_linear_velocity
+            if np.linalg.norm(error) >= self.deadband:
+                linear = linear + clamp_norm(self.position_gain * error, self.max_correction)
+            linear = clamp_norm(linear, self.max_linear)
 
-        angular = np.zeros(3)
-        if target_orientation is not None:
-            rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
-            correction = clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction)
-            angular = clamp_norm(self.feedforward * self.target_angular_velocity + correction, self.max_angular)
+            angular = np.zeros(3)
+            if target_orientation is not None:
+                rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
+                correction = clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction)
+                angular = clamp_norm(self.feedforward * self.target_angular_velocity + correction, self.max_angular)
 
         if self.command_filter is not None:
             # Release still sends an unfiltered zero, so the robot stops at once.
             # Clamped again as the Butterworth can overshoot a step by ~4%.
             filtered = self.command_filter(np.concatenate([linear, angular]))
-            linear = clamp_norm(filtered[:3], self.max_linear)
-            angular = clamp_norm(filtered[3:], self.max_angular)
+            if self.rcm_point is None:
+                linear = clamp_norm(filtered[:3], self.max_linear)
+                angular = clamp_norm(filtered[3:], self.max_angular)
+            else:
+                linear, angular = filtered[:3], filtered[3:]
+        if self.rcm_point is not None:
+            linear, angular = self.rcm_tool0_twist(robot, linear[0], angular)
 
         # Last, so it sees the twist Servo will get and the filter cannot smear its limits
         if self.singularity_guard is not None:
             linear, angular = self.guard_singularity(linear, angular)
 
         self.publish_twist(linear, angular)
+
+    def rcm_pivot_twist(self, robot, target):
+        """(insertion speed, angular velocity) as a 6-vector for the command filter: turn
+        towards the target orientation about the RCM point, slide towards the target depth."""
+        robot_position, robot_orientation = robot
+        target_position, target_orientation = target
+        rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
+        angular = (self.feedforward * self.target_angular_velocity
+                   + clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction))
+        depth_error = (self.rcm_tool.depth(target_position, target_orientation, self.rcm_point)
+                       - self.rcm_tool.depth(robot_position, robot_orientation, self.rcm_point))
+        insertion = self.feedforward * self.target_depth_velocity
+        if abs(depth_error) >= self.deadband:
+            insertion += float(np.clip(self.position_gain * depth_error, -self.max_correction, self.max_correction))
+        return np.array([insertion, 0.0, 0.0]), angular
+
+    def rcm_tool0_twist(self, robot, insertion, angular):
+        """The tool0 twist for an insertion speed + angular velocity, built from the newest
+        pose after the command filter (so the filter's delay does not bend the lever arm),
+        led by loop_delay for the arm's own delay and speed-capped as a whole."""
+        linear = self.rcm_tool.twist(*robot, self.rcm_point, insertion, angular,
+                                     self.rcm_gain, self.max_correction, self.loop_delay)
+        return self.cap_together(linear, angular)
+
+    def cap_together(self, linear, angular):
+        """Scale linear and angular by one factor to within the speed caps. Capping them
+        separately would change the twist's shape, which moves the shaft off the RCM point."""
+        factor = min(1.0, self.max_linear / max(np.linalg.norm(linear), 1e-12),
+                     self.max_angular / max(np.linalg.norm(angular), 1e-12))
+        return linear * factor, angular * factor
+
+    def publish_rcm_state(self, robot):
+        """Publish depth, shaft-to-RCM error and the tool tip; hold still if the shaft is off."""
+        error = self.rcm_tool.line_error(*robot, self.rcm_point)
+        self.rcm_error_pub.publish(Float64(data=error))
+        self.insertion_depth_pub.publish(Float64(data=self.rcm_tool.depth(*robot, self.rcm_point)))
+        msg = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.base_frame
+        msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = \
+            (float(v) for v in self.rcm_tool.shaft(*robot)[2])
+        msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w = \
+            (float(v) for v in (robot[1] * self.rcm_tool.tip_rotation).as_quat())
+        self.tool_tip_pub.publish(msg)
+        if error > self.rcm_max_error and not self.rcm_fault:
+            self.rcm_fault = True
+            self.get_logger().error(
+                f"Shaft is {1e3 * error:.1f} mm off the RCM point (limit {1e3 * self.rcm_max_error:.1f} mm) - "
+                "holding still. Hold WHITE + click GREY to leave RCM mode")
 
     def guard_singularity(self, linear, angular):
         """The twist with motion into a singularity removed (and a push back out of one)."""
@@ -632,8 +796,17 @@ class TouchTeleop(Node):
         except KeyError:
             return linear, angular
         guard = self.singularity_guard
-        twist = guard(np.concatenate([linear, angular]), positions)
+        command = np.concatenate([linear, angular])
+        twist = guard(command, positions)
         self.condition_pub.publish(Float64(data=float(guard.condition)))
+        if self.rcm_point is not None and twist is not command:
+            # The guard reshapes the twist (and adds a back-off) in joint space, which would
+            # move the shaft off the RCM point. Keep only how much of the command it lets
+            # through: motion into the singularity is slowed, away from it is not, and with
+            # no command the arm holds still at the limit instead of backing out.
+            size = command @ command
+            factor = float(np.clip(command @ twist / size, 0.0, 1.0)) if size > 0.0 else 0.0
+            twist = factor * command
 
         # 2 = backing out, 1 = limiting, 0 = clear; with 10% hysteresis, as the guard
         # holds the arm right at `stop`, where it would flip every cycle
@@ -649,6 +822,9 @@ class TouchTeleop(Node):
             if state == 1:
                 self.get_logger().warn(f"Near the {what} singularity (condition {condition:.0f}) - "
                                        "motion towards it is slowed, along / away from it is free")
+            elif self.rcm_point is not None:
+                self.get_logger().warn(f"At the {what} singularity limit (condition {condition:.0f}) - "
+                                       "RCM mode does not back out: move the stylus away")
             else:
                 self.get_logger().warn(f"At the {what} singularity limit (condition {condition:.0f}) - "
                                        "backing out; keep holding WHITE, or move the stylus away")
@@ -681,6 +857,10 @@ class TouchTeleop(Node):
         alpha = dt / (dt + self.feedforward_filter)
         self.target_linear_velocity += alpha * (linear - self.target_linear_velocity)
         self.target_angular_velocity += alpha * (angular - self.target_angular_velocity)
+        if self.rcm_point is not None:
+            depth = (self.rcm_tool.depth(*self.target, self.rcm_point)
+                     - self.rcm_tool.depth(*previous, self.rcm_point)) / dt
+            self.target_depth_velocity += alpha * (depth - self.target_depth_velocity)
 
     def publish_target(self, stamp):
         position, orientation = self.target

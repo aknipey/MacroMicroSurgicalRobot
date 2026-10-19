@@ -20,6 +20,7 @@ from moveit_msgs.srv import ServoCommandType
 from std_msgs.msg import Float64MultiArray
 from std_srvs.srv import SetBool, Trigger
 from scipy.signal import butter
+from scipy.spatial.transform import Rotation
 import numpy as np
 import rclpy
 
@@ -371,6 +372,113 @@ def ur_singularity_name(positions):
     if min(wrist, elbow) > 0.35:
         return "shoulder (wrist centre near the base axis)"
     return "wrist (wrist 2 near 0 / 180 deg)" if wrist < elbow else "elbow (arm stretched out)"
+
+
+class RcmTool:
+    """A straight tool shaft fixed to tool0, pivoting about a remote centre of motion.
+
+    In the tool0 frame the shaft starts at `shaft_start`, runs along `shaft_direction`
+    and ends at the tip `shaft_length` further on. With an RCM point c (base frame), the
+    insertion depth is how far the tip is past c along the shaft, and the shaft must
+    keep passing through c: of the tool's 6 DOF only the pivot (2), depth and roll
+    about the shaft are left.
+    """
+
+    def __init__(self, shaft_start, shaft_direction, shaft_length):
+        self.start = np.asarray(shaft_start, dtype=float)
+        direction = np.asarray(shaft_direction, dtype=float)
+        if self.start.shape != (3,) or direction.shape != (3,) or not np.linalg.norm(direction) > 1e-9:
+            raise ValueError(f"RCM shaft needs a 3-vector start and a non-zero direction, "
+                             f"not {shaft_start}, {shaft_direction}")
+        if not shaft_length > 0.0:
+            raise ValueError(f"RCM shaft length must be positive, not {shaft_length}")
+        self.direction = direction / np.linalg.norm(direction)
+        self.length = float(shaft_length)
+        self.tip_offset = self.start + self.length * self.direction     # tool0 -> tip, tool0 frame
+        # Tool0 orientation -> tip frame, whose z is the shaft axis
+        self.tip_rotation = self.align(np.array([0.0, 0.0, 1.0]), self.direction)
+
+    @staticmethod
+    def align(a, b):
+        """Smallest rotation turning unit vector a onto unit vector b."""
+        axis = np.cross(a, b)
+        sin, cos = np.linalg.norm(axis), float(a @ b)
+        if sin < 1e-12:
+            if cos > 0.0:
+                return Rotation.identity()
+            # Opposite: half a turn about any axis perpendicular to a
+            perpendicular = np.cross(a, [1.0, 0.0, 0.0] if abs(a[0]) < 0.9 else [0.0, 1.0, 0.0])
+            return Rotation.from_rotvec(np.pi * perpendicular / np.linalg.norm(perpendicular))
+        return Rotation.from_rotvec(axis / sin * np.arctan2(sin, cos))
+
+    def shaft(self, position, rotation):
+        """(start, unit axis, tip) in the base frame for a tool0 pose (position, Rotation)."""
+        start = position + rotation.apply(self.start)
+        axis = rotation.apply(self.direction)
+        return start, axis, start + self.length * axis
+
+    def depth(self, position, rotation, rcm):
+        """How far the tip is past the RCM point along the shaft (m; < 0 = not reached)."""
+        _, axis, tip = self.shaft(position, rotation)
+        return float((tip - rcm) @ axis)
+
+    def line_error(self, position, rotation, rcm):
+        """Distance (m) from the shaft line to the RCM point - 0 when the constraint holds."""
+        start, axis, _ = self.shaft(position, rotation)
+        offset = rcm - start
+        return float(np.linalg.norm(offset - (offset @ axis) * axis))
+
+    def tool0_position(self, tip, rotation):
+        """Tool0 position that puts the tip at `tip` with tool0 orientation `rotation`."""
+        return tip - rotation.apply(self.tip_offset)
+
+    @staticmethod
+    def target_shaft(tip_target, rcm, axis_origin, min_pivot_depth, max_depth):
+        """(unit axis, depth) for a wanted tip position, the shaft through the RCM point.
+
+        The axis points from the RCM point towards the tip target, and the depth is
+        their distance, except near the RCM point: there the sideways part (across
+        axis_origin, the axis at engage) is faded out by (axial / min_pivot_depth)^2,
+        so the pivot angle starts from 0 at depth 0 and grows smoothly into the plain
+        direction-to-target at min_pivot_depth. A target behind the RCM point gives
+        depth 0 along axis_origin; the depth is capped at max_depth.
+        """
+        offset = tip_target - rcm
+        axial = float(offset @ axis_origin)
+        if axial <= 0.0:
+            return axis_origin, 0.0
+        sideways = offset - axial * axis_origin
+        if axial < min_pivot_depth:
+            sideways = sideways * (axial / min_pivot_depth) ** 2
+        offset = axial * axis_origin + sideways
+        depth = np.linalg.norm(offset)
+        return offset / depth, min(depth, max_depth)
+
+    def pivot(self, position, rotation, rcm):
+        """(point of the shaft line nearest the RCM point, unit shaft axis), base frame."""
+        start, axis, _ = self.shaft(position, rotation)
+        return start + ((rcm - start) @ axis) * axis, axis
+
+    def twist(self, position, rotation, rcm, insertion_speed, angular, rcm_gain, max_correction, lead=0.0):
+        """Tool0 linear velocity (base frame) that turns the tool at `angular` about the RCM
+        point and slides it along the shaft at insertion_speed (> 0 = deeper).
+
+        Drift of the shaft off the RCM point is pulled back across the shaft at rcm_gain
+        (capped at max_correction m/s). The twist reaches the arm `lead` s later, by when
+        the tool has turned and slid on; it is built for the pose predicted then, as
+        built for the current one the lever arm and shaft axis are stale and the shaft
+        drifts outwards on fast pivots (~|angular|^2 |lever| lead, plus insertion x
+        |angular| x lead).
+        """
+        pivot, axis = self.pivot(position, rotation, rcm)
+        drift = rcm_gain * (rcm - pivot)            # across the shaft only
+        norm = np.linalg.norm(drift)
+        if norm > max_correction:
+            drift *= max_correction / norm
+        turn = Rotation.from_rotvec(lead * angular)
+        position = pivot + turn.apply(position - pivot) + lead * insertion_speed * axis
+        pivot, axis = self.pivot(position, turn * rotation, rcm)
+        return insertion_speed * axis + drift + np.cross(angular, position - pivot)
 
 
 class RecorderClient:
