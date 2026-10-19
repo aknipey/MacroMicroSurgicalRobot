@@ -129,10 +129,10 @@ TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 # Shaft geometry in the tool0 frame (z out of the flange): the shaft starts at
 # SHAFT_START (the end at the holder), runs along SHAFT_DIRECTION (normalised) and
 # ends at the tip SHAFT_LENGTH further on. Only points on that segment can be the RCM.
-# Current tool: tip 0.54 m straight out of the flange (shaft start still a guess).
+# Measure your tool.
 TOUCH_RCM_SHAFT_START = [0.0, 0.0, 0.05]     # m
 TOUCH_RCM_SHAFT_DIRECTION = [0.0, 0.0, 1.0]
-TOUCH_RCM_SHAFT_LENGTH = 0.262                # m (tip at 0.05 + 0.49 = 0.54 m)
+TOUCH_RCM_SHAFT_LENGTH = 0.262               # m
 # Closest the shaft start (holder / collar) may come to the RCM point (m), so the
 # deepest insertion is SHAFT_LENGTH - this.
 TOUCH_RCM_DEPTH_MARGIN = 0.02

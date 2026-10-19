@@ -21,8 +21,7 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V3 | `v3` | 2026-10-12 | Selectable motion scaling (1:1 / 1:5 / 1:20) | Finer control: hand motion scaled down 5× or 20× | ~140 ms / ~140 ms |
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
 | V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
-| V6 | (not tagged yet) | 2026-10-15 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck | Not run on the real arm yet |
-| V7 | (not tagged yet) | 2026-10-15 | RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point; the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Laparoscopic-style work: the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots; not run on the real arm yet |
+| V6 | `v6` | 2026-10-19 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs; RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point, the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck. RCM: laparoscopic-style work, the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots. Real arm RCM runs in `logs/V6/` (BasicInRCM, ScalingInRCM, ExitingRCM): near the point the arm has to accelerate hard for small tip moves |
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
 target path (`scripts/plot_paths.py`). Each version's section below has the full
@@ -886,9 +885,9 @@ the tool's translation slows too.
 
 ---
 
-## V6 — Singularity guard
+## V6 (part 1) — Singularity guard
 
-**Code:** not committed or tagged yet. Only the Touch node uses the guard; keyboard,
+**Code:** tag `v6`. Only the Touch node uses the guard; keyboard,
 player and stylus replay are unchanged apart from the keyboard node resetting Servo's
 thresholds.
 
@@ -966,9 +965,9 @@ behind the V4/V5 wrist overspeed faults.
   joint speeds blow up (~100+).
 
 
-## V7 — RCM (remote centre of motion) mode
+## V6 (part 2) — RCM (remote centre of motion) mode
 
-**Code:** not committed or tagged yet. Touch node only (`ur5e_touch_teleop.py`, and
+**Code:** tag `v6`, together with the singularity guard. Touch node only (`ur5e_touch_teleop.py`, and
 `RcmTool` in `ls_thesis/ur5e_common.py`). Free-motion teleop is unchanged; RCM is a
 mode that is switched on and off with the buttons.
 
