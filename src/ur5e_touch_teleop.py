@@ -22,9 +22,12 @@ RCM (remote centre of motion) mode: while holding WHITE, click GREY. The tool ti
 e.g. a port. From then on the stylus drives the tool tip: the arm pivots the shaft
 about that point to aim it at the tip target, the distance past it is the insertion
 depth (capped at shaft length - `rcm_depth_margin`), pen twist rolls the tool about
-the shaft and pen tilt is ignored. Close to the point (`rcm_min_pivot_depth`) the
-sideways motion fades out, so the tool first goes in straight. Hold WHITE + click
-GREY again to leave, which needs the tool retracted to `rcm_exit_depth`. The RCM
+the shaft and pen tilt is ignored. Sideways stylus motion swings tool0 by the same
+amount at every depth (`rcm_tool0_gain`, up to `rcm_tool0_gain_depth`), so the tip
+moves less the shallower it is; an extra fade near the point is optional
+(`rcm_pivot_fade_depth`, off by default). Hold WHITE + click
+GREY again to leave, which needs the tool retracted to `rcm_exit_depth`; it can be
+pulled out up to `rcm_retract_depth` past the point first. The RCM
 state is published on ~/rcm_active, ~/rcm_point, ~/rcm_error (shaft line to the
 point), ~/insertion_depth and ~/tool_tip.
 
@@ -48,16 +51,29 @@ straight, wrist centre over the base) the part of the motion heading into it is
 slowed and then removed, so the tool slides along the edge instead of stalling,
 and if the arm is past the limit (or starts there) holding WHITE backs it out.
 The arm's condition number is published on ~/condition_number.
+
+Haptic cues (`haptics`, sent to the driver's force_feedback topic) while WHITE is
+held: in RCM mode a soft wall at the deepest insertion and at the retract limit and
+a click as the tip target crosses the RCM point; a small tap when RCM mode turns on
+or off (two when it refuses to turn off); near a singularity a
+push on the stylus in the direction that leads out of it, growing from the guard's
+slow to its stop threshold. The driver keeps the last force it was sent, so the
+node sends zero when it starts and when it exits.
 """
 
+import signal
+import socket
+import struct
+import time
 import xml.etree.ElementTree as ET
 from collections import deque
 
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
-from omni_msgs.msg import OmniButtonEvent, OmniState
+from omni_msgs.msg import OmniButtonEvent, OmniFeedback, OmniState
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
@@ -80,6 +96,7 @@ from ls_thesis.ur5e_common import (
     ur_singularity_name,
 )
 from ls_thesis import teleop_settings as cfg
+from ls_thesis.haptics import PulsePlayer, limit_force, singularity_force
 
 # omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
 # transposed, so its "offset * rotation" is a right multiply), so the offset cancels
@@ -304,10 +321,30 @@ class TouchTeleop(Node):
         self.declare_parameter("rcm_shaft_direction", cfg.TOUCH_RCM_SHAFT_DIRECTION)
         self.declare_parameter("rcm_shaft_length", cfg.TOUCH_RCM_SHAFT_LENGTH)
         self.declare_parameter("rcm_depth_margin", cfg.TOUCH_RCM_DEPTH_MARGIN)
-        self.declare_parameter("rcm_min_pivot_depth", cfg.TOUCH_RCM_MIN_PIVOT_DEPTH)
+        self.declare_parameter("rcm_pivot_fade_depth", cfg.TOUCH_RCM_PIVOT_FADE_DEPTH)
+        self.declare_parameter("rcm_pivot_fade_strength", cfg.TOUCH_RCM_PIVOT_FADE_STRENGTH)
+        self.declare_parameter("rcm_tool0_gain", cfg.TOUCH_RCM_TOOL0_GAIN)
+        self.declare_parameter("rcm_tool0_gain_depth", cfg.TOUCH_RCM_TOOL0_GAIN_DEPTH)
+        self.declare_parameter("rcm_retract_depth", cfg.TOUCH_RCM_RETRACT_DEPTH)
         self.declare_parameter("rcm_exit_depth", cfg.TOUCH_RCM_EXIT_DEPTH)
         self.declare_parameter("rcm_gain", cfg.TOUCH_RCM_GAIN)
         self.declare_parameter("rcm_max_error", cfg.TOUCH_RCM_MAX_ERROR)
+        self.declare_parameter("force_topic", "/phantom/force_feedback")
+        # touch_server (ls_thesis touch_driver.launch.py) renders the RCM walls itself
+        self.declare_parameter("haptic_scene_port", 47102)
+        self.declare_parameter("haptics", cfg.TOUCH_HAPTICS)
+        self.declare_parameter("haptic_max_force", cfg.TOUCH_HAPTIC_MAX_FORCE)
+        self.declare_parameter("haptic_slew_rate", cfg.TOUCH_HAPTIC_SLEW_RATE)
+        self.declare_parameter("haptic_wall_stiffness", cfg.TOUCH_HAPTIC_WALL_STIFFNESS)
+        self.declare_parameter("haptic_crossing_force", cfg.TOUCH_HAPTIC_CROSSING_FORCE)
+        self.declare_parameter("haptic_crossing_hysteresis", cfg.TOUCH_HAPTIC_CROSSING_HYSTERESIS)
+        self.declare_parameter("haptic_crossing_holdoff", cfg.TOUCH_HAPTIC_CROSSING_HOLDOFF)
+        self.declare_parameter("haptic_limit_force", cfg.TOUCH_HAPTIC_LIMIT_FORCE)
+        self.declare_parameter("haptic_pulse_force", cfg.TOUCH_HAPTIC_PULSE_FORCE)
+        self.declare_parameter("haptic_pulse_frequency", cfg.TOUCH_HAPTIC_PULSE_FREQUENCY)
+        self.declare_parameter("haptic_singularity_force", cfg.TOUCH_HAPTIC_SINGULARITY_FORCE)
+        self.declare_parameter("haptic_singularity_damping", cfg.TOUCH_HAPTIC_SINGULARITY_DAMPING)
+        self.declare_parameter("haptic_singularity_filter", cfg.TOUCH_HAPTIC_SINGULARITY_FILTER)
         self.declare_parameter("setup_servo", True)
 
         p = lambda name: self.get_parameter(name).value
@@ -383,10 +420,49 @@ class TouchTeleop(Node):
         if not self.rcm_max_depth > 0.0:
             raise ValueError(f"rcm_depth_margin ({p('rcm_depth_margin')} m) must be shorter than "
                              f"rcm_shaft_length ({self.rcm_tool.length} m)")
-        self.rcm_min_pivot_depth = p("rcm_min_pivot_depth")
+        self.rcm_pivot_fade_depth = p("rcm_pivot_fade_depth")
+        self.rcm_pivot_fade_strength = p("rcm_pivot_fade_strength")
+        if not self.rcm_pivot_fade_strength >= 1.0:
+            raise ValueError(f"rcm_pivot_fade_strength must be >= 1, not {self.rcm_pivot_fade_strength}")
+        self.rcm_tool0_gain = p("rcm_tool0_gain")
+        self.rcm_tool0_gain_depth = p("rcm_tool0_gain_depth")
+        self.rcm_min_depth = -p("rcm_retract_depth")
+        if self.rcm_min_depth > 0.0:
+            raise ValueError(f"rcm_retract_depth must be >= 0, not {-self.rcm_min_depth}")
         self.rcm_exit_depth = p("rcm_exit_depth")
         self.rcm_gain = p("rcm_gain")
         self.rcm_max_error = p("rcm_max_error")
+
+        # Haptic cues; all forces in the stylus position axes (N)
+        self.force_pub = None
+        if p("haptics"):
+            if p("haptic_pulse_frequency") >= publish_rate / 2.0:
+                raise ValueError(f"haptic_pulse_frequency ({p('haptic_pulse_frequency')} Hz) must be "
+                                 f"below half publish_rate ({publish_rate} Hz)")
+            self.force_pub = self.create_publisher(OmniFeedback, p("force_topic"), 10)
+        self.haptic_max_force = p("haptic_max_force")
+        self.publish_period = 1.0 / publish_rate
+        self.haptic_max_step = p("haptic_slew_rate") * self.publish_period
+        self.wall_stiffness = p("haptic_wall_stiffness")
+        self.scene_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.scene_address = ("127.0.0.1", p("haptic_scene_port"))
+        self.scene_active = False
+        self.crossing_force = p("haptic_crossing_force")
+        self.crossing_hysteresis = p("haptic_crossing_hysteresis")
+        self.crossing_side = None                   # +1 / -1: tip target past / short of the RCM point
+        self.crossing_holdoff = p("haptic_crossing_holdoff")
+        self.last_crossing_click = -1e9
+        self.limit_force = p("haptic_limit_force")
+        self.limit_side = None                      # +1 past deepest / -1 past retract / 0 between
+        self.last_limit_click = -1e9
+        self.pulses = PulsePlayer(p("haptic_pulse_force"), p("haptic_pulse_frequency"))
+        self.singularity_push = p("haptic_singularity_force")
+        self.singularity_push_damping = p("haptic_singularity_damping")
+        self.singularity_push_filter = p("haptic_singularity_filter")
+        self.haptic_force = np.zeros(3)             # last force sent
+        self.singularity_force = np.zeros(3)        # low-passed singularity push
+        self.singularity_cue = None                 # (limiting, twist_gradient) this cycle
+        self.touch_velocity = np.zeros(3)           # m/s, stylus frame (driver's estimate)
 
         self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
         self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
@@ -435,6 +511,7 @@ class TouchTeleop(Node):
         self.tip_origin = None
         self.shaft_axis_origin = None
         self.rcm_active_pub.publish(Bool(data=False))
+        self.send_zero_force()      # clear a force left on by a node that died
 
         self.create_subscription(OmniState, p("state_topic"), self.on_state, 1)
         self.create_subscription(OmniButtonEvent, p("button_topic"), self.on_button, 10)
@@ -493,6 +570,13 @@ class TouchTeleop(Node):
             self.touch_orientation = (None if orientation is None
                                       else self.orientation_kalman.feed(orientation, quat, stamp))
         self.touch_stamp = self.get_clock().now()
+        # For the haptic damping. The driver's estimate is 20 Hz low-passed, and damping on
+        # it lags enough at ~25 Hz to push along the motion and shake the pen, so the
+        # Kalman filter's (no lag) is used when it is on
+        if self.position_kalman is not None and self.position_kalman.value is not None:
+            self.touch_velocity = self.position_kalman.velocity.copy()
+        else:
+            self.touch_velocity = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z]) * self.units
         if self.clutched:
             self.target = self.compute_target()
             self.publish_target(msg.header.stamp)
@@ -536,14 +620,17 @@ class TouchTeleop(Node):
             self.get_logger().info(
                 "RCM mode ON at tip ({:.4f}, {:.4f}, {:.4f}) m - the stylus now drives the tip, "
                 "max depth {:.0f} mm".format(*self.rcm_point, 1e3 * self.rcm_max_depth))
+            self.pulses.play("rcm_on", self.now())
         else:
             depth = self.rcm_tool.depth(*robot, self.rcm_point)
             if depth > self.rcm_exit_depth and not self.rcm_fault:
                 self.get_logger().warn(f"Retract the tool before leaving RCM mode (depth {1e3 * depth:.1f} mm, "
                                        f"needs <= {1e3 * self.rcm_exit_depth:.1f} mm)")
+                self.pulses.play("refused", self.now())
                 return
             self.rcm_point = None
             self.get_logger().info("RCM mode OFF - free motion")
+            self.pulses.play("rcm_off", self.now())
         self.rcm_active_pub.publish(Bool(data=self.rcm_point is not None))
         if self.clutched:
             self.engage()       # restart the stroke from here in the new mode
@@ -613,7 +700,7 @@ class TouchTeleop(Node):
             # The tip as if the shaft ran exactly through the RCM point, so a small drift
             # is corrected rather than becoming part of the target
             _, axis, _ = self.rcm_tool.shaft(*robot)
-            depth = np.clip(self.rcm_tool.depth(*robot, self.rcm_point), 0.0, self.rcm_max_depth)
+            depth = np.clip(self.rcm_tool.depth(*robot, self.rcm_point), self.rcm_min_depth, self.rcm_max_depth)
             self.shaft_axis_origin = axis
             self.tip_origin = self.rcm_point + depth * axis
         self.pen_twist = 0.0
@@ -675,7 +762,7 @@ class TouchTeleop(Node):
         target, rolled about itself by the pen twist (pen tilt is not used)."""
         tip_target = self.tip_origin + self.translation_scale * touch_delta
         axis, depth = self.rcm_tool.target_shaft(tip_target, self.rcm_point, self.shaft_axis_origin,
-                                                 self.rcm_min_pivot_depth, self.rcm_max_depth)
+                                                 self.rcm_max_depth, self.rcm_slope, self.rcm_min_depth)
         orientation = RcmTool.align(self.shaft_axis_origin, axis) * self.robot_origin[1]
         if self.enable_twist:
             roll = PEN_AXIS_TO_TOOL_Z_SIGN * self.twist_scale * self.pen_twist
@@ -683,6 +770,12 @@ class TouchTeleop(Node):
         return self.rcm_tool.tool0_position(self.rcm_point + depth * axis, orientation), orientation
 
     def update(self):
+        self.singularity_cue = None     # set again by guard_singularity if it runs this cycle
+        self.update_motion()
+        if self.force_pub is not None:
+            self.update_haptics()
+
+    def update_motion(self):
         if not self.clutched and self.rcm_point is None:
             return
         robot = self.lookup_robot_pose()
@@ -799,6 +892,8 @@ class TouchTeleop(Node):
         command = np.concatenate([linear, angular])
         twist = guard(command, positions)
         self.condition_pub.publish(Float64(data=float(guard.condition)))
+        if guard.twist_gradient is not None:
+            self.singularity_cue = (guard.limiting, guard.twist_gradient)
         if self.rcm_point is not None and twist is not command:
             # The guard reshapes the twist (and adds a back-off) in joint space, which would
             # move the shaft off the RCM point. Keep only how much of the command it lets
@@ -833,6 +928,159 @@ class TouchTeleop(Node):
         self.singularity_state = state
         # Servo's own speed caps still apply, so keep within them
         return clamp_norm(twist[:3], self.max_linear), clamp_norm(twist[3:], self.max_angular)
+
+    def update_haptics(self):
+        """Add up this cycle's haptic cues and send them (capped and slew-limited)."""
+        force = np.zeros(3)
+        engaged = self.clutched and self.touch_is_fresh()
+        self.send_scene(engaged and self.rcm_point is not None)
+        self.check_crossing(engaged and self.rcm_point is not None)
+        self.check_limits(engaged and self.rcm_point is not None)
+        if engaged:
+            push = self.singularity_haptic_force() if self.singularity_cue is not None else np.zeros(3)
+            alpha = self.publish_period / (self.publish_period + self.singularity_push_filter)
+            self.singularity_force += alpha * (push - self.singularity_force)
+        else:
+            self.singularity_force = np.zeros(3)
+        force += self.singularity_force
+        force += self.pulses(self.now())
+        self.send_force(force)
+
+    def rcm_slope(self, axial):
+        return self.rcm_tool.pivot_slope(axial, self.rcm_tool0_gain, self.rcm_tool0_gain_depth,
+                                         self.rcm_pivot_fade_depth, self.rcm_pivot_fade_strength)
+
+    # touch_server's TouchScenePacket (include/ls_thesis/touch_packets.hpp)
+    SCENE_FORMAT = "<II3d3d7d"
+    SCENE_MAGIC = 0x54534331
+
+    def send_scene(self, active):
+        """RCM mode: walls at the deepest insertion and at the retract limit, along the
+        stylus direction that drives the depth, for touch_server to render from the pen's
+        position every servo tick (computed here, over ROS, they arrived tens of ms late
+        and shook the pen). touch_server can also render a detent there, but an attracting
+        spring shakes a hand-held pen, so a click (check_crossing) is used instead. Placed on the stylus target's depth,
+        unclipped, so pushing past a limit (where the target stops) presses into the wall.
+        The depth limit is on the axial part of the target (the shaft's tilt is left
+        out: the wall comes a little after the target stops when pivoted)."""
+        if not active:
+            if self.scene_active:
+                self.send_scene_packet(enabled=False)
+            return
+        mm = 1.0 / self.units                                       # stylus metres -> mm
+        scale = self.translation_scale
+        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
+        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
+        # The target's depth is axial0 + scale * u for u stylus metres along axis
+        self.send_scene_packet(
+            axis=axis, origin=self.touch_origin[0] * mm,
+            u_zero=-axial0 / scale * mm,
+            u_min=(self.rcm_min_depth - axial0) / scale * mm,
+            u_max=(self.rcm_max_depth - axial0) / scale * mm,
+            stiffness=self.wall_stiffness / mm, detent_force=0.0, detent_width=1.0,
+            max_force=self.haptic_max_force)
+
+    def check_crossing(self, active):
+        """Click (one tap against the direction of travel) when the tip target crosses the
+        RCM point, with hysteresis so hovering at the point does not click repeatedly."""
+        if not active:
+            self.crossing_side = None
+            return
+        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
+        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
+        # Target depth in stylus metres (the target's depth is axial0 + scale * this travel)
+        depth = axial0 / self.translation_scale + float((self.touch_position - self.touch_origin[0]) @ axis)
+        side = 1 if depth > self.crossing_hysteresis else -1 if depth < -self.crossing_hysteresis else None
+        if side is None:
+            return
+        now = self.now()
+        if (self.crossing_side is not None and side != self.crossing_side
+                and now - self.last_crossing_click >= self.crossing_holdoff):
+            self.pulses.play("crossing", now, direction=-side * axis, amplitude=self.crossing_force)
+            self.last_crossing_click = now
+        self.crossing_side = side
+
+    def check_limits(self, active):
+        """Click (one tap back out of the limit) when the tip target reaches the deepest
+        insertion or the retract limit. Replaces the walls, which buzzed at their edge on
+        the real Touch. Same hysteresis and hold-off as the crossing click."""
+        if not active or self.limit_force <= 0.0:
+            self.limit_side = None
+            return
+        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
+        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
+        # Target depth past each limit, in stylus metres (as check_crossing)
+        depth = axial0 / self.translation_scale + float((self.touch_position - self.touch_origin[0]) @ axis)
+        deep = depth - self.rcm_max_depth / self.translation_scale
+        shallow = self.rcm_min_depth / self.translation_scale - depth
+        h = self.crossing_hysteresis
+        if deep > 0.0 or shallow > 0.0:
+            side = 1 if deep > 0.0 else -1
+        elif deep < -h and shallow < -h:
+            side = 0
+        else:
+            return                                                  # within the hysteresis band
+        now = self.now()
+        if (self.limit_side == 0 and side != 0
+                and now - self.last_limit_click >= self.crossing_holdoff):
+            self.pulses.play("limit", now, direction=-side * axis, amplitude=self.limit_force)
+            self.last_limit_click = now
+        self.limit_side = side
+
+    def send_scene_packet(self, enabled=True, axis=(1.0, 0.0, 0.0), origin=(0.0, 0.0, 0.0), u_zero=0.0,
+                          u_min=0.0, u_max=0.0, stiffness=0.0, detent_force=0.0, detent_width=0.0, max_force=0.0):
+        packet = struct.pack(self.SCENE_FORMAT, self.SCENE_MAGIC, int(enabled), *axis, *origin,
+                             u_zero, u_min, u_max, stiffness, detent_force, detent_width, max_force)
+        try:
+            self.scene_socket.sendto(packet, self.scene_address)
+        except OSError:
+            pass
+        self.scene_active = enabled
+
+    def singularity_haptic_force(self):
+        """Push the stylus the way that takes the arm out of the singularity."""
+        limiting, twist_gradient = self.singularity_cue
+        relieve = self.stylus_twist_jacobian().T @ twist_gradient
+        return singularity_force(relieve, limiting, self.touch_velocity,
+                                 self.singularity_push, self.singularity_push_damping)
+
+    # Stylus step (m) for the numerical RCM-mode stylus Jacobian
+    STYLUS_STEP = 1e-4
+
+    def stylus_twist_jacobian(self):
+        """6 x 3: tool0 target twist (linear, angular; base frame) per metre of stylus
+        motion along each stylus axis. In free mode the pen's position only moves the
+        tool; in RCM mode it pivots it too (numerically, through rcm_target)."""
+        if self.rcm_point is None:
+            return np.vstack([self.translation_scale * self.axis_matrix, np.zeros((3, 3))])
+        touch_delta = self.axis_matrix @ (self.touch_position - self.touch_origin[0])
+        position, orientation = self.rcm_target(touch_delta)
+        columns = []
+        for column in self.axis_matrix.T:   # robot-frame image of each stylus axis
+            moved_position, moved_orientation = self.rcm_target(touch_delta + self.STYLUS_STEP * column)
+            columns.append(np.concatenate([moved_position - position,
+                                           (moved_orientation * orientation.inv()).as_rotvec()]))
+        return np.column_stack(columns) / self.STYLUS_STEP
+
+    def send_force(self, force):
+        force = limit_force(force, self.haptic_force, self.haptic_max_force, self.haptic_max_step)
+        if force.any() or self.haptic_force.any():  # nothing to send while it stays 0
+            self.haptic_force = force
+            self.publish_force(force)
+
+    def send_zero_force(self):
+        if self.force_pub is not None:
+            self.send_scene_packet(enabled=False)
+            self.haptic_force = np.zeros(3)
+            self.publish_force(self.haptic_force)
+
+    def publish_force(self, force):
+        msg = OmniFeedback()
+        msg.force.x, msg.force.y, msg.force.z = (float(v) for v in force)
+        self.force_pub.publish(msg)
+
+    def now(self):
+        return self.get_clock().now().nanoseconds * 1e-9
 
     def delayed_target(self):
         """The stylus target as it was loop_delay ago (the oldest one kept, early in a stroke)."""
@@ -885,13 +1133,18 @@ class TouchTeleop(Node):
 
 
 def main():
-    rclpy.init()
+    # Ctrl-C / SIGTERM handled here, not by rclpy (which would shut the context down
+    # first), so the zero force can still be sent: the driver keeps the last one
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     node = TouchTeleop()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        node.send_zero_force()
+        time.sleep(0.05)        # let it go out before the publisher is destroyed
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

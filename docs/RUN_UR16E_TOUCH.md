@@ -115,10 +115,11 @@ Terminal 1 should say **`Robot connected to reverse interface. Ready to receive 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch omni_common omni_state.launch.py
+ros2 launch ls_thesis touch_driver.launch.py
 ```
 
-You should see `Found Touch.` and `Publishing omni state on: phantom/state`.
+You should see `Found Touch.`, `touch_server running` and `Receiving Touch state from touch_server`.
+Use this, not omni_common's `omni_state`: with `omni_state` the pen tracks fine but the haptic forces never reach the motors.
 
 ### B7. Terminal 3 — start the Touch control
 
@@ -139,9 +140,13 @@ Wait for **`Touch teleop ready`**.
 5. **RCM mode** (pivot about a port): put the tool tip at the port, then **hold WHITE and click GREY**. The tip is now the fixed pivot point:
    - Moving the stylus moves the tool tip. The arm pivots the shaft about the point, and pushing down inserts the tool.
    - Twisting the pen rolls the tool. Tilting the pen does nothing.
-   - The first ~10 mm of insertion is straight in.
-   - To leave, pull the tool back out to the port, then **hold WHITE and click GREY** again. It refuses while the tool is inserted.
+   - Sideways pen motion moves the arm's flange by the same amount at every depth down to 130 mm (`TOUCH_RCM_TOOL0_GAIN`, 0.5 = half the scaled pen motion). The tip moves less than the pen, more so when shallow, and going in or out never swings the arm sideways. Pushing in and out is 1:1 with the pen (times the motion scale).
+   - To leave, pull the tool back out to the port, then **hold WHITE and click GREY** again. It refuses while the tool is inserted. You can pull the tip up to 5 mm back out past the point first (`TOUCH_RCM_RETRACT_DEPTH`), so the tool is fully out when you leave.
    - The tool's size is set in `teleop_settings.py` (`TOUCH_RCM_*`). Measure it before using RCM mode, and leave the pendant TCP at zero.
+6. **What you feel** (while WHITE is held; `TOUCH_HAPTIC_*` in `teleop_settings.py`, `TOUCH_HAPTICS = False` turns it all off):
+   - A small tap on the pen when RCM mode turns on or off, and two taps if it refuses to turn off because the tool is still in.
+   - In RCM mode, a soft wall at the deepest insertion and at the 5 mm retract limit, and a small click (one tap against your motion) as the tip crosses the RCM point.
+   - Near a singularity, a push on the pen in the direction that takes the arm out of it. It grows as you go further in (full at the guard's stop). The pen can only be pushed, not twisted, so if you got there by tilting the pen, the push is sideways.
 
 The directions assume you stand **in front of the robot**. Pushing the pen away from you moves the robot away from you.
 
@@ -214,7 +219,7 @@ ros2 launch ls_thesis ur5e_teleop.launch.py [options]
 
 | Option | Default | What it does |
 |---|---|---|
-| `ur_type:=` | `ur5e` | Robot model. **Use `ur16e`.** Also: `ur3`, `ur3e`, `ur5`, `ur5e`, `ur10`, `ur10e`, `ur20`, `ur30` |
+| `ur_type:=` | `ur16e` | Robot model (the lab arm). Also: `ur3`, `ur3e`, `ur5`, `ur5e`, `ur10`, `ur10e`, `ur20`, `ur30` |
 | `robot_ip:=` | `192.168.0.100` | The robot's IP address |
 | `use_mock_hardware:=` | `false` | `true` = simulated robot, no real robot needed |
 | `input:=` | `keyboard` | `touch` = also start the Touch driver + Touch control (default speeds). `keyboard` or `none` = start neither |
@@ -227,10 +232,10 @@ Show all options: `ros2 launch ls_thesis ur5e_teleop.launch.py --show-args`
 ### Touch driver
 
 ```bash
-ros2 launch omni_common omni_state.launch.py
+ros2 launch ls_thesis touch_driver.launch.py
 ```
 
-No options. It publishes the stylus on `/phantom/state` and the buttons on `/phantom/button`.
+No options. It publishes the stylus on `/phantom/state` and the buttons on `/phantom/button`, and renders `/phantom/force_feedback`. Two processes: `touch_server` owns the device (OpenHaptics only, no ROS) and `touch_bridge` publishes the topics. OpenHaptics renders no force in a process that has ROS 2's libraries loaded, so omni_common's `omni_state` (one process) never produced any. A force not refreshed for 0.25 s drops to zero.
 
 ### Touch control
 

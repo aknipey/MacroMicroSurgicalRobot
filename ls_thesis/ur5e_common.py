@@ -73,6 +73,14 @@ JOINT_CONTROLLERS = [
 
 RECORDER_START_SERVICE = "/trajectory_recorder/start"
 RECORDER_STOP_SERVICE = "/trajectory_recorder/stop"
+RECORDER_STATE_TOPIC = "/trajectory_recorder/recording"
+NDI_TRACKER_NODE = "ndi_tracking"   # src/ndi_tracking's node, follows RECORDER_STATE_TOPIC
+
+
+def ndi_tracker_listening(node):
+    """True if the NDI tracker is subscribed to the recorder's state, i.e. it will record."""
+    return any(info.node_name == NDI_TRACKER_NODE
+               for info in node.get_subscriptions_info_by_topic(RECORDER_STATE_TOPIC))
 
 
 def call_service(node, srv_type, name, request, timeout=5.0):
@@ -312,6 +320,9 @@ class SingularityGuard:
         self.condition = 1.0
         self.limiting = 0.0     # 0 = untouched, 1 = all motion into the singularity removed
         self.escaping = False
+        # Twist (6) direction that leads out of the singularity: dm/dt = twist_gradient . twist
+        # through the same damped inverse as the joint velocities. None below `slow`.
+        self.twist_gradient = None
 
     @staticmethod
     def measure(singular_values):
@@ -324,7 +335,7 @@ class SingularityGuard:
         jacobian = self.jacobian_fn(positions)
         u, s, vt = np.linalg.svd(jacobian)
         self.condition = s[0] / s[-1] if s[-1] > 0.0 else np.inf
-        self.limiting, self.escaping = 0.0, False
+        self.limiting, self.escaping, self.twist_gradient = 0.0, False, None
         if self.condition < self.slow:
             return twist
 
@@ -355,6 +366,8 @@ class SingularityGuard:
                 - base for step in np.eye(len(positions))]) / self.PROBE_STEP
             norm_sq = gradient @ gradient
         if norm_sq > 1e-12:
+            # (J_dls^+)^T g: q' = J_dls^+ v, so dm/dt = g . q' = this . v
+            self.twist_gradient = u @ ((s / (s ** 2 + damping_sq)) * (vt @ gradient))
             self.limiting = min(1.0, (self.condition - self.slow) / (self.stop - self.slow))
             towards = gradient @ joint_velocity
             if towards < 0.0:
@@ -433,26 +446,63 @@ class RcmTool:
         return tip - rotation.apply(self.tip_offset)
 
     @staticmethod
-    def target_shaft(tip_target, rcm, axis_origin, min_pivot_depth, max_depth):
+    def pivot_fade(axial, fade_depth, strength=1.0):
+        """Share (0-1) of the sideways tip target kept at `axial` depth: smootherstep
+        10t^3 - 15t^4 + 6t^5 of t = axial / fade_depth, raised to `strength` (>= 1;
+        higher holds sideways motion back harder, deeper into the fade). Flat at both
+        ends, so the pivot and its rate pick up without a jump in acceleration at 0
+        or fade_depth, and the pivot per unit sideways (fade / axial) peaks at
+        ~1.2 / fade_depth (strength 1) instead of growing as 1 / axial.
+        fade_depth <= 0 = no fade (1 everywhere past the point)."""
+        if axial >= fade_depth:
+            return 1.0
+        if axial <= 0.0:
+            return 0.0
+        t = axial / fade_depth
+        return (t ** 3 * (10.0 + t * (6.0 * t - 15.0))) ** strength
+
+    def lever(self, depth):
+        """Distance (m) from tool0 to the RCM point with the tip `depth` past it: how far
+        tool0 swings per radian of pivot (the tip swings `depth`)."""
+        return float(np.linalg.norm(self.tip_offset - depth * self.direction))
+
+    def pivot_slope(self, axial, tool0_gain, gain_depth, fade_depth, fade_strength=1.0):
+        """Pivot per unit of sideways tip target at `axial` depth: tan(pivot angle) /
+        sideways offset (1/m). The tip's share of the sideways target is this * axial.
+
+        With tool0_gain set: tool0_gain / lever(axial), so a sideways stylus move swings
+        tool0 (not the tip) by tool0_gain times as much at every depth. This stays
+        finite at and behind the RCM point (axial <= 0 uses its depth-0 value), so the
+        pivot is continuous as the target depth crosses 0. Past gain_depth the tip
+        keeps the share it had at gain_depth (plain mapping, scaled), as the lever gets
+        short and the pivot per mm would keep growing. Times pivot_fade (fade_depth 0 =
+        no fade). tool0_gain <= 0 = off: the tip follows the stylus 1:1 past
+        fade_depth, and with no fade the pivot is dropped at and behind the point.
+        """
+        axial = max(axial, 0.0)
+        fade = self.pivot_fade(axial, fade_depth, fade_strength) if fade_depth > 0.0 else 1.0
+        if tool0_gain <= 0.0:
+            return fade / axial if axial > 0.0 else 0.0
+        if axial > gain_depth:
+            return fade * tool0_gain * gain_depth / self.lever(gain_depth) / axial
+        return fade * tool0_gain / self.lever(axial)
+
+    def target_shaft(self, tip_target, rcm, axis_origin, max_depth, pivot_slope, min_depth=0.0):
         """(unit axis, depth) for a wanted tip position, the shaft through the RCM point.
 
-        The axis points from the RCM point towards the tip target, and the depth is
-        their distance, except near the RCM point: there the sideways part (across
-        axis_origin, the axis at engage) is faded out by (axial / min_pivot_depth)^2,
-        so the pivot angle starts from 0 at depth 0 and grows smoothly into the plain
-        direction-to-target at min_pivot_depth. A target behind the RCM point gives
-        depth 0 along axis_origin; the depth is capped at max_depth.
+        The axis is tilted from axis_origin (the axis at engage) towards the sideways
+        part of the tip target by tan(angle) = pivot_slope(axial depth) * sideways, and
+        the depth is set so the tip is at the target's axial depth, kept between
+        min_depth (<= 0: the tip that far back out past the RCM point) and max_depth.
+        The stylus target itself is kept, so going deeper or shallower moves the tip
+        along with the slope.
         """
         offset = tip_target - rcm
         axial = float(offset @ axis_origin)
-        if axial <= 0.0:
-            return axis_origin, 0.0
         sideways = offset - axial * axis_origin
-        if axial < min_pivot_depth:
-            sideways = sideways * (axial / min_pivot_depth) ** 2
-        offset = axial * axis_origin + sideways
-        depth = np.linalg.norm(offset)
-        return offset / depth, min(depth, max_depth)
+        direction = axis_origin + pivot_slope(axial) * sideways
+        norm = np.linalg.norm(direction)
+        return direction / norm, min(max(axial, min_depth) * norm, max_depth)
 
     def pivot(self, position, rotation, rcm):
         """(point of the shaft line nearest the RCM point, unit shaft axis), base frame."""

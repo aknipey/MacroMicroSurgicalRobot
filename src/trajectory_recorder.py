@@ -7,8 +7,14 @@ Services (std_srvs/Trigger):
 
 The keyboard teleop ('[' / ']') and Touch teleop (grey button) call these for you.
 The tool path being recorded is published as nav_msgs/Path on
-/trajectory_recorder/path for RViz. Saved files can be replayed with
-trajectory_player.py.
+/trajectory_recorder/path for RViz. Recording state is published latched on
+/trajectory_recorder/recording (std_msgs/String, JSON: {"recording": bool,
+"run_dir": path or null, "start_unix": s}) so other recorders (e.g. the NDI tracker,
+src/ndi_tracking) can write into the same run folder on the same time base.
+With LOG_REQUIRE_NDI a recording is refused unless the NDI tracker follows this topic;
+a tracker that drops out mid-run, or a run without NDI_PATH.csv, is logged as an error
+and noted in META.yaml (`ndi`).
+Saved files can be replayed with trajectory_player.py.
 
 While recording, full-rate path logs are also written to <log_dir>/NEW_RUN/
 (see LOG_DIR in teleop_settings.py). Every sample is stamped on arrival with
@@ -34,6 +40,7 @@ Plot with scripts/plot_paths.py.
 """
 
 import csv
+import json
 import os
 import shutil
 import signal
@@ -53,11 +60,13 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 from scipy.spatial.transform import Rotation
 from rclpy.time import Time
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from ls_thesis import teleop_settings as cfg
 from ls_thesis.run_logger import CsvStream
+from ls_thesis.ur5e_common import ndi_tracker_listening
 
 UR_JOINTS = [
     "shoulder_pan_joint",
@@ -135,6 +144,7 @@ class TrajectoryRecorder(Node):
 
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_pub = self.create_publisher(Path, "~/path", latched)
+        self.recording_pub = self.create_publisher(String, "~/recording", latched)
 
         # Path logs (open only while recording)
         self.logs = None
@@ -167,8 +177,11 @@ class TrajectoryRecorder(Node):
         self.start_time = None
         self.path = Path()
         self.path.header.frame_id = self.base_frame
+        self.publish_recording(False)
 
         self.create_timer(1.0 / self.get_parameter("sample_rate").value, self.sample)
+        self.ndi = None     # NDI tracker status for the current recording (META.yaml)
+        self.create_timer(1.0, self.check_ndi)
         self.get_logger().info(f"Recorder ready: runs go to {short_path(os.path.join(self.log_dir, RUN_FOLDER))}")
 
     def on_joint_states(self, msg):
@@ -181,6 +194,15 @@ class TrajectoryRecorder(Node):
             response.success = False
             response.message = "Already recording"
             return response
+        ndi_ok = ndi_tracker_listening(self)
+        if not ndi_ok and cfg.LOG_REQUIRE_NDI:
+            response.success = False
+            response.message = ("NOT RECORDING: the NDI tracker is not running. Start "
+                                "`python3 -m ndi_tracking run` (same ROS_DOMAIN_ID), or set "
+                                "LOG_REQUIRE_NDI = False to record without it")
+            self.get_logger().error(response.message)
+            return response
+        self.ndi = {"tracker_at_start": ndi_ok, "lost_at": None, "files": None}
         self.samples = []
         self.path.poses = []
         self.start_time = self.get_clock().now()
@@ -190,9 +212,21 @@ class TrajectoryRecorder(Node):
             self.get_logger().error(f"Could not open path logs in {self.log_dir}: {exc}")
             self.logs = None
         self.recording = True
+        self.publish_recording(True)
         response.success = True
         response.message = "Recording..." if self.logs else "Recording trajectory only (path logs failed)..."
+        if not ndi_ok:
+            response.message += " - WARNING: NDI tracker not running, this run has NO NDI data"
+            self.get_logger().error("NDI tracker not running: this run has NO NDI data")
         return response
+
+    def check_ndi(self):
+        """Shout as soon as the NDI tracker drops out of a recording it started with."""
+        if self.recording and self.ndi["tracker_at_start"] and self.ndi["lost_at"] is None \
+                and not ndi_tracker_listening(self):
+            self.ndi["lost_at"] = round(self.host_time(), 1)
+            self.get_logger().error(f"NDI tracker STOPPED {self.ndi['lost_at']} s into the recording: "
+                                    "NDI data is missing from here on")
 
     def on_stop(self, _request, response):
         if not self.recording:
@@ -210,6 +244,18 @@ class TrajectoryRecorder(Node):
                 problems.append(f"trajectory not saved: {exc}")
         saved = f"Saved {self.host_time():.1f} s"
         if self.logs:
+            # The tracker opens NDI_PATH.csv when it starts recording into run_dir
+            self.ndi["files"] = os.path.exists(os.path.join(self.run_dir, "NDI_PATH.csv"))
+            ndi_problem = ("NO NDI DATA in this run (no NDI_PATH.csv)" if not self.ndi["files"] else
+                           f"NDI tracker stopped {self.ndi['lost_at']} s in: NDI data incomplete"
+                           if self.ndi["lost_at"] is not None else None)
+            if ndi_problem:
+                self.get_logger().error(ndi_problem)
+                problems.append(ndi_problem)
+        # Before close_logs (bag shutdown takes a moment, LOG_KEEP_ALL_RUNS copies the
+        # folder): gives other recorders time to finish their files in run_dir
+        self.publish_recording(False)
+        if self.logs:
             try:
                 saved += " to " + self.close_logs(trajectory_path)
             except OSError as exc:
@@ -219,6 +265,13 @@ class TrajectoryRecorder(Node):
         response.success = trajectory_path is not None
         response.message = saved + "".join(f" - WARNING: {p}" for p in problems)
         return response
+
+    def publish_recording(self, recording):
+        self.recording_pub.publish(String(data=json.dumps({
+            "recording": recording,
+            "run_dir": self.run_dir if self.logs else None,
+            "start_unix": self.start_time.nanoseconds * 1e-9 if self.start_time else None,
+        })))
 
     # ------------------------------------------------------------ path logs
     def host_time(self):
@@ -286,6 +339,7 @@ class TrajectoryRecorder(Node):
                 "rows": rows,
                 "rosbag": bag_status,
                 "tcp_offset": self.tcp_offset_summary(),
+                "ndi": self.ndi,
                 "trajectory_source": trajectory_path,
                 "notes": {
                     "t": "host receive time, s since recording start (same clock for every file)",
@@ -295,6 +349,9 @@ class TrajectoryRecorder(Node):
                     "UR_PATH": "source rtde = tcp_pose_broadcaster (pendant TCP, tool0_controller) "
                                "moved back to ee_frame by tcp_offset, tf = TF ee_frame fallback, "
                                "rtde_tcp = pendant TCP (offset not measured); all in base_frame",
+                    "ndi": "tracker_at_start = NDI tracker following the recording when it started, "
+                           "lost_at = s when it stopped following (null = never), "
+                           "files = NDI_PATH.csv in this folder at stop",
                     "tcp_offset": "ee_frame -> pendant TCP, measured against TF at recording start; "
                                   "check_max_mm = largest drift from it in later checks during the "
                                   "run (should be ~0: more means TF uses the wrong arm kinematics)",

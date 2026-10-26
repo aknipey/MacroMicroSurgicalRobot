@@ -158,6 +158,22 @@ def best_lag(error_at):
     return lags[i], rms[i], rms[0]
 
 
+def scroll_zoom_3d(fig, step=1.2):
+    """Mouse wheel zooms every 3D axes in fig about its centre (all axes equally)."""
+    def on_scroll(event):
+        ax = event.inaxes
+        if ax is None or ax.name != "3d":
+            return
+        scale = 1 / step if event.button == "up" else step
+        for get, set_ in ((ax.get_xlim3d, ax.set_xlim3d), (ax.get_ylim3d, ax.set_ylim3d),
+                          (ax.get_zlim3d, ax.set_zlim3d)):
+            lo, hi = get()
+            mid, half = (lo + hi) / 2, (hi - lo) / 2 * scale
+            set_(mid - half, mid + half)
+        fig.canvas.draw_idle()
+    fig._scroll_zoom_cid = fig.canvas.mpl_connect("scroll_event", on_scroll)
+
+
 def set_equal_3d(ax, xyz):
     centre = np.nanmean([np.nanmin(xyz, axis=0), np.nanmax(xyz, axis=0)], axis=0)
     half = np.nanmax(np.nanmax(xyz, axis=0) - np.nanmin(xyz, axis=0)) / 2 or 1.0
@@ -182,6 +198,7 @@ def plot_translation(name, ur_t, ur_xyz, touch, metrics):
     ur_xyz = ur_xyz * 1000.0       # mm
     fig3d = plt.figure(f"{name} - paths", figsize=(8, 7))
     ax = fig3d.add_subplot(projection="3d")
+    scroll_zoom_3d(fig3d)
     ax.plot(*ur_xyz.T, color=UR_COLOR, linewidth=2, label="UR actual (tool0)")
     all_xyz = ur_xyz
     if touch is not None:

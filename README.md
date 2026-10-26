@@ -111,7 +111,7 @@ ros2 launch ls_thesis display.launch.py
 
 1. Add permissions for the touch USB device: `sudo chmod 777 /dev/ttyACM0`
 2. Start the Touch driver (command depends on your ROS 2 Touch driver package, e.g.):
-   `ros2 launch omni_common omni_state.launch.py`
+   `ros2 launch ls_thesis touch_driver.launch.py` (not omni_common's `omni_state`: its forces never reach the motors)
 
 ### UR5e
 

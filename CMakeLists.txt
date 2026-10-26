@@ -92,10 +92,27 @@ ament_target_dependencies(android_pose_subscriber
 #############
 
 ## C++ executables
+## Touch driver, split in two: OpenHaptics renders no force in a process that has ROS 2's
+## libraries (lttng-ust / libnuma) loaded, so touch_server (device, OpenHaptics only -
+## never link ROS into it) and touch_bridge (ROS only) talk over UDP on localhost
+find_path(OPENHAPTICS_INCLUDE_DIR NAMES HD/hd.h)
+if(OPENHAPTICS_INCLUDE_DIR)
+  add_executable(touch_server src/touch_server.cpp)
+  target_include_directories(touch_server PRIVATE ${OPENHAPTICS_INCLUDE_DIR})
+  target_link_libraries(touch_server HD HDU rt pthread)
+  install(TARGETS touch_server DESTINATION lib/${PROJECT_NAME})
+else()
+  message(WARNING "OpenHaptics not found - touch_server is not built")
+endif()
+
+add_executable(touch_bridge src/touch_bridge.cpp)
+ament_target_dependencies(touch_bridge rclcpp geometry_msgs sensor_msgs omni_msgs)
+
 install(TARGETS
   ur5e_control
   micro_module_control
   android_pose_subscriber
+  touch_bridge
   DESTINATION lib/${PROJECT_NAME}
 )
 

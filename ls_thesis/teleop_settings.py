@@ -130,17 +130,42 @@ TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 # SHAFT_START (the end at the holder), runs along SHAFT_DIRECTION (normalised) and
 # ends at the tip SHAFT_LENGTH further on. Only points on that segment can be the RCM.
 # Measure your tool.
-TOUCH_RCM_SHAFT_START = [0.0, 0.0, 0.05]     # m
-TOUCH_RCM_SHAFT_DIRECTION = [0.0, 0.0, 1.0]
-TOUCH_RCM_SHAFT_LENGTH = 0.262               # m
+# Tool = NDI wand 8700340, calibrated 2026-10-26 (wand re-seated in the holder):
+# tool0 -> wand hand-eye fit (wrist joints jogged, no divot) + the wand's own markers ->
+# tip calibration (2026-10-20). Tip at (-0.41, 9.84, 366.87) mm in tool0, shaft 1.05 deg
+# off tool0 z, tip checked against the camera to 0.82 mm rms. LENGTH = tip back to the
+# wand's first marker along the shaft.
+# src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json. 2026-10-22 (old seat):
+# [-0.0006, 0.00662, 0.20624] / [-0.00607, 0.01481, 0.99987], tip 2.5 mm from today's.
+TOUCH_RCM_SHAFT_START = [0.00008, 0.00699, 0.20827]     # m
+TOUCH_RCM_SHAFT_DIRECTION = [-0.00309, 0.01798, 0.99983]
+TOUCH_RCM_SHAFT_LENGTH = 0.1586               # m
 # Closest the shaft start (holder / collar) may come to the RCM point (m), so the
 # deepest insertion is SHAFT_LENGTH - this.
 TOUCH_RCM_DEPTH_MARGIN = 0.02
-# Below this insertion depth (m) the stylus's sideways motion is faded out (fully
-# off at depth 0), so the tool goes in and out straight: with the tip at the RCM a
-# small sideways move would need a huge pivot.
-TOUCH_RCM_MIN_PIVOT_DEPTH = 0.01
-# RCM mode can only be left with the tip within this depth (m) of the RCM point.
+# Sideways stylus motion moves tool0 (not the tip) by this many times the (scaled)
+# stylus motion, the same at every depth: the tip gets gain * depth / lever, lever =
+# tool0 -> RCM point. The tip's share goes to 0 at the RCM point by itself, so the
+# pivot per mm stays finite (gain / lever) right down to depth 0, and going in or out
+# with the stylus held to one side does not swing tool0 sideways.
+# 0 = off (the tip follows the stylus 1:1, the arm's swing grows as 1 / depth).
+TOUCH_RCM_TOOL0_GAIN = 1.0
+# Deepest insertion (m) the constant-tool0 law holds to. Deeper, the tip keeps the
+# share it had here: the lever gets short, so the pivot per mm would keep growing.
+TOUCH_RCM_TOOL0_GAIN_DEPTH = 0.13
+# Optional extra fade (m) of the sideways motion near the RCM point (smootherstep,
+# 0 at depth 0, full at this depth), raised to TOUCH_RCM_PIVOT_FADE_STRENGTH (>= 1).
+# 0 = off. With the tool0 gain on, keep it off: sideways stylus motion held back by
+# the fade comes back as the tool goes deeper, so moving in and out across the fade
+# swung tool0 sideways at ~4x the stylus speed (V7 real arm run).
+TOUCH_RCM_PIVOT_FADE_DEPTH = 0.0
+TOUCH_RCM_PIVOT_FADE_STRENGTH = 1.0
+# How far (m) the tip may be pulled back out past the RCM point, so the tool can come
+# fully out of the port before leaving RCM mode. The shaft line still runs through
+# the point out there.
+TOUCH_RCM_RETRACT_DEPTH = 0.005
+# RCM mode can only be left with the tip within this depth (m) of the RCM point
+# (anywhere outside it, up to TOUCH_RCM_RETRACT_DEPTH out, also counts).
 TOUCH_RCM_EXIT_DEPTH = 0.003
 # How hard the shaft is pulled back onto the RCM point when it drifts off (1/s),
 # capped at TOUCH_MAX_CORRECTION_SPEED like the position correction.
@@ -148,6 +173,62 @@ TOUCH_RCM_GAIN = 8.0
 # If the shaft is ever this far (m) from the RCM point, the robot holds still and
 # RCM mode may be left at any depth.
 TOUCH_RCM_MAX_ERROR = 0.005
+
+# Haptic cues (force feedback on the stylus, ls_thesis/haptics.py), all while WHITE is
+# held: a soft wall at the deepest RCM insertion and at the retract limit, a click as
+# the tip target crosses the RCM point, a small tap when RCM mode turns on or off (two
+# when it refuses to turn off), and a push out of a singularity.
+# Distances are in *stylus* metres, so the cues feel the same at every motion scale.
+# Each cue's force / stiffness = 0 turns just that one off. False = no forces at all.
+TOUCH_HAPTICS = True
+# Hard cap on the total force (N). The Touch gives 3.3 N peak, 0.88 N continuous.
+# Strengths are set from bare-OpenHaptics tests on SN 22129000559 (2026-10-19, VERSIONS.md
+# V7 part 2): nothing is felt below ~0.0008 N, 0.001 N is soft but felt, 0.01 N is about as
+# much as is comfortable (0.1 N felt huge). Its force output does not follow the command
+# well (the same kick for 0.001-0.01 N steps), so cues stay just past the threshold.
+TOUCH_HAPTIC_MAX_FORCE = 0.01
+# Fastest the force may change (N/s): rounds off every step (release, entering a wall),
+# as a jump in force can trip the Touch's max-force-impulse check.
+TOUCH_HAPTIC_SLEW_RATE = 2.0           # 0.01 N in 5 ms
+# RCM depth walls: N per m of stylus past the limit, one sided (like TouchCheckup's Box,
+# which feels smooth: free inside, pushed back only when pressing into a wall). They are
+# rendered by touch_server in the Touch's own 1 kHz loop (needs ls_thesis
+# touch_driver.launch.py): computed here and sent over ROS they arrived tens of ms late
+# and shook the pen violently (2026-10-19). Only the total force cap above applies.
+# 0 = off. On SN 22129000559 any spring wall buzzed at its edge: its force passes the
+# ~0.0008 N threshold where the Touch's fixed kick switches on (logs NEW_RUN 17:28, ~2 mm
+# shake at 0.0005-0.0015 N). The limits are marked by a click instead (below).
+TOUCH_HAPTIC_WALL_STIFFNESS = 0.0       # N/m (2.0 put the 0.01 N cap 5 mm into the wall)
+# Click when the tip target crosses the RCM point: one 40 ms tap (N) against the direction
+# of travel. It replaces a detent spring, which pulled the pen towards the point like
+# HelloHapticDevice's gravity well and, held in the hand, shook it (2026-10-19). Taps are
+# open loop and cannot. The side changes only once the target is this far (m of stylus)
+# past the point, so hovering at the point does not click over and over.
+TOUCH_HAPTIC_CROSSING_FORCE = 0.002
+TOUCH_HAPTIC_CROSSING_HYSTERESIS = 0.001
+# Minimum time (s) between two crossing clicks. On the real Touch each click shook the pen
+# ~10 mm, which carried it back across the point and fired the next click 40-60 ms later,
+# a self-sustaining buzz (logs NEW_RUN, 2026-10-19). The side is still tracked meanwhile.
+TOUCH_HAPTIC_CROSSING_HOLDOFF = 0.3
+# Click (N) when the tip target reaches the deepest insertion or the retract limit, pushing
+# back out of the limit. Open loop like the crossing click, with the same hysteresis and
+# hold-off, so it cannot chatter the way a wall did. The arm already stops at the limit.
+TOUCH_HAPTIC_LIMIT_FORCE = 0.002
+# RCM on / off tap: one small upward push (60 ms) when RCM mode turns on or off, two
+# when leaving is refused. Force (N); frequency (Hz) > 0 makes each tap a buzz instead
+# (0.4 N at 40 Hz was far too much on the real Touch).
+TOUCH_HAPTIC_PULSE_FORCE = 0.002
+TOUCH_HAPTIC_PULSE_FREQUENCY = 0.0
+# Singularity: from TOUCH_SINGULARITY_SLOW (0) to TOUCH_SINGULARITY_STOP (full), push the
+# stylus with up to this force (N) in the direction that moves the arm out of it, plus
+# damping (N s/m) on stylus motion heading in. Only the stylus translation is pushed
+# (the Touch cannot twist the pen), so a singularity reached by tilting the pen is
+# pushed back by moving the pen sideways. Needs TOUCH_SINGULARITY_GUARD.
+TOUCH_HAPTIC_SINGULARITY_FORCE = 0.005
+TOUCH_HAPTIC_SINGULARITY_DAMPING = 0.015
+# Low-pass time constant (s) on the singularity push: the condition number and the
+# direction out jitter with the arm.
+TOUCH_HAPTIC_SINGULARITY_FILTER = 0.03
 
 # Position errors smaller than this are ignored (m, at 1:1 - shrinks with the
 # double-click motion scale so fine moves are not swallowed).
@@ -252,6 +333,10 @@ RECORDER_SAMPLE_RATE = 25.0      # Hz
 # LOG_KEEP_ALL_RUNS every run is also copied to LOG_DIR/runs/<date_time>/.
 LOG_DIR = "~/ros2_ws/src/MacroMicroSurgicalRobot/logs"
 LOG_KEEP_ALL_RUNS = False
+# Refuse to start a recording (GREY button or replay) unless the NDI tracker
+# (`python3 -m ndi_tracking run`, src/ndi_tracking) is following it, so no run ends
+# up without NDI data. False = record anyway, with a warning at start and stop.
+LOG_REQUIRE_NDI = True
 # Without tcp_pose_broadcaster (mock hardware) the UR path falls back to TF
 # base_link -> tool0, sampled at this rate (Hz).
 LOG_TF_FALLBACK_RATE = 200.0
@@ -262,6 +347,8 @@ LOG_BAG_TOPICS = [
     "/phantom/state",
     "/phantom/button",
     "/phantom/joint_states",    # Touch encoder angles: shows a sticking/skipping joint directly
+    "/phantom/force_feedback",  # haptic cues sent to the stylus (N)
+    "/phantom/applied_force",   # force touch_server actually rendered, incl. RCM walls / detent (N)
     "/ur5e_touch_teleop/target_pose",
     "/ur5e_touch_teleop/motion_scale",
     "/ur5e_touch_teleop/condition_number",     # singularity guard: arm Jacobian condition number

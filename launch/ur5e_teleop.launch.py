@@ -17,8 +17,8 @@
     # ...with the real arm's delays added (ur_emulator.py), for latency testing
     ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true emulate_ur:=true
 
-    # Other UR models (e.g. a UR16e): pass ur_type, ideally with its own calibration
-    ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur16e robot_ip:=<ip> kinematics_params_file:=<file>
+    # Defaults to the lab UR16e (factory kinematics). Other models / a calibration file:
+    ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur5e robot_ip:=<ip> kinematics_params_file:=<file>
 
 Terminal output is kept short: nodes from other packages (UR driver, controller
 spawners, MoveIt, Touch driver) only print warnings and errors, and launch's own
@@ -158,7 +158,7 @@ def generate_launch_description():
     ])
 
     args = [
-        DeclareLaunchArgument("ur_type", default_value="ur5e",
+        DeclareLaunchArgument("ur_type", default_value="ur16e",
                               choices=["ur3", "ur3e", "ur5", "ur5e", "ur10", "ur10e", "ur16e", "ur20", "ur30"],
                               description="UR model being driven, e.g. ur16e"),
         DeclareLaunchArgument("robot_ip", default_value="192.168.0.100"),
@@ -289,8 +289,10 @@ def generate_launch_description():
         output="log",
     )
 
+    # ls_thesis's own Touch driver, not omni_common's omni_state: forces from omni_state
+    # never reach the motors (OpenHaptics renders none in a ROS process)
     touch_driver = IncludeLaunchDescription(
-        PathJoinSubstitution([FindPackageShare("omni_common"), "launch", "omni_state.launch.py"]),
+        PathJoinSubstitution([pkg_share, "launch", "touch_driver.launch.py"]),
         condition=use_touch,
     )
 

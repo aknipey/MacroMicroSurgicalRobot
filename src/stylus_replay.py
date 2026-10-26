@@ -17,8 +17,13 @@ of the stack can be tested with exactly the same hand motion.
    first unless --yes): the teleop target is relative to where the robot was when
    WHITE went down.
 3. Starts trajectory_recorder, plays the stylus back with its original timing
-   (restamped to now; GREY is masked out so it cannot toggle the recording),
-   releases WHITE, then stops the recorder.
+   (restamped to now; GREY on its own is masked out so it cannot toggle the
+   recording, but GREY pressed while WHITE is held - the RCM chord - is replayed),
+   releases WHITE, then stops the recorder. Refuses to start with RCM mode on.
+   --rcm: for runs recorded with RCM mode already on, turn it on at the start pose
+   (WHITE + GREY with the stylus still, before the recorder starts), so the RCM point
+   is the tip there. If RCM mode is still on from the last replay (it ended with the
+   tool in), the robot moves straight to the start pose and leaves RCM mode there.
 4. Writes REPLAY.yaml into logs/NEW_RUN saying which run it replayed.
 
 Replays of replays work too (they log STYLUS_RAW.csv like any run). The stylus
@@ -54,6 +59,7 @@ from ls_thesis.ur5e_common import (
     TRAJECTORY_ACTION,
     TRAJECTORY_CONTROLLER,
     activate_controller,
+    ndi_tracker_listening,
     servo_controller,
     call_service,
     set_servo_paused,
@@ -63,6 +69,7 @@ from ls_thesis import teleop_settings as cfg
 STATE_TOPIC = "/phantom/state"
 BUTTON_TOPIC = "/phantom/button"
 SCALE_TOPIC = "/ur5e_touch_teleop/motion_scale"
+RCM_ACTIVE_TOPIC = "/ur5e_touch_teleop/rcm_active"
 PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 UR_JOINTS = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -83,22 +90,33 @@ def resolve_run(name):
 
 
 def read_run(run_dir):
-    """-> dict(events=[(t, topic, msg or WHITE bool)] sorted, t s from the first stylus row,
-               white=WHITE held at the start, joints=start joint positions or None,
-               scale=motion_scale value in the bag or None)"""
+    """-> dict(events=[(t, topic, msg or (WHITE, GREY) bools)] sorted, t s from the first
+               stylus row, white=WHITE held at the start, joints=start joint positions or
+               None, scale=motion_scale value in the bag or None)
+
+    GREY is only kept while it is an RCM chord (pressed with WHITE held); on its own it
+    toggled the recording, which the replay owns."""
     with open(os.path.join(run_dir, "STYLUS_RAW.csv"), newline="") as f:
         rows = list(csv.DictReader(f))
     if not rows:
         sys.exit(f"{run_dir}/STYLUS_RAW.csv has no rows")
     t0 = float(rows[0]["t"])
     events, white = [], rows[0]["white"] == "1"
-    previous = white
+    previous = (white, False)
+    grey_was = rows[0]["grey"] == "1"
+    chord = False
     for row in rows:
         t = float(row["t"]) - t0
         pressed = row["white"] == "1"           # recorded from OmniState.locked = WHITE
-        if pressed != previous:
-            events.append((t, BUTTON_TOPIC, pressed))
-            previous = pressed
+        grey = row["grey"] == "1"               # recorded from OmniState.close_gripper = GREY
+        if grey and not grey_was:
+            chord = pressed
+        elif not grey:
+            chord = False
+        grey_was = grey
+        if (pressed, chord) != previous:
+            events.append((t, BUTTON_TOPIC, (pressed, chord)))
+            previous = (pressed, chord)
         msg = OmniState(locked=pressed)
         msg.header.frame_id = "world"
         p, q, v = msg.pose.position, msg.pose.orientation, msg.velocity
@@ -116,20 +134,23 @@ def read_run(run_dir):
         joints = samples[0]["positions"] if samples else None
     except OSError:
         pass
-    return {"events": events, "white": white, "joints": joints, "scale": bag_motion_scale(run_dir)}
+    return {"events": events, "white": white, "joints": joints,
+            "scale": bag_first(run_dir, SCALE_TOPIC, Float64),
+            "rcm": bag_first(run_dir, RCM_ACTIVE_TOPIC, Bool)}
 
 
-def bag_motion_scale(run_dir):
-    """The teleop's (latched) motion_scale as recorded in the run's bag, or None."""
+def bag_first(run_dir, topic, msg_type):
+    """The first value of a (latched) topic in the run's bag, or None: the teleop's
+    motion_scale, or whether RCM mode was on when the recording started."""
     bag_dir = os.path.join(run_dir, "rosbag")
     if not os.path.isfile(os.path.join(bag_dir, "metadata.yaml")):
         return None
     reader = SequentialReader()
     reader.open(StorageOptions(uri=bag_dir, storage_id="mcap"), ConverterOptions("cdr", "cdr"))
-    reader.set_filter(StorageFilter(topics=[SCALE_TOPIC]))
+    reader.set_filter(StorageFilter(topics=[topic]))
     if not reader.has_next():
         return None
-    return deserialize_message(reader.read_next()[1], Float64).data
+    return deserialize_message(reader.read_next()[1], msg_type).data
 
 
 def scale_step(scale, run_dir):
@@ -155,15 +176,20 @@ class StylusReplay(Node):
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.program_running = None
         self.teleop_scale = None
+        self.rcm_active = None
         self.create_subscription(Bool, PROGRAM_RUNNING_TOPIC, self.on_program_running, latched)
         self.create_subscription(Float64, SCALE_TOPIC, self.on_scale, latched)
-        self.white = False
+        self.create_subscription(Bool, RCM_ACTIVE_TOPIC, self.on_rcm_active, latched)
+        self.buttons = (False, False)
 
     def on_program_running(self, msg):
         self.program_running = msg.data
 
     def on_scale(self, msg):
         self.teleop_scale = msg.data
+
+    def on_rcm_active(self, msg):
+        self.rcm_active = msg.data
 
     def check_topics(self, timeout=5.0):
         """Exit if the real stylus driver is publishing, or nobody is listening."""
@@ -177,10 +203,19 @@ class StylusReplay(Node):
         if not self.get_subscriptions_info_by_topic(STATE_TOPIC):
             sys.exit(f"Nothing subscribes to {STATE_TOPIC} - is ur5e_teleop.launch.py input:=replay running?")
 
-    def wait_for_status(self, timeout=5.0):
-        """Spin until the latched program-running and motion-scale topics have arrived."""
+    def wait_for_ndi_tracker(self, timeout=5.0):
+        """True once the NDI tracker follows the recorder (discovery of a fresh process
+        can take a few seconds to find it)."""
         end = time.monotonic() + timeout
-        while (self.program_running is None or self.teleop_scale is None) and time.monotonic() < end:
+        while not ndi_tracker_listening(self) and time.monotonic() < end:
+            rclpy.spin_once(self, timeout_sec=0.1)
+        return ndi_tracker_listening(self)
+
+    def wait_for_status(self, timeout=5.0):
+        """Spin until the latched program-running, motion-scale and RCM topics have arrived."""
+        end = time.monotonic() + timeout
+        while (self.program_running is None or self.teleop_scale is None
+               or self.rcm_active is None) and time.monotonic() < end:
             rclpy.spin_once(self, timeout_sec=0.1)
 
     def scale_clicks(self, step):
@@ -193,20 +228,25 @@ class StylusReplay(Node):
                                    f"- using {steps[index(step)]:g}")
         return (index(step) - index(current)) % len(steps)
 
-    def move_to(self, positions, duration):
+    def follow(self, points, what):
+        """Run [(time_from_start s, joint positions)] on the trajectory controller (stopping
+        at the last point); True when it got there."""
         if not self.action_client.wait_for_server(timeout_sec=10.0):
             self.get_logger().error(f"Action server {TRAJECTORY_ACTION} not available")
             return False
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = UR_JOINTS
-        point = JointTrajectoryPoint(positions=[float(p) for p in positions], velocities=[0.0] * 6)
-        point.time_from_start = Duration(sec=int(duration), nanosec=int((duration % 1.0) * 1e9))
-        goal.trajectory.points = [point]
+        for k, (t, positions) in enumerate(points):
+            point = JointTrajectoryPoint(positions=[float(p) for p in positions])
+            if k == len(points) - 1:
+                point.velocities = [0.0] * 6
+            point.time_from_start = Duration(sec=int(t), nanosec=int((t % 1.0) * 1e9))
+            goal.trajectory.points.append(point)
         send_future = self.action_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, send_future)
         handle = send_future.result()
         if handle is None or not handle.accepted:
-            self.get_logger().error("Move to the start pose was rejected")
+            self.get_logger().error(f"{what} was rejected")
             return False
         result_future = handle.get_result_async()
         try:
@@ -216,9 +256,18 @@ class StylusReplay(Node):
             raise
         result = result_future.result().result
         if result.error_code != FollowJointTrajectory.Result.SUCCESSFUL:
-            self.get_logger().error(f"Move to the start pose failed: {result.error_string}")
+            self.get_logger().error(f"{what} failed: {result.error_string}")
             return False
         return True
+
+    def run_on_trajectory_controller(self, points, what):
+        """follow() with Servo paused and its controller swapped out, then back."""
+        if not set_servo_paused(self, True, timeout=2.0):
+            self.get_logger().warn("Could not pause MoveIt Servo")
+        ok = activate_controller(self, TRAJECTORY_CONTROLLER) and self.follow(points, what)
+        activate_controller(self, servo_controller(self))
+        set_servo_paused(self, False, timeout=2.0)
+        return ok
 
     def recorder(self, service):
         response = call_service(self, Trigger, service, Trigger.Request(), timeout=15.0)
@@ -232,14 +281,15 @@ class StylusReplay(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         self.state_pub.publish(msg)
 
-    def publish_button(self, white):
-        self.white = bool(white)
-        self.button_pub.publish(OmniButtonEvent(white_button=int(white), grey_button=0))
+    def publish_button(self, white, grey=False):
+        self.buttons = (bool(white), bool(grey))
+        self.button_pub.publish(OmniButtonEvent(white_button=int(white), grey_button=int(grey)))
 
     def play(self, events, rate=1000.0):
         """Publish (t, topic, msg) events at their times; between stylus samples the last
         one is repeated at `rate` (the teleop stops on stale stylus data). Button events
-        carry WHITE as a bool; GREY is never pressed, the replay owns recording."""
+        carry (WHITE, GREY); GREY is only ever pressed with WHITE held (the RCM chord),
+        the replay owns recording."""
         start = time.monotonic()
         state = next(msg for _, topic, msg in events if topic == STATE_TOPIC)
         for t, topic, msg in events:
@@ -250,12 +300,12 @@ class StylusReplay(Node):
             if topic == STATE_TOPIC:
                 state = msg
                 self.publish_state(state)
-            elif topic == BUTTON_TOPIC and msg != self.white:
-                self.publish_button(msg)
+            elif topic == BUTTON_TOPIC and msg != self.buttons:
+                self.publish_button(*msg)
 
     def hold(self, state, seconds, buttons=()):
         """Hold the stylus still at `state` for `seconds`, with WHITE events [(t, white)]."""
-        self.play([(0.0, STATE_TOPIC, state)] + [(t, BUTTON_TOPIC, w) for t, w in buttons]
+        self.play([(0.0, STATE_TOPIC, state)] + [(t, BUTTON_TOPIC, (w, False)) for t, w in buttons]
                   + [(seconds, STATE_TOPIC, state)])
 
     def double_clicks(self, state, count):
@@ -264,6 +314,20 @@ class StylusReplay(Node):
         gap = cfg.TOUCH_DOUBLE_CLICK_TIME + 0.2
         for _ in range(count):
             self.hold(state, gap, click)
+
+    def rcm_chord(self, state):
+        """Hold WHITE and click GREY with the stylus still: RCM mode on at the tip as it is,
+        or off (refused unless the tool is retracted). True if it switched.
+        WHITE is held longer than a click, so the next press is not a double click."""
+        hold = cfg.TOUCH_DOUBLE_CLICK_TIME + 0.2
+        self.play([(0.0, STATE_TOPIC, state), (0.0, BUTTON_TOPIC, (True, False)),
+                   (hold, BUTTON_TOPIC, (True, True)), (hold + 0.1, BUTTON_TOPIC, (True, False)),
+                   (2 * hold, BUTTON_TOPIC, (False, False)), (3 * hold, STATE_TOPIC, state)])
+        on = not self.rcm_active
+        end = time.monotonic() + 2.0
+        while self.rcm_active != on and time.monotonic() < end:
+            rclpy.spin_once(self, timeout_sec=0.05)
+        return self.rcm_active == on
 
 
 def main():
@@ -274,6 +338,8 @@ def main():
     parser.add_argument("--no-approach", action="store_true",
                         help="start from wherever the robot is (the run will not match the original)")
     parser.add_argument("--no-record", action="store_true", help="don't start trajectory_recorder")
+    parser.add_argument("--rcm", action="store_true",
+                        help="start in RCM mode, latched at the start pose (for runs recorded with RCM already on)")
     parser.add_argument("--yes", action="store_true", help="don't ask for confirmation")
     parser.add_argument("--log-dir", default=cfg.LOG_DIR,
                         help="trajectory_recorder's log_dir, for REPLAY.yaml (default LOG_DIR)")
@@ -283,23 +349,37 @@ def main():
     recorded = read_run(run_dir)
     events = recorded["events"]
     states = [msg for _, topic, msg in events if topic == STATE_TOPIC]
-    presses = sum(1 for _, topic, white in events if topic == BUTTON_TOPIC and white)
+    buttons = [(False, False)] + [b for _, topic, b in events if topic == BUTTON_TOPIC]
+    presses = sum(1 for a, b in zip(buttons, buttons[1:]) if b[0] and not a[0])
+    chords = sum(1 for a, b in zip(buttons, buttons[1:]) if b[1] and not a[1])
     step = scale_step(recorded["scale"], run_dir)
     print(f"Replaying {run_dir}\n  {len(states)} stylus samples, {events[-1][0]:.1f} s, scale 1:{1.0 / step:g}, "
-          f"WHITE {'held at the start + ' if recorded['white'] else ''}{presses} presses")
+          f"WHITE {'held at the start + ' if recorded['white'] else ''}{presses} presses, "
+          f"{chords} RCM chords (WHITE + GREY){', starting in RCM mode' if args.rcm else ''}")
+    if recorded["rcm"] and not args.rcm:
+        print("  WARNING: RCM mode was on when this run started - add --rcm to start the replay in it")
+    elif recorded["rcm"] is False and args.rcm:
+        print("  WARNING: RCM mode was off when this run started, but --rcm turns it on")
     if recorded["joints"] is None and not args.no_approach:
         sys.exit("No TRAJECTORY.yaml to take the start pose from - use --no-approach")
 
     # Keep the context alive on Ctrl+C so WHITE can be released and the recorder stopped
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = StylusReplay()
-    recording = False
+    recording = finished = False
     try:
         time.sleep(1.0)     # let discovery find the teleop node and any other stylus publisher
         node.check_topics()
+        # Before anything moves: the recorder would refuse to start without the tracker anyway
+        if not args.no_record and cfg.LOG_REQUIRE_NDI and not node.wait_for_ndi_tracker():
+            sys.exit("NDI tracker not running - start `python3 -m ndi_tracking run` (same ROS_DOMAIN_ID) "
+                     "first, or set LOG_REQUIRE_NDI = False to replay without NDI data")
         node.wait_for_status()
         if node.program_running is False:
             sys.exit("Robot program not running - press play on the teach pendant")
+        if node.rcm_active:
+            print("  RCM mode is still on from the last replay (it ended with the tool in): the arm moves "
+                  "straight to the start pose with the tool in, then RCM mode is left there")
         if not args.yes:
             what = "move to the start pose and replay" if not args.no_approach else "replay from where it is"
             if input(f"The robot will {what}. Proceed? [y/N] ").strip().lower() != "y":
@@ -310,15 +390,21 @@ def main():
         node.hold(states[0], 0.5)
         node.double_clicks(states[0], node.scale_clicks(step))
         if not args.no_approach:
-            if not set_servo_paused(node, True, timeout=2.0):
-                node.get_logger().warn("Could not pause MoveIt Servo")
-            ok = activate_controller(node, TRAJECTORY_CONTROLLER) and node.move_to(recorded["joints"], args.approach_time)
-            activate_controller(node, servo_controller(node))
-            set_servo_paused(node, False, timeout=2.0)
-            if not ok:
+            if not node.run_on_trajectory_controller([(args.approach_time, recorded["joints"])],
+                                                     "Move to the start pose"):
                 return
 
         node.hold(states[0], 0.5)
+        # The recorded chords toggle RCM mode from off. Left on by the last replay of this
+        # run, the tip is back at its RCM point here, so the teleop lets it be left
+        if node.rcm_active:
+            if not node.rcm_chord(states[0]):
+                sys.exit("RCM mode is still on from the last replay and can't be left here (the tip is "
+                         "not at its RCM point): restart the stack (terminal 1), then replay again")
+            node.get_logger().info("Left RCM mode from the last replay")
+        if args.rcm and not node.rcm_chord(states[0]):
+            node.get_logger().error("RCM mode did not turn on - not replaying")
+            return
         if not args.no_record:
             response = node.recorder(RECORDER_START_SERVICE)
             if response is None or not response.success:
@@ -326,9 +412,12 @@ def main():
             recording = True
             node.hold(states[0], cfg.REPLAY_LEAD_IN)    # ros2 bag record needs a moment to subscribe
 
-        node.play(([(0.0, BUTTON_TOPIC, True)] if recorded["white"] else []) + events)
+        node.play(([(0.0, BUTTON_TOPIC, (True, False))] if recorded["white"] else []) + events)
         node.publish_button(False)
         node.hold(states[-1], cfg.REPLAY_TAIL)          # let the robot settle into the logs
+        for _ in range(10):                             # play() doesn't spin: take in rcm_active
+            rclpy.spin_once(node, timeout_sec=0.05)
+        finished = True
     except KeyboardInterrupt:
         node.get_logger().warn("Replay interrupted")
     finally:
@@ -336,6 +425,14 @@ def main():
             node.publish_button(False)
             if recording and node.recorder(RECORDER_STOP_SERVICE) is not None:
                 write_replay_info(run_dir, args, step)
+            # Without the Touch, RCM mode could only be left by restarting the stack:
+            # leave it here, after the recording, so the next replay starts from off
+            if finished and node.rcm_active:
+                if node.rcm_chord(states[-1]):
+                    node.get_logger().info("Left RCM mode after the replay")
+                else:
+                    node.get_logger().info("RCM mode stays on (the tool is in, as at the end of the run): "
+                                           "the next replay leaves it at the start pose")
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

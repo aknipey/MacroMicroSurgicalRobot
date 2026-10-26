@@ -13,7 +13,7 @@
 # Modes:
 #   display     RViz + robot/joint state publishers only. No hardware needed.
 #   touch       Touch stylus teleop of the micro-manipulator (no UR5e).
-#               omni_state driver + serial bridge + micro_module_control.
+#               Touch driver (touch_server + touch_bridge) + serial bridge + micro_module_control.
 #   keyboard    Keyboard teleop of the micro-manipulator. No Touch device
 #               needed - only the Arduino. Good for bench-testing the servos.
 #   ur5e-keyboard  UR5e + MoveIt Servo + trajectory recorder; this terminal
@@ -28,9 +28,9 @@
 #   help        Show this message.
 #
 # Options:
-#   --robot-ip=IP            UR5e IP address (default: 192.168.0.100)
-#   --calibration-file=PATH  UR5e kinematics calibration YAML
-#                            (default: <repo>/lab_ur5e_1_calibration.yaml)
+#   --robot-ip=IP            Robot IP address (default: 192.168.0.100)
+#   --calibration-file=PATH  Robot kinematics calibration YAML
+#                            (default: UR16e factory kinematics)
 #   --arduino-port=PORT      Serial port for the micro-module Arduino
 #                            (default: /dev/ttyACM0)
 #   --baud=RATE              Serial baud rate for the Arduino (default: 9600)
@@ -67,7 +67,9 @@ MODE="${1:-help}"
 
 ROS_DISTRO_ARG="${ROS_DISTRO:-jazzy}"
 ROBOT_IP="192.168.0.100"
-CALIBRATION_FILE="${PKG_DIR}/lab_ur5e_1_calibration.yaml"
+# The lab arm is a UR16e; the lab_ur5e_1 calibration belongs to the old UR5e.
+UR_TYPE="ur16e"
+CALIBRATION_FILE=""
 ARDUINO_PORT="/dev/ttyACM0"
 BAUD="9600"
 WITH_RVIZ="false"
@@ -93,6 +95,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Empty = let the launch files pick the UR16e factory kinematics
+KIN_ARG=()
+[ -n "$CALIBRATION_FILE" ] && KIN_ARG=(kinematics_params_file:="$CALIBRATION_FILE")
 
 usage() {
   sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -267,7 +273,7 @@ case "$MODE" in
     ;;
 
   touch)
-    run_bg touch_driver ros2 launch omni_common omni_state.launch.py
+    run_bg touch_driver ros2 launch ls_thesis touch_driver.launch.py
     wait_for_topic /phantom/state 15
 
     check_serial_port "$ARDUINO_PORT"
@@ -303,7 +309,7 @@ case "$MODE" in
 
   ur5e)
     run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
-      ur_type:=ur5e robot_ip:="$ROBOT_IP" kinematics_params_file:="$CALIBRATION_FILE" \
+      ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
       launch_rviz:=false
     wait_for_service /controller_manager/list_controllers 60
 
@@ -321,7 +327,7 @@ case "$MODE" in
       echo ">> Make sure the External Control program is running on the UR5e Teach Pendant."
     fi
     run_bg ur5e_teleop ros2 launch ls_thesis ur5e_teleop.launch.py \
-      robot_ip:="$ROBOT_IP" use_mock_hardware:="$MOCK" kinematics_params_file:="$CALIBRATION_FILE" \
+      ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" use_mock_hardware:="$MOCK" "${KIN_ARG[@]}" \
       input:="$INPUT" launch_rviz:="$WITH_RVIZ"
     wait_for_service /servo_node/switch_command_type 90
 
@@ -341,7 +347,7 @@ case "$MODE" in
     ;;
 
   full)
-    run_bg touch_driver ros2 launch omni_common omni_state.launch.py
+    run_bg touch_driver ros2 launch ls_thesis touch_driver.launch.py
     wait_for_topic /phantom/state 15
 
     check_serial_port "$ARDUINO_PORT"
@@ -350,7 +356,7 @@ case "$MODE" in
     wait_for_topic /micro_module_motor_states 15
 
     run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
-      ur_type:=ur5e robot_ip:="$ROBOT_IP" kinematics_params_file:="$CALIBRATION_FILE" \
+      ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
       launch_rviz:=false
     wait_for_service /controller_manager/list_controllers 60
 

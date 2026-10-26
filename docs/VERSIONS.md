@@ -22,6 +22,10 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
 | V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
 | V6 | `v6` | 2026-10-19 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs; RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point, the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck. RCM: laparoscopic-style work, the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots. Real arm RCM runs in `logs/V6/` (BasicInRCM, ScalingInRCM, ExitingRCM): near the point the arm has to accelerate hard for small tip moves |
+| V7 | (not tagged yet) | 2026-10-19 | RCM sideways scaling: a sideways stylus move moves tool0 by the same amount at every depth (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5, to 130 mm), replacing V6's (depth / 10 mm)² fade; pivot continuous through 0 mm; tip can retract 5 mm past the point (`TOUCH_RCM_RETRACT_DEPTH`). **Part 2:** haptic cues on the Touch (`TOUCH_HAPTIC_*`): RCM depth walls, a click at the RCM point, a tap on RCM on / off, a push out of singularities; new Touch driver `touch_driver.launch.py` (`touch_server` + `touch_bridge`) replacing `omni_state` | V6 real arm runs: near the RCM point the arm moves r(d) / d times the tip, so it accelerated hugely for small moves; fades tried first swung the arm when moving in and out. Part 2: Feel the limits and mode changes instead of watching for them; the singularity guard silently removed motion into a singularity, now the hand is told which way is out | Offline: tool0 0.50 mm per mm of stylus at 0-130 mm; mock arm: retract to −5.2 mm and exit OK. Final code not run on the real arm yet. Part 2: motion unchanged (forces only); `omni_state` never rendered any force (OpenHaptics renders none in a ROS process), the new driver does (1 N lift test); real-Touch tuning in progress |
+
+**V7 SimpleHolder replays (2026-10-26, with NDI):** see `logs/V7/REPLAYS_2026-10-26.md`:
+results, original → replay map, and why the NDI error is mostly factory-kinematics error.
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
 target path (`scripts/plot_paths.py`). Each version's section below has the full
@@ -999,7 +1003,7 @@ roll about the shaft.
 - This is the usual laparoscopic / da Vinci arrangement: the user steers the tip, and
   the fulcrum reversal outside is the arm's problem.
 - The catch: right after latching, the tip *is* at the RCM point, so a small sideways
-  move would need an unbounded pivot. Below `TOUCH_RCM_MIN_PIVOT_DEPTH` (10 mm) the
+  move would need an unbounded pivot. Below `TOUCH_RCM_MIN_PIVOT_DEPTH` (10 mm; replaced in V7) the
   sideways part is faded out by (depth / 10 mm)². The pivot angle then starts at 0
   and grows smoothly (the largest step in a 0-30 mm sweep was 0.03°), and the tool
   first goes in straight.
@@ -1076,3 +1080,588 @@ at 1:5 scale with low speed caps and no tool contact, and watch `~/rcm_error`. I
 grows on fast pivots, `TOUCH_LOOP_DELAY` is off from the arm's real delay. Pivoting
 about a fixed point uses much more arm motion than free teleop and reaches wrist
 singularities sooner, so choose the port position with that in mind.
+
+
+## V7 (part 1) — RCM: sideways scaling and entry / exit
+
+**Code:** not committed or tagged yet (in progress). Builds on `v6`. Touch node only:
+`RcmTool.lever`, `pivot_slope`, `pivot_fade` and `target_shaft` in
+`ls_thesis/ur5e_common.py`, `rcm_target` / `engage` in `src/ur5e_touch_teleop.py`,
+and the settings below. Free-motion teleop is unchanged.
+
+**Summary of the changes:**
+1. **Sideways scaling:** in RCM mode a sideways stylus move now moves tool0 by the
+   same amount at every depth (from 0 to 130 mm), instead of the tip following the
+   stylus 1:1. This replaces V6's (depth / 10 mm)² fade.
+2. **Continuous through 0 mm:** the pivot no longer snaps straight when the target
+   depth reaches the RCM point.
+3. **Retract past the point:** the tip can be pulled up to 5 mm back out past the RCM
+   point, so the tool can leave the port before RCM mode is switched off.
+
+### Why: the lever problem near the RCM point
+
+In RCM mode the shaft pivots about the fixed point c. For a pivot by a small angle θ:
+- the tip, `d` past the point (the insertion depth), moves θ · d sideways;
+- tool0, on the other side of the point, moves θ · r(d) the other way, where
+  r(d) = |tool0 → c| (`RcmTool.lever`; ≈ 0.312 m − d for the 0.262 m shaft that
+  starts 50 mm out of the flange).
+
+So the arm moves r(d) / d times as far as the tip: ≈ 30× at 10 mm deep, 9× at 30 mm,
+1.4× at 130 mm. In V6 the stylus drove the tip 1:1, so the arm's sideways motion
+and acceleration grew as 1 / d near the point, without bound at the point itself.
+V6 faded the sideways stylus motion by (d / 10 mm)² below 10 mm, which hid the worst
+of it. But the pivot per mm of stylus still peaked at 10 mm (5.7°/mm, as much as with
+no fade), and the fade's kink at 10 mm was a step in acceleration. In the V6 real arm
+runs (`logs/V6/BasicInRCM`, `ScalingInRCM`, `ExitingRCM`) the arm accelerated hugely
+for small moves near the point.
+
+### The sideways scaling function
+
+The stylus still sets a tip target, `tip_origin + translation_scale · Δstylus`
+(axis-mapped as in free mode). It is split, relative to the shaft axis `a₀` at
+engage, into an axial part (depth along `a₀`) and a sideways part `s` across it.
+The shaft is then tilted from `a₀` towards `s` by
+
+  tan θ = p(d) · |s|,  with p(d) = k / r(d)   (`RcmTool.pivot_slope`)
+
+and slid so that the tip sits at the target's axial depth (`target_shaft`). Since
+tool0 swings θ · r(d) ≈ k · |s|, **a sideways stylus move of 1 mm moves tool0 by k mm
+at every depth**, the opposite way to the tip. Equivalently, the tip only gets a
+share k · d / r(d) of the sideways stylus motion:
+
+| Depth | 0 | 10 mm | 30 mm | 70 mm | 130 mm | 160 mm | 200 mm | 240 mm |
+|---|---|---|---|---|---|---|---|---|
+| tool0 per mm of stylus (k = 0.5) | 0.50 | 0.50 | 0.50 | 0.50 | 0.50 | 0.34 | 0.20 | 0.11 |
+| tip per mm of stylus | 0 | 0.017 | 0.053 | 0.15 | 0.36 | 0.36 | 0.36 | 0.36 |
+| pivot per mm of stylus | 0.092° | 0.095° | 0.10° | 0.12° | 0.16° | 0.13° | 0.10° | 0.09° |
+
+Properties that made it the choice:
+- **No blow-up at the point.** p(d) = k / r(d) is finite at d = 0 (r(0) = 0.312 m),
+  so the pivot per mm of stylus stays between 0.09° and 0.16° over the whole range.
+  No separate near-point fade is needed: the tip's share k · d / r(d) goes to 0 at
+  the point by itself.
+- **Going in or out does not swing the arm.** With the stylus held to one side and
+  only the depth changing, tool0's sideways offset k · |s| does not depend on d. So
+  insertion with a sideways offset moves tool0 along the shaft only (offline: target
+  5 mm to the side, tool0 stayed 5.00 mm off from 30 to 130 mm). The fade versions
+  below failed exactly here.
+- **One smooth function of depth,** with no thresholds or kinks inside 0-130 mm.
+- **The stylus target is absolute,** as in free mode: no drift between pen and tool
+  builds up, and releasing / re-engaging WHITE starts from the current shaft axis
+  (`a₀` is reset at engage, so `s` is 0 and nothing moves).
+
+**Past 130 mm** (`TOUCH_RCM_TOOL0_GAIN_DEPTH`) the tip keeps the share it had at
+130 mm (p = share / d), so tool0 moves less than k there. Keeping tool0 at k all the
+way would make the pivot per mm grow ~4× by the deepest insertion (242 mm), as the
+lever gets short (r = 70 mm). 130 mm was the target range for constant motion, with
+some loss accepted past 100 mm.
+
+**k = `TOUCH_RCM_TOOL0_GAIN` = 0.5:** tool0 moves half the (scaled) stylus motion.
+k = 1 (1:1) felt too large on the real arm at 1:1 motion scale (tool0 at 100-150
+mm/s). Raising k gives the tip more sideways motion at every depth, and keeps
+tool0's motion the same at every depth. Insertion (along the shaft) is not scaled by
+k: it stays 1:1 with the stylus times the motion scale. k = 0 switches the law off
+(the tip then follows the stylus 1:1, with the fade below if set).
+
+### How it was chosen (what was tried first)
+
+| Try | Function of depth d (sideways share of the tip) | Result | Why rejected |
+|---|---|---|---|
+| V6 | (d / 10 mm)² below 10 mm, then 1 | Big accelerations near the point (real arm, V6 runs) | Pivot per mm peaks at 1 / 10 mm (5.7°/mm); kink at 10 mm (offline: 124 m/s² inserting past a 10 mm side offset) |
+| 1 | Smootherstep 10t³ − 15t⁴ + 6t⁵ of t = d / 30 mm | Offline: 5 mm circle at 10 mm depth 4.4 → 1.0 m/s²; the kink case 124 → 0.8 m/s² | Still "moves a lot" near the point (real arm) |
+| 2 | Smootherstep³ (`TOUCH_RCM_PIVOT_FADE_STRENGTH` 3) | Keeps 1 / 12 / 49 / 90 % at 10 / 15 / 20 / 25 mm; 0.05 m/s² at 10 mm | Past 30 mm still the plain mapping: arm motion = 9× the tip at 30 mm, falling with depth, so the same stylus motion felt very different at different depths |
+| 3 | fade³ × k · d / r(d), k = 1 (constant tool0 past 30 mm) | Offline: tool0 exactly 1.00 mm per mm from 30 to 130 mm | Real arm run (13:39): rough around 30 mm, large past 30 mm (see below) |
+| 4 | k · d / r(d), no fade, k = 0.5 | Real arm run (13:46): smooth, except jumps at 0 mm | Jumps from a separate code path at d ≤ 0, fixed below; this is the final function |
+
+The fades all had the same flaw, which try 3 showed on the arm. The stylus target is
+absolute, so the sideways motion the fade holds back while shallow comes back as the
+tool goes deeper. Moving in and out across the fade then swings tool0 sideways even
+with the hand still sideways. In the 13:39 run (depth going in and out between 9 and
+47 mm, stylus at 100-160 mm/s), the tool0 target swung at 4-6× the stylus speed at
+15-25 mm. Offline, the same kind of motion (10 ↔ 45 mm at 0.7 Hz with a 30 mm
+sideways sweep) gave 100 mm/s of tool0 sideways motion for a 24 mm/s stylus with the
+fade, and 24 mm/s (k = 1) or 12 mm/s (k = 0.5) without it. Peak acceleration went
+from 1.34 to 0.34 m/s², and what is left is the 1:1 insertion.
+
+The fade code is kept as an option (`TOUCH_RCM_PIVOT_FADE_DEPTH` > 0, shape
+smootherstep ^ `TOUCH_RCM_PIVOT_FADE_STRENGTH`). It multiplies the slope, so it can
+make entry straighter, at the cost of the in/out swing above.
+
+### Continuous through 0 mm
+
+In the 13:46 run (k = 0.5, no fade) the motion was smooth except at 0 mm. The tool0
+target leapt at 1-5 m/s (2-15 rad/s) for one or two samples each time the target
+depth crossed 0 (t = 6.3, 7.4, 7.5, 10.9, 11.6, 12.1, 13.4, 22.8, 23.4 s), and stayed
+below 0.25 m/s everywhere else. With the k / r(d) law the pivot angle tends to a
+finite value as d → 0 (tan θ = k · |s| / r(0)). But a target at or behind the point
+took a separate branch that put the shaft straight back on `a₀`, which snapped tool0
+back by k · |s| in one step (5 mm for a 10 mm sideways offset).
+
+Fix: `target_shaft` now always tilts the axis by `pivot_slope`, which is held at its
+d = 0 value for targets behind the point, so the pivot is continuous through 0. For
+targets past the point it is the same mapping as before (checked numerically).
+Offline, with the stylus 20 mm to the side and the depth going ±4 mm about the point,
+the largest tool0 step went from 11 mm in one 2 ms sample (5.5 m/s, as on the arm) to
+0.03 mm. Side effect: retracted to the port, the shaft stays tilted by the sideways
+pen offset (3.7° for 40 mm at k = 0.5) instead of snapping straight.
+
+### Retract past the point
+
+The depth used to stop at 0, so the tip could only come back to the RCM point, not out
+of the port, before leaving RCM mode. It may now be pulled up to
+`TOUCH_RCM_RETRACT_DEPTH` (5 mm) back out past the point (`target_shaft`'s
+`min_depth`, also the lower limit when re-engaging). The shaft line still runs
+through the point out there. Leaving still needs depth ≤ `TOUCH_RCM_EXIT_DEPTH`
+(3 mm), which any retracted depth meets.
+
+### Settings
+
+| Setting (parameter) | Value | Meaning |
+|---|---|---|
+| `TOUCH_RCM_TOOL0_GAIN` (`rcm_tool0_gain`) | 0.5 | tool0 sideways motion per unit of scaled sideways stylus motion; 0 = off |
+| `TOUCH_RCM_TOOL0_GAIN_DEPTH` (`rcm_tool0_gain_depth`) | 0.13 m | deepest the constant-tool0 law holds to |
+| `TOUCH_RCM_PIVOT_FADE_DEPTH` (`rcm_pivot_fade_depth`) | 0 (off) | optional extra fade near the point; replaces V6's `TOUCH_RCM_MIN_PIVOT_DEPTH` |
+| `TOUCH_RCM_PIVOT_FADE_STRENGTH` (`rcm_pivot_fade_strength`) | 1 | power on the fade's smootherstep (≥ 1) |
+| `TOUCH_RCM_RETRACT_DEPTH` (`rcm_retract_depth`) | 0.005 m | how far the tip may come back out past the point |
+
+### Tests
+
+- **Offline** (`RcmTool` with the 0.262 m shaft): the tables above; the law gives 1.00
+  (k = 1) / 0.50 (k = 0.5) mm of tool0 per mm at 0-130 mm; same mapping as before past
+  the point; the 0 mm crossing; the node's own `rcm_target` called directly (2.00 mm
+  of tool0 for a 2 mm stylus move at 70 mm depth, k = 1; smooth pull-out through 0).
+- **Mock arm** (UR16e, `emulate_ur:=true`, from the `V7/WeirdJumpsRCM` start pose,
+  scripted stylus): RCM on, insert 40 mm (depth 40.3 mm), 15 mm sideways (depth
+  unchanged), stylus pulled ~10 mm past the point: depth stopped at −5.2 mm (−5.7 mm at
+  most), exit chord accepted. Shaft line to the point: 0.01 mm at most.
+- **Real arm:** the 13:39 and 13:46 runs above, recorded to `logs/NEW_RUN` and not
+  kept (overwritten by later runs), and `logs/V7/WeirdJumpsRCM`. The final code
+  (continuity fix, retract) has not been run on the real arm yet.
+
+### Jumps in `V7/WeirdJumpsRCM`: recording start, not the mapping
+
+About 1.73 s into the recording, no joint velocity command reached the arm for over
+50 ms. The Touch node's watchdog zeroed the command ("MoveIt Servo stopped sending
+joint velocities mid-motion"), so the arm braked (6.5 m/s², 100 → 16 mm/s) while the
+target ran on. Once commands flowed again it was 37 mm behind and lurched to catch up
+(6.8 m/s², with the velocity limiter clipping). The target itself was smooth (depth
+59-99 mm). The session log has this error 1.8-2.9 s after 3 of 5 recording starts and
+never outside a recording, while `ros2 bag record` (started fresh by each GREY press)
+is still subscribing to its ~20 topics. The laptop has no real-time scheduling, so
+that start-up competes with Servo and the limiter. Also running then, on another ROS
+domain: leftover mock-test Servo / ros2_control / move_group processes (since
+stopped), which added CPU load. Planned fix: start the bag recorder once, paused, and
+have GREY pause / resume it. Until then, hold still for ~3 s after starting a
+recording.
+
+### Tool calibration for the NDI wand (2026-10-22)
+
+**What:** `TOUCH_RCM_SHAFT_START / _DIRECTION / _LENGTH` set to the NDI wand (probe
+8700340) mounted on the flange as the tool: START (−0.6, 6.6, 206.2) mm, DIRECTION
+(−0.0061, 0.0148, 0.9999) (0.92° off tool0 z), LENGTH 158.6 mm, so the tip is at
+(−1.56, 8.97, 364.85) mm in tool0. Was the placeholder [0, 0, 0.05] / [0, 0, 1] / 0.262
+(tip at 312 mm).
+
+**Why:** the placeholder tip was 53 mm short of the real one (and 9 mm off-axis), so RCM
+mode would latch and pivot about a point inside the shaft instead of the tip, and the NDI
+would see that as RCM error.
+
+**How:** no divot could be used, so `ndi_tracking robot-tcp --wand-is-tool` was only used
+to record (wrist 1/2/3 jogged one at a time, 90 s, `calibrations/raw/robot_tcp_20261022_092412.npz`);
+its printed result assumes a divot and is invalid. A hand-eye fit alone gives tool0 → wand,
+and the wand's own markers → tip calibration (2026-10-20, 0.93 mm pivot rms, kept in
+`calibrations/wand_only_8700340_2026-10-20/`) maps the tip and axis into tool0. Check: the
+tip through the robot's kinematics vs. the tip seen by the camera agree to 1.05 mm rms
+(max 2.2 mm) over 0.5 m of travel; the two halves of the recording give tips 0.5 / 0.95 mm
+from the full fit. The hand-eye "camera pose spread" (9.6 mm) is 0.5° of rotation noise
+times the ~1.4 m camera distance, not tip error. LENGTH is the wand's tip → first-marker
+distance along the shaft (not measured with a ruler); deepest insertion = 158.6 − 20 mm
+margin = 139 mm. Result in `calibrations/robot_tcp_handeye_2026-10-22.json`.
+
+### Replays enter RCM mode (2026-10-22)
+
+**What:** `stylus_replay.py` replays the RCM chord: a GREY press that starts while
+WHITE is held is sent (from the run's `STYLUS_RAW.csv` `grey` column), until GREY is
+released. GREY on its own (recording start / stop) is still masked. The replay also
+refuses to start while the teleop's latched `rcm_active` is on, and warns if RCM is
+still on at the end (an exit chord refused).
+
+**Why:** the 2026-10-22 runs (`V7/*SimpleHolder`) are RCM runs. Before, a replay never
+entered RCM mode, so the same stylus motion moved the tool freely instead of about the
+port: not a repeat of the run, and with the tool in the holder a likely collision.
+
+**Tests:** offline, the chords come out at 35.34 / 92.65 s
+(`WholeRunDrinkBottleSimpleHolder`, NDI rcm_set / rcm_clear at 35.37 / 92.67 s) and
+2.89 / 31.69 s (`FastCheckingRCMSimpleHolder`); no GREY without WHITE is sent. Mock arm
+(UR16e, `emulate_ur:=true`, domain 77, `--no-record`), replay of
+`FastCheckingRCMSimpleHolder`: RCM ON then OFF 28.80 s apart (original 28.80 s), exit
+accepted, no warnings beyond the usual controller switching. Not yet run on the real arm.
+
+**Runs recorded with RCM mode already on (`--rcm`, 2026-10-22):** `V7/RCMOnlySimpleHolder`
+was recorded with RCM already on (latched before GREY), so it has no chord to replay; its
+`_Replay1` ran free. `stylus_replay.py --rcm` turns RCM on at the start pose (WHITE + GREY
+with the stylus still, before the recorder starts), so the RCM point is the tip there. For
+this run the tip was 0.56 mm past its RCM point at the start (shaft 0.01 mm off it), so
+the replay pivots within ~0.5 mm of the original point (mock: (0.6447, 0.2262, 0.2443) m vs
+(0.6446, 0.2261, 0.2448) m). The replay warns when the bag's first `rcm_active` and `--rcm`
+disagree.
+
+The run ends with the tool 100 mm in, so the teleop (correctly) refuses to leave RCM mode
+after it, and with no Touch in replay mode only a stack restart cleared it. Replays can now
+run back to back: at the end the replay tries to leave RCM mode (works if the tool is
+out); if it is still on at the next replay's start, the robot moves straight to the start
+pose (joint move, tool still in - fine for the open simple holder) and leaves RCM mode
+there, where the tip is back at the latched point. A rewind of the last recording (to
+retract along the shaft first) was tried and dropped: not needed for this holder, and it
+stopped 3.4 mm deep against the 3 mm exit limit because the latched point differs from the
+original's by 0.5 mm. Mock: three `--rcm` replays of `RCMOnlySimpleHolder` back to back, each
+left RCM at the start pose and latched the same point.
+
+### Not in this version (yet)
+
+- The paused bag recorder above.
+
+## V7 (part 2) — Haptic cues on the Touch
+
+**Code:** not committed or tagged yet, part of V7 (with part 1). Current state and next steps:
+[HAPTICS_HANDOFF.md](HAPTICS_HANDOFF.md); this section is the history, in order (the first
+design below was changed several times, see the later subsections). New
+`ls_thesis/haptics.py`; `SingularityGuard.twist_gradient` in `ls_thesis/ur5e_common.py`;
+`update_haptics` and helpers in `src/ur5e_touch_teleop.py`; `TOUCH_HAPTIC_*` settings.
+**The robot's motion is unchanged**: these only add forces on the stylus.
+
+### What you feel (while WHITE is held)
+
+| Cue | When | Force |
+|---|---|---|
+| Depth walls | RCM mode, the stylus target past the deepest insertion (shaft length − `TOUCH_RCM_DEPTH_MARGIN`) or past the retract limit (`TOUCH_RCM_RETRACT_DEPTH`) | One-sided spring-damper along the stylus direction that drives the depth: 250 N/m of stylus penetration + 2 N s/m moving in; never pulls |
+| Detent | RCM mode, the tip target crossing the RCM point | Slope of a Gaussian well, pulling towards depth 0: 0.3 N at most, at ±2 mm of stylus; nothing past ~8 mm |
+| Buzz | RCM on (one 120 ms), off (two 60 ms), refused because the tool is still in (three 40 ms) | 0.4 N, 40 Hz, up / down, Hann-windowed so it starts and ends at 0 |
+| Singularity push | Condition number above `TOUCH_SINGULARITY_SLOW` | Along the stylus direction that moves the arm out: 0.8 N × the guard's `limiting` (0 at slow, 1 at stop), + 3 N s/m × limiting on stylus motion heading in; 30 ms low-pass |
+
+The sum is capped at 1.5 N (the Touch gives 3.3 N peak, 0.88 N continuous) and slew-limited
+to 200 N/s, because a step in force can trip the Touch's max-force-impulse check.
+Wall and detent distances are in stylus metres (penetration / motion scale), so they feel
+the same at 1:1, 1:5 and 1:20.
+
+### Why these designs
+
+- **Walls and detent are placed on the stylus target, not the robot.** The target's depth
+  is computed without the limits (`target_shaft` with ±inf), so pushing past a limit,
+  where the target stops, presses into the wall. Being on the hand side, they feel the same
+  however far the arm lags and form no loop through the arm, so they cannot make it
+  oscillate.
+- **Singularity direction: the guard's own gradient, mapped to the stylus.** The guard
+  already computes g, the joint-space gradient of m ≈ s_min. Through its damped inverse,
+  dm/dt = g · J_dls⁺ v = ((J_dls⁺)ᵀ g) · v, so `twist_gradient` = (J_dls⁺)ᵀ g is the twist
+  direction that leads out. That is mapped to the stylus with the 6 × 3 stylus → tool0 twist
+  map: [scale · axis_matrix; 0] in free mode, and numerically through `rcm_target` in RCM
+  mode. Only the translation is used: the Touch has no torque output.
+- **A field, not just damping:** the push acts even when the pen is still, so at the edge
+  the hand is held back with a force that grows as it goes in, like a soft wall. The
+  damping term only resists motion heading in.
+- **The driver keeps the last force it was sent** (`omni_state.cpp`, `force_callback`), so
+  the node sends zero at start (clearing a force left by a node that died) and on
+  Ctrl-C / SIGTERM. rclpy's own signal handler is off so the context is still up to send it.
+  A `kill -9` still leaves the last force on, until the next teleop start.
+
+### Tests
+
+- **Offline** (UR16e URDF): 150 random poses with 32 < c < 120 (55 elbow, 56 shoulder,
+  39 wrist). In all 150, a 1 mm tool move along the push lowered c and one against it
+  raised it, and the push beat 97-99% of random directions. Shapes: wall 0.5 N at 2 mm,
+  0 moving out; detent ±0.30 N at ±2 mm; buzzes peak 0.39 N, ≤ 0.2 N per 2 ms.
+- **Mock arm** (UR16e, `emulate_ur:=true`, scripted stylus, 1:1):
+  - RCM: on → one buzz; stylus 20 mm out → tip stopped at −5.3 mm and the wall pushed
+    back in (1.5 N cap); back in through the point → the detent pulls towards 0 from both
+    sides (±0.29 N); exit at 29 mm → refused + three buzzes; at the point → off + two
+    buzzes.
+  - Singularity: stylus 700 mm away from the base (elbow) → push towards the base from
+    c = 30, 0.8 N + damping (1.06 N while still pushing in), 0.6 N held still at c ≈ 54,
+    0 on release.
+  - Ctrl-C of the node while pushing 1.12 N → its last message was zero.
+  - Largest step between messages 0.38 N (limit 0.4).
+- **Real Touch:** not run yet. Stiffness / damping are first guesses for the ~2-4 ms ROS
+  delay; if a wall buzzes, lower `TOUCH_HAPTIC_WALL_STIFFNESS` or raise its damping.
+
+### No force on the real Touch: OpenHaptics renders nothing in a ROS process
+
+On the real Touch (SN 22129000559) no cue was felt. A recording showed the walls being
+sent correctly (0.9 N back towards the port at the −5 mm limit), and `omni_state` passed
+them on: under gdb its `force_callback` got them and `hdSetDoublev(HD_CURRENT_FORCE)` was
+called with them (0, 1.000, 0 N) at 1 kHz, with HD_FORCE_OUTPUT enabled, calibration OK
+and no HD errors. The pen still did not move. Lift test: the pen resting free, a ramped
+1 N upward force, rise measured from the encoders:
+
+| Program | Rise |
+|---|---|
+| Plain OpenHaptics program (HelloHapticDevice's call order) | 148-165 mm |
+| Same, with `omni_state`'s exact HD calls, order and calibration | 151-154 mm |
+| Same, with the force applied 3 s after start | 154 mm |
+| `omni_state`, force over ROS | 0 mm |
+| `omni_state` copy with a fixed force, ROS never initialised | 0 mm |
+| Plain program **linked** against librclcpp / librcl (never called) | 0 mm |
+| … against librcutils, librmw_implementation, spdlog, yaml, fmt | 155-160 mm |
+| … against liblttng-ust, libtracetools or libnuma | 0 mm |
+| Plain program with only libnuma `LD_PRELOAD`ed | 0 mm |
+
+So OpenHaptics (3.4, driver Dev_Dec 10 2025) silently stops rendering forces in any
+process that has liblttng-ust or libnuma loaded, and every ROS 2 node loads both
+(rcl → tracetools → lttng-ust → libnuma). The servo loop still runs at 1 kHz and every
+query looks normal. The position and buttons were never affected, which is why
+teleoperation always worked. No workaround inside one process was found: a stub
+libnuma (no constructor) still failed through lttng-ust, and preloading the Touch
+libraries first did not help.
+
+**Fix:** the device runs in a process without ROS. `touch_server` (`src/touch_server.cpp`,
+links only HD / HDU) runs `omni_state`'s servo callback unchanged: same axes, mm, velocity
+filter, damping and calibration. `touch_bridge` (`src/touch_bridge.cpp`) publishes
+`omni_state`'s topics and messages and forwards `/phantom/force_feedback`. They talk over
+UDP on localhost (`include/ls_thesis/touch_packets.hpp`). `launch/touch_driver.launch.py`
+starts both, and `ur5e_teleop.launch.py` (input:=touch) uses it instead of `omni_state`.
+Through it: `/phantom/state`, `/joint_states` and `/pose` at 1022 Hz, and the 1 N lift over
+ROS rose 168-177 mm. One change from `omni_state`: a force not refreshed for 0.25 s drops
+to zero (omni_state kept the last one, so a crashed sender left it on). The teleop sends
+every cycle while a cue is active, so this does not cut cues short.
+
+Before this was found, the Touch config files were also replaced: `~/.3dsystems/config`
+had been written for the other unit (SN 19039000821). `Touch_HeadlessSetup` was rerun for
+SN 22129000559 (the old files are in `~/.3dsystems/config.backup-SN19039000821-2026-10-19`).
+After that and a power cycle, TouchCheckup's Box test felt right. Whether the config
+mismatch did anything is not known: the ROS-process problem above blocked forces either way.
+
+### First real-Touch run: too strong and shaking (driver damping)
+
+The first run with `touch_server` (16:19, motion scale 1:40) felt "way too strong and
+vibratory". The teleop only ever sent the RCM detent (≤ 0.30 N, zero most of the time).
+But while any force was fresh, `touch_server` also subtracted `omni_state`'s damping,
+0.001 N per mm/s of its 20 Hz-filtered velocity: up to 2.0 N (median 0.5 N). Its filter
+lags so much near 25 Hz that it pushed along the motion. The pen's 15-40 Hz shake was ~70×
+higher while forces were fresh than before or after, at up to 1.7 m/s (vs 0.37 m/s).
+`omni_state` always had this term; it was never felt only because its forces never
+reached the motors.
+
+Changes: the damping is removed from `touch_server` (the force sent is the force
+rendered). The teleop's own wall / singularity damping now uses the Kalman pen
+velocity (no lag) instead of the driver's. Defaults are softened: cap 1.5 → 1.0 N, wall
+250 → 150 N/m and 2 → 1 N s/m, detent 0.3 → 0.15 N, buzz 0.4 → 0.3 N, singularity
+0.8 → 0.5 N and 3 → 1.5 N s/m.
+
+The RCM on / off buzz (0.4 N, 40 Hz, up to three bursts) was still "way too big and too
+much": it is now a single 60 ms Hann-shaped push of 0.1 N (two when leaving is refused),
+`TOUCH_HAPTIC_PULSE_FREQUENCY` = 0 (> 0 brings the buzz back).
+
+### Walls and detent rendered in the Touch's own loop
+
+Next run (16:25): "violent, pulls it out of my hand". Right after RCM on, the detent flipped
+sign every 20-40 ms while the pen jumped 10-20 mm per sample (up to ~7 m/s), and the walls
+hit the 1.0 N cap as it swung past the limits. These cues are springs on the pen's position,
+and they went round Touch → bridge → teleop (Python, 500 Hz) → bridge → server. That trip
+is tens of ms, long enough for even a 0.15 N detent to push at the wrong moment and grow.
+
+Fix: the teleop now sends only the shape (`TouchScenePacket`, UDP straight to
+`touch_server`): the insertion direction in stylus axes, the stylus position at engage, the
+detent centre and the wall limits along it (stylus mm), stiffness, detent size and the
+force cap. `touch_server` renders walls and detent from the current position on every 1 kHz
+tick, with no delay, adds the slow cues still sent over `/phantom/force_feedback`
+(singularity push, taps), then caps the total (≤ 2 N hard) and slew-limits it (0.2 N per
+tick). The scene is dropped 0.25 s after the last packet. The wall damping is gone (its
+velocity was the delayed part). `/phantom/applied_force` now logs what was actually rendered.
+Mock arm, with a stand-in renderer on a test port (the scene goes over UDP, which ROS
+domains do not isolate: tests must set `haptic_scene_port` away from 47102): pen 20 mm out →
+wall from −5 mm, pushing back in up to the 1.0 N cap; detent ±0.15 N at ±2 mm, pulling
+towards the port; no scene after RCM off.
+
+### Detent spring replaced by a click
+
+It still shook at the port (16:34 run: ±0.15 N rendered by `touch_server`, pen oscillating
+~±8 mm at 20-30 Hz in the detent zone only, calm elsewhere). Comparison by hand: the
+OpenHaptics HelloHapticDevice gravity well (an attracting spring, 0.075 N/mm) also shook,
+while TouchCheckup's Box and Sphere (one-sided walls: free inside, pushed back only when
+pressing into one) were smooth on the same device. So the device and `touch_server` are
+fine. An attracting spring held loosely in the hand, with nothing to damp it, keeps
+overshooting its centre, and the detent was such a spring.
+
+The detent is no longer sent (`touch_server` can still render one). Instead the teleop
+plays a 40 ms, 0.1 N tap (`TOUCH_HAPTIC_CROSSING_FORCE`) against the direction of travel
+when the tip target crosses the RCM point, with ±1 mm of stylus hysteresis
+(`TOUCH_HAPTIC_CROSSING_HYSTERESIS`). Taps are open loop: they don't depend on where the pen
+is, so they cannot oscillate. The walls stay as they are (Box-like). Mock arm: a click
+(+z, against the downward push) on crossing inwards; 0 N within ±5 mm of the point; walls
+up to the 1.0 N cap. Leaving the point right after RCM on does not click (the target starts
+at the point and has not crossed it).
+
+### Run `logs/NEW_RUN` (16:49): clicks and walls feel maxed out and vibrate
+
+The first run with `/phantom/applied_force` in the bag. `touch_server` rendered what was asked:
+0.1 N clicks and walls up to the 1.0 N cap. But every 0.1 N, 40 ms click (1.33, 3.95, 4.55 s)
+set the pen shaking ~±10 mm at 20-45 Hz, up to 2 m/s, mostly through the elbow joint (±3°).
+Before each click it moved smoothly (0.2 mm high-pass). It felt "maxed out". The tests
+below show the device is fine: the Touch arm is light and nearly balanced, so a loosely held
+pen follows even small forces, and these cues were much too strong for it. Two things kept the shake going:
+
+- **Clicks retriggered themselves.** The shake carried the target back across the ±1 mm
+  hysteresis, and each pass fired another click 40-60 ms later (1.33-1.68 s, 3.1-3.3 s).
+  Fix: `TOUCH_HAPTIC_CROSSING_HOLDOFF` (0.3 s) between clicks; the side is still tracked.
+- **The retract wall was within reach of the shake.** At scale 0.5 the −5 mm limit is
+  10 mm of stylus from the point, so the shake hit the wall: 0 ↔ 1 N at ~22 Hz from 1.6 to
+  2.9 s and 4.0 to 4.25 s.
+
+Not the cause: the missing `Default Device.config`. For this HID Touch, `Touch_HeadlessSetup`
+deletes `Default Device.config` and `Device Calibration` itself (strace) and keeps the config
+on the device. OpenHaptics reports Touch, SN 22129000559, 3.3 N max (0.88 N continuous),
+0.5 N/mm max stiffness, servo at 1020 Hz: all as expected.
+
+Bare-device taps (`touch_server` stopped; a plain OpenHaptics program, 40 ms sin² pulses straight
+up, pen held loosely, 1 s apart). The pen started moving 15-29 ms after each pulse (too soon for
+the hand), 40-100° off vertical, mostly towards the operator:
+
+| Pulse | Felt | Pen motion |
+|---|---|---|
+| 0.1 N | "a huge amount of force" | 15-19 mm, ringing ~37 Hz (held firmer) |
+| 0.01 N | "much better" (held less tightly) | 43-59 mm, smooth |
+| 0.001 N | "even softer", odd direction | 12-33 mm |
+
+Repeats were inconsistent: 0.001 N moved the pen 0-2 mm the second time, and 0.01 N moved it
+14-52 mm. The motion depends mostly on the grip, so feel is the better guide: 0.0005 N and
+0.0001 N were not felt. Hands-off force check: a slow upward ramp from the inkwell lifted the
+pen at 0.20 N, a normal value (an earlier run started outside the inkwell, where the arm was
+nearly balanced, and lifted at 0.0009 N; that run is invalid). The docked calibration check
+was fine too: status OK, inkwell at (0, -65.5, -88.1) mm. Then, pen lying on the table, the same ramp
+lifted it at 0.0007 N: no motion at or below 0.0005 N, then within ~15 ms ~0.5 m/s, coasting 44 mm,
+mostly towards the operator, after the force was back at 0 (it needs ~1-2 N). So a command
+just past a tiny threshold gives a large kick in an odd direction, in bare OpenHaptics. Suspected
+cause, not proven: a big fixed offset per motor once the command passes the threshold (like a
+friction or deadband compensation set far too high). That would also explain the wall chatter.
+All strengths were cut ~10x: cap 1.0 → 0.1 N, walls 150 → 15 N/m, crossing click and RCM tap
+0.1 → 0.01 N, singularity push 0.5 → 0.05 N. The off-vertical motion (mostly towards the operator)
+matches the table run, so it is likely the device, not the hand. Next: a staircase of constant
+forces on the table, then Touch_AdvancedConfig / the driver / 3D Systems support.
+
+Staircase test, pen on the table, hands off, bare OpenHaptics, force straight up. A slow ramp
+at 0.0001 N/s first moved the pen at 0.00084 N. Then steps, each from rest:
+
+| Step | 10 mm after | Path |
+|---|---|---|
+| 0.001 N | 21 ms | up + towards the operator |
+| 0.002 N | 21 ms | same |
+| 0.005 N | 22 ms | same |
+| 0.01 N | 23 ms | same |
+| 0.03 N | 20 ms | reversed: down + away |
+
+Over 10x of commanded force the kick is the same, and at 0.03 N it reverses. So this Touch's
+force output is faulty: any command above ~0.0008 N gives a fixed, violent kick that does not
+follow the command. No setting in our code can fix it, and every wall or click passes through
+the threshold. TouchCheckup also sets forces with hdSetDoublev, and its Forces page (sliders
+that set the force directly) is the vendor-side check. Haptics should stay off
+(`TOUCH_HAPTICS = False`) until the unit is repaired or replaced.
+
+**Strengths set to the tested range (user's request).** The user wanted the cues to work at the
+forces found in testing: nothing below ~0.0008 N, 0.001 N soft but felt, 0.01 N about as much as
+is comfortable. Cap 0.1 → 0.01 N, walls 15 → 2 N/m (the cap 5 mm of stylus into the wall),
+crossing click and RCM tap 0.01 → 0.002 N, singularity push 0.05 → 0.005 N with damping 1.5 →
+0.015 N s/m, slew 200 → 2 N/s (0.01 N in 5 ms). Caveat: the staircase test showed the same kick
+for every step from 0.001 to 0.01 N, so on this unit the levels may feel alike. The walls and
+clicks still pass through the ~0.0008 N threshold.
+
+**Run 17:28: walls replaced by a limit click.** With the tested-range strengths the shake dropped
+from 10-20 mm to ~2 mm. What was left was all at the retract wall, while its force sat at
+0.0005-0.0015 N: across the Touch's ~0.0008 N kick threshold, so the kick flicked on and off.
+Pressing further in, to the 0.01 N cap, shook 12-16 mm. Any spring wall starts from 0 N, so on
+this unit it always buzzes at its edge. The walls are now off (`TOUCH_HAPTIC_WALL_STIFFNESS = 0`),
+and `check_limits` plays one 40 ms, 0.002 N click back out of the limit
+(`TOUCH_HAPTIC_LIMIT_FORCE`) when the tip target reaches the deepest insertion or the retract
+limit. It uses the crossing click's hysteresis (1 mm of stylus) and 0.3 s hold-off. The arm already
+stops at the limits by itself. Offline check: one click entering each limit, pushing back the right way;
+none from ±0.5 mm jitter at the edge. The META.yaml of that run lists the old strengths: the
+recorder (terminal 1) had loaded the settings before they changed. The teleop used the new ones
+(max sent 0.002 N, max rendered 0.01 N).
+
+## NDI tracking hook (2026-10-20, alongside V7)
+
+**What:** `trajectory_recorder` publishes its recording state latched on
+`/trajectory_recorder/recording` (`std_msgs/String`, JSON `{"recording", "run_dir",
+"start_unix"}`): once when it starts up, once on start, once on stop. Stop is published
+*before* `close_logs` (bag shutdown, `LOG_KEEP_ALL_RUNS` copy).
+
+**Why:** the Polaris Vega VT (NDI optical tracker) measures the tool independently of the
+UR's kinematics, to check that the shaft stays on the RCM point. The tracker
+(`src/ndi_tracking`, standalone, to become its own repo) follows this topic to record
+`NDI_PATH.csv` / `NDI_EVENTS.csv` / `NDI_META.yaml` (RCM error metrics) / `NDI_PLOT.png`
+into the same `NEW_RUN` folder, with `t` on the recorder's clock. It also follows the
+existing `/ur5e_touch_teleop/rcm_active`: RCM on latches the NDI-measured tool tip as the
+RCM point, the same moment the teleop latches its own. Stop goes out early so the NDI
+files are finished before the folder is copied.
+
+**Teleop behaviour:** unchanged (one extra latched publisher). Tested on a private ROS
+domain: GREY start/stop and RCM on/off reached the tracker, NDI files landed in NEW_RUN
+next to the recorder's own.
+
+**Plots (2026-10-20):** `scripts/plot_paths.py` 3D path figure zooms with the mouse wheel
+(`scroll_zoom_3d`, about the box centre, all axes equally so the scale stays equal).
+Matplotlib's 3D axes only zoom with a right-drag, which was awkward for close-up checks of
+small deviations. Plotting only; no effect on runs.
+
+## Robot type hard-coded to UR16e (2026-10-26)
+
+**What:** `launch/ur5e_teleop.launch.py` now defaults `ur_type` to `ur16e` (was `ur5e`).
+`scripts/launch_system.sh` sets `UR_TYPE="ur16e"` and passes it in every robot mode
+(`ur5e`, `ur5e-keyboard`, `ur5e-touch`, `full`); its default `--calibration-file` is now
+empty, so the UR16e factory kinematics are used unless a calibration file is given.
+
+**Why:** the lab arm is a UR16e (dashboard: UR16, SN 20225600118, PolyScope 5.12.1), but
+`launch_system.sh` hard-coded `ur_type:=ur5e` and the old UR5e's
+`lab_ur5e_1_calibration.yaml`. That is the same mismatch behind the V3 replays running
+UR5e kinematics on the UR16e. Passing `ur_type:=ur5e` explicitly still works for the old arm.
+
+## Recording refused without the NDI tracker (2026-10-26)
+
+**What:** `LOG_REQUIRE_NDI = True` (teleop_settings.py). `trajectory_recorder` refuses to
+start a recording (GREY button or replay) unless the `ndi_tracking` node is subscribed
+to `/trajectory_recorder/recording`. During a recording it checks every second and logs an
+error the moment the tracker drops out. At stop it checks for `NDI_PATH.csv` in the run
+folder and adds a WARNING to the stop message if the file is missing or the tracker
+stopped part-way through. `META.yaml` gets `ndi: {tracker_at_start, lost_at, files}`.
+`stylus_replay.py` makes the same check before the arm moves, so a replay without the
+tracker exits straight away rather than after the approach move. With
+`LOG_REQUIRE_NDI = False` it records anyway, with errors at start and stop.
+
+**Why:** on 2026-10-22 the tracker stopped following at ~09:51 and nothing said so: the
+SlowChecking and RCMOnly originals and all 12 replays (Fast x5, Slow x3, WholeRun x3,
+RCMOnly x1) had no NDI data. The 12 replays were moved to the Trash at the user's request
+(originals kept) and are to be redone with the tracker running.
+
+**Tests:** private ROS domain, recorder logging to a scratch folder, a stand-in
+`ndi_tracking` node: no tracker → refused; tracker up → recorded, no warning; tracker
+killed mid-run → error at 2.1 s, stop warning, `META.yaml ndi.lost_at: 2.1`.
+
+## RCM tool recalibrated: wand re-seated in the holder (2026-10-26)
+
+**What:** `TOUCH_RCM_SHAFT_START` [-0.0006, 0.00662, 0.20624] → [0.00008, 0.00699, 0.20827] m,
+`TOUCH_RCM_SHAFT_DIRECTION` [-0.00607, 0.01481, 0.99987] → [-0.00309, 0.01798, 0.99983];
+LENGTH unchanged (0.1586 m, wand geometry). Tip in tool0 (-0.41, 9.84, 366.87) mm, 2.5 mm
+from the 2026-10-22 tip (mostly +2.0 mm along the shaft); shaft 1.05° off tool0 z (was 0.92°).
+
+**Why:** the same wand went back in the same holder for the replay re-runs, seated slightly
+differently. Same method as 2026-10-22: `robot-tcp --wand-is-tool -d 60`, wrist 1/2/3 jogged
+one at a time, no divot; tip and axis from the wand's own calibration through the hand-eye
+fit (the robot-pivot numbers robot-tcp prints are invalid without a divot). Fit quality:
+rotation mismatch 0.42° rms (was 0.49°), camera-pose spread 8.1 mm / 0.34° (was 9.6 / 0.47),
+tip check against the camera 0.82 mm rms / 1.95 max (2026-10-22 data, same check: 1.15 / 2.61).
+Recomputing 2026-10-22's raw data with the same script reproduced its settings exactly.
+Record: `src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json`.
+
+**Fix (same day):** the replay's tracker check ran ~1 s after its node started, before DDS
+discovery had found the `ndi_tracking` node (1.0-2.6 s on the live stack), so replays were
+refused with the tracker running. `stylus_replay.py` now waits up to 5 s for it
+(`wait_for_ndi_tracker`). The recorder's own check is unaffected: it is a long-lived node.
+
+## 2026-10-26 replay set: results and the factory-kinematics caveat
+
+The 14 SlowChecking/FastChecking/RCMOnly/WholeRun SimpleHolder replays were re-recorded with
+NDI data. Results, the original-to-replay map and the analysis are in
+**`logs/V7/REPLAYS_2026-10-26.md`**. In short: the teleop holds its own RCM point to
+0.05-0.23 mm, but the NDI-measured error (0.4-2.9 mm rms) is mostly pose-dependent error in
+the UR16e factory kinematics (TF vs the controller's calibrated tool0: 0.1-0.25°). Loading
+the arm's own calibration is the untested next step; `ur_calibration` failed to connect.
+Analysis script: `scripts/rcm_offset_check.py`.
