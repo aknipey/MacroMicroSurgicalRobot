@@ -22,7 +22,8 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V4 | `v4` | 2026-10-14 | Velocity output option, UR emulator, latency study | V3's ~140 ms lag is mostly trajectory output delivering only 60% of the commanded motion | sim: ~30 ms / ~34 ms (velocity mode) |
 | V5 | `v5` | 2026-10-15 | `TOUCH_COMMAND_FILTER` low-pass on the command + `TOUCH_KALMAN` filter on the stylus + 500 Hz `joint_states` robot pose + 500 Hz command chain + `joint_velocity_limiter` | Velocity mode vibrated on the real arm: Servo does not smooth its velocity output, so stylus tremor/jitter (amplified by the feedforward), the Touch's 4 ms update steps and the 20 Hz TF pose all reached the joints | 58 ms / 72 ms (real arm, by hand, 500 Hz + limiter, no faults); earlier V5 tests and the V4 velocity benchmarks faulted the robot (wrist current chatter) |
 | V6 | `v6` | 2026-10-19 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs; RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point, the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck. RCM: laparoscopic-style work, the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots. Real arm RCM runs in `logs/V6/` (BasicInRCM, ScalingInRCM, ExitingRCM): near the point the arm has to accelerate hard for small tip moves |
-| V7 | (not tagged yet) | 2026-10-19 | RCM sideways scaling: a sideways stylus move moves tool0 by the same amount at every depth (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5, to 130 mm), replacing V6's (depth / 10 mm)² fade; pivot continuous through 0 mm; tip can retract 5 mm past the point (`TOUCH_RCM_RETRACT_DEPTH`). **Part 2:** haptic cues on the Touch (`TOUCH_HAPTIC_*`): RCM depth walls, a click at the RCM point, a tap on RCM on / off, a push out of singularities; new Touch driver `touch_driver.launch.py` (`touch_server` + `touch_bridge`) replacing `omni_state` | V6 real arm runs: near the RCM point the arm moves r(d) / d times the tip, so it accelerated hugely for small moves; fades tried first swung the arm when moving in and out. Part 2: Feel the limits and mode changes instead of watching for them; the singularity guard silently removed motion into a singularity, now the hand is told which way is out | Offline: tool0 0.50 mm per mm of stylus at 0-130 mm; mock arm: retract to −5.2 mm and exit OK. Final code not run on the real arm yet. Part 2: motion unchanged (forces only); `omni_state` never rendered any force (OpenHaptics renders none in a ROS process), the new driver does (1 N lift test); real-Touch tuning in progress |
+| V7 | `v7` | 2026-10-19 – 10-26 | RCM sideways scaling: a sideways stylus move moves tool0 by the same amount at every depth (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5, to 130 mm), replacing V6's (depth / 10 mm)² fade; pivot continuous through 0 mm; tip can retract 5 mm past the point; RCM tool = NDI wand (hand-eye calibration). **Part 2:** haptic cues on the Touch (`TOUCH_HAPTIC_*`) through a new driver (`touch_server` + `touch_bridge`) replacing `omni_state`. **Tooling:** NDI Vega tracking of every run, recording refused without the tracker, replays with RCM chords / `--rcm`, UR16e hard-coded. Overview: section *V7 — summary of what changed from V6* | V6 real arm runs: near the RCM point the arm moved r(d) / d times the tip, so it accelerated hugely for small moves; fades tried first swung the arm when moving in and out. Part 2: feel limits and mode changes instead of watching for them. NDI: measure the RCM error independently of the robot's kinematics | Offline: tool0 0.50 mm per mm of stylus at 0-130 mm. Real arm, 14 NDI replays (2026-10-26): NDI RCM error 0.4-2.9 mm rms, teleop's own 0.05-0.23 mm (gap = UR16e factory kinematics, `logs/V7/REPLAYS_2026-10-26.md`). Haptics: OpenHaptics renders no force in a ROS process (fixed by the new driver); this Touch's force output is faulty |
+| V8 | `v8` | 2026-10-27 – 10-30 | GREY-hold macro/micro switch; numbered tool library switched from the launch terminal; smoother `speedj` on the robot (`SERVO_SMOOTH_SPEEDJ`); micro module made to work (startup deadlock, lost handshake, rad/deg motor maths, stylus position control, responsive damping); tool tip from one NDI ball, micro module = tool 2. Overview: section *V8 — summary of what changed from V7* | One stylus for arm and micro; tools change with the quick-change coupling; the arm buzzed / ground on accelerations; the Touch never moved the micro module | Sim / fakes: micro tip step settles in 69 ms (was 1.1 s), tracks within ~0.1 mm; speedj script loads (real-arm effect not yet measured). Real: tool switching; micro tip at (−8.7, 17.0, 436.0) mm ±1.5 mm |
 
 **V7 SimpleHolder replays (2026-10-26, with NDI):** see `logs/V7/REPLAYS_2026-10-26.md`:
 results, original → replay map, and why the NDI error is mostly factory-kinematics error.
@@ -1082,9 +1083,60 @@ about a fixed point uses much more arm motion than free teleop and reaches wrist
 singularities sooner, so choose the port position with that in mind.
 
 
+## V7 — summary of what changed from V6
+
+**Code:** tag `v7` (commit `a43f58e`; builds on `v6`). Dates 2026-10-19 to 2026-10-26.
+The sections below have the full detail, measurements and reasoning; this is the overview.
+
+### 1. RCM motion (part 1)
+
+| Change | Why | Detail |
+|---|---|---|
+| Sideways stylus motion moves tool0 by the same amount at every depth, 0-130 mm (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5); this replaces V6's (depth / 10 mm)² fade | In V6 the arm moved r(d) / d times the tip (~30× at 10 mm deep), so it accelerated hugely for small moves near the RCM point (`V6/BasicInRCM`, `ScalingInRCM`, `ExitingRCM`). Fades were tried first and swung the arm when going in and out | [sideways scaling](#the-sideways-scaling-function), [what was tried](#how-it-was-chosen-what-was-tried-first) |
+| The pivot is continuous through 0 mm | A separate branch for targets at or behind the point snapped tool0 back (1-5 m/s jumps on the arm) | [continuous through 0 mm](#continuous-through-0-mm) |
+| The tip can retract 5 mm past the point (`TOUCH_RCM_RETRACT_DEPTH`) | So the tool can leave the port before RCM mode is switched off | [retract](#retract-past-the-point) |
+| RCM tool = the NDI wand: `TOUCH_RCM_SHAFT_*` from a hand-eye calibration (2026-10-22, redone 2026-10-26 after re-seating the wand) | The placeholder tip was 53 mm short, so the RCM would pivot inside the shaft | [2026-10-22](#tool-calibration-for-the-ndi-wand-2026-10-22), [2026-10-26](#rcm-tool-recalibrated-wand-re-seated-in-the-holder-2026-10-26) |
+
+### 2. Haptic cues on the Touch (part 2)
+
+| Change | Why | Detail |
+|---|---|---|
+| New Touch driver, `touch_driver.launch.py` = `touch_server` (OpenHaptics only) + `touch_bridge` (ROS only), over UDP; replaces `omni_common`'s `omni_state` | OpenHaptics silently renders no force in any process that loads liblttng-ust / libnuma, which every ROS 2 node does. Position and buttons were unaffected, which is why teleop always worked | [no force in ROS](#no-force-on-the-real-touch-openhaptics-renders-nothing-in-a-ros-process) |
+| Cues (`TOUCH_HAPTIC_*`, `ls_thesis/haptics.py`): a tap on RCM on / off, a click crossing the RCM point, a click at the depth limits, and a singularity push from the guard's gradient | So the operator can feel limits and mode changes instead of watching for them; V6's singularity guard silently removed motion | [design](#what-you-feel-while-white-is-held) |
+| Iterated on the real Touch: driver damping removed; walls and detent rendered in the Touch's own 1 kHz loop; detent spring → click; spring walls → limit click; strengths cut to 0.002-0.01 N | Shaking and "violent" forces in successive runs | [first run](#first-real-touch-run-too-strong-and-shaking-driver-damping) onwards |
+| **Status:** this Touch (SN 22129000559) has faulty force output: any command above ~0.0008 N gives the same fixed kick (staircase test). Cues are on (`TOUCH_HAPTICS = True`) at the tested-range strengths at the user's request; spring walls are off | Hardware, not code. Vendor check: TouchCheckup's Forces page | [staircase test](#run-logsnew_run-1649-clicks-and-walls-feel-maxed-out-and-vibrate), [HAPTICS_HANDOFF.md](HAPTICS_HANDOFF.md) |
+
+The robot's motion is unchanged by part 2: it only adds forces on the stylus.
+
+### 3. Measurement and run tooling
+
+| Change | Why | Detail |
+|---|---|---|
+| NDI Polaris Vega tracking (`src/ndi_tracking`, standalone): the recorder publishes its state latched on `/trajectory_recorder/recording`, and the tracker records `NDI_*` files into the same run folder and latches its own RCM point with the teleop's | An independent measurement of the RCM error, not from the robot's kinematics | [NDI hook](#ndi-tracking-hook-2026-10-20-alongside-v7) |
+| Recording refused unless the NDI tracker is following (`LOG_REQUIRE_NDI`); a dropout mid-run and a missing `NDI_PATH.csv` at stop are logged as errors; `META.yaml` `ndi:` | On 2026-10-22 the tracker stopped unnoticed and 2 originals + 12 replays had no NDI data | [NDI guard](#recording-refused-without-the-ndi-tracker-2026-10-26) |
+| `stylus_replay.py` replays the RCM chord (WHITE + GREY), `--rcm` for runs recorded with RCM already on, back-to-back RCM replays, and waits for the tracker | The SimpleHolder runs are RCM runs; before, a replay moved the tool freely | [replays enter RCM](#replays-enter-rcm-mode-2026-10-22) |
+| UR16e hard-coded (`ur5e_teleop.launch.py` default, `launch_system.sh`); the default kinematics are UR16e factory values, not the old UR5e calibration file | The lab arm is a UR16e; `launch_system.sh` still passed `ur5e` | [UR16e](#robot-type-hard-coded-to-ur16e-2026-10-26) |
+| `plot_paths.py`: mouse-wheel zoom on the 3D path | Close-up checks of small deviations | [NDI hook](#ndi-tracking-hook-2026-10-20-alongside-v7) |
+| `scripts/rcm_offset_check.py`: teleop vs NDI RCM points and pivots in base_link | To find where the NDI-measured RCM error comes from | `logs/V7/REPLAYS_2026-10-26.md` |
+
+### V7 runs (`logs/V7/`)
+
+| Runs | Date | Notes |
+|---|---|---|
+| `WeirdJumpsRCM`, `WeirdVibrationSounds` | 2026-10-19 | Before NDI. The jumps came from `ros2 bag record` starting with each recording, not from the RCM mapping ([jumps](#jumps-in-v7weirdjumpsrcm-recording-start-not-the-mapping)) |
+| `FastCheckingRCM`, `SlowCheckingRCM`, `RCMOnly`, `WholeRunDrinkBottle` `SimpleHolder` (originals) | 2026-10-22 | Only Fast and WholeRun have NDI data; wand seat / calibration of 2026-10-22 |
+| 14 replays of those (`_Replay1-5` / `_Replay1-3`) | 2026-10-26 | All with NDI. NDI RCM error 0.4-2.9 mm rms, while the teleop holds its own point to 0.05-0.23 mm: the gap is mostly UR16e **factory kinematics** error. See `logs/V7/REPLAYS_2026-10-26.md` |
+
+### Open / not done in V7
+
+- The arm's own kinematic calibration is not loaded (`ur_calibration` failed to connect); this is the likely fix for most of the NDI-measured RCM error.
+- The bag recorder still starts with each recording (the cause of the `WeirdJumpsRCM` jumps). Planned: start it once, paused.
+- "Not run on the real arm yet" in parts 1 and 2 was written on 2026-10-19. Since then the 2026-10-22 / 26 SimpleHolder runs have used the V7 RCM code, but the retract past the point has had no dedicated real-arm test.
+- The haptics need a working Touch unit to tune.
+
 ## V7 (part 1) — RCM: sideways scaling and entry / exit
 
-**Code:** not committed or tagged yet (in progress). Builds on `v6`. Touch node only:
+**Code:** tag `v7`. Builds on `v6`. Touch node only:
 `RcmTool.lever`, `pivot_slope`, `pivot_fade` and `target_shaft` in
 `ls_thesis/ur5e_common.py`, `rcm_target` / `engage` in `src/ur5e_touch_teleop.py`,
 and the settings below. Free-motion teleop is unchanged.
@@ -1323,7 +1375,7 @@ left RCM at the start pose and latched the same point.
 
 ## V7 (part 2) — Haptic cues on the Touch
 
-**Code:** not committed or tagged yet, part of V7 (with part 1). Current state and next steps:
+**Code:** tag `v7`, part of V7 (with part 1). Current state and next steps:
 [HAPTICS_HANDOFF.md](HAPTICS_HANDOFF.md); this section is the history, in order (the first
 design below was changed several times, see the later subsections). New
 `ls_thesis/haptics.py`; `SingularityGuard.twist_gradient` in `ls_thesis/ur5e_common.py`;
@@ -1665,3 +1717,260 @@ NDI data. Results, the original-to-replay map and the analysis are in
 the UR16e factory kinematics (TF vs the controller's calibrated tool0: 0.1-0.25°). Loading
 the arm's own calibration is the untested next step; `ur_calibration` failed to connect.
 Analysis script: `scripts/rcm_offset_check.py`.
+
+## V8 — summary of what changed from V7
+
+**Code:** tag `v8` (builds on `v7`). Dates 2026-10-27 to 2026-10-30. The sections below have the full detail, measurements and reasoning; this is the overview.
+
+| Change | Why | Detail |
+|---|---|---|
+| Hold GREY 1 s (no WHITE) to switch the stylus between the arm and the micro module; WHITE is the deadman for both; `launch_system.sh ur5e-touch --with-micro` | One stylus for both modules, without one GREY press both recording and moving the micro | [macro / micro switch](#macro--micro-switch-on-the-grey-button-2026-10-27) |
+| Numbered tool library (`config/tools.yaml`, `tool_library.py`); type a number in the launch terminal to switch; refused in RCM, with WHITE held or while the arm moves; tool logged in `META.yaml` | Several tools on the quick-change coupling, each with its own calibration; editing settings and restarting per swap was slow and error-prone | [tool library](#tool-library-numbered-calibrated-tools-switched-from-the-terminal-2026-10-30) |
+| The robot runs a copy of the driver's URScript whose `speedj` ramps over each 2 ms step (`SERVO_SMOOTH_SPEEDJ`) | Buzz / grind: 0.3-1.0 A of 120-250 Hz current on the big joints while accelerating, absent from the command | [buzz](#buzz--grind-speedj-ramps-over-each-2-ms-step-2026-10-30) |
+| Micro module: transient-local states + 1 Hz republish, robust Arduino handshake (`Serial_Control` repo), motor command = rest + tendon model, rounding, joint limits from the motor limits | The Touch never moved it (startup deadlock); then the motors moved ~1/1000 of what they should | [micro module](#micro-module-startup-deadlock-lost-handshake-and-motors-barely-moving-2026-10-30) |
+| Micro module: stylus position control (0.05×, task weighting), damping and orientation lag cut | Position barely moved the tip; the user wants a responsive Touch | [position](#micro-module-stylus-position-control-and-a-responsive-touch-2026-10-30) |
+| `scripts/tip_ball_calibration.py`: tool tip in tool0 from one NDI ball, no wand; micro module = tool 2 (tip (−8.7, 17.0, 436.0) mm, 200 mm shaft) | The micro module has no wand; `robot-tcp --tip-ball` needs one | [tip ball](#tool-tip-from-a-single-marker-ball-no-wand-scriptstip_ball_calibrationpy-2026-10-30) |
+
+None of these has a dedicated real-arm benchmark yet: the speedj script, the micro fixes and position control are verified in simulation / with fakes; the tool switch and the tip-ball calibration ran on the real setup.
+
+### Open / not done in V8
+
+- `serial_bridge.py`'s handshake / republish fix lives in the separate `Serial_Control` repo.
+- No real-arm measurement yet of the `speedj` script's effect on the buzz, or of the micro module's direction, frame and feel.
+- The micro tip (tool 2) is only right with the module straight, and is ±1.5 mm (factory kinematics).
+
+## Macro / micro switch on the GREY button (2026-10-27)
+
+**What:** holding GREY for 1 s (`TOUCH_MODE_SWITCH_HOLD_TIME`) without touching WHITE
+switches the stylus between the arm and the micro-manipulator. `ur5e_touch_teleop`
+owns the mode and publishes it latched on `/teleop_mode` (`macro` at start).
+`micro_module_control` subscribes to it. WHITE is now the deadman for **both**
+modules (the micro node used GREY). Each node ignores WHITE while the other module is
+active: no engage, no double-click scale change, no RCM chord. A GREY click shorter
+than 1 s still starts/stops recording, but on **release** now, not press. WHITE
+touched at any point during a GREY press cancels both the click and the switch, so
+WHITE + GREY stays only the RCM chord. `launch_system.sh ur5e-touch --with-micro`
+starts the serial bridge and micro node alongside the arm teleop.
+
+**Why:** both nodes read `/phantom/button`, so with both running a GREY press would
+toggle recording and drive the micro module at the same time, and WHITE would move
+the arm while you were working the micro. The micro deadman had to move off GREY,
+because holding GREY to drive it would switch back to the arm after 1 s. The switch
+fires while GREY is still held, so you know it took. Recording has to wait for
+release, because only then is it clear the press was a click and not a hold.
+Without the arm teleop running, `/teleop_mode` is never published and the micro
+node stays active, so the micro-only `touch` mode still works.
+
+**Tests:** private ROS domain, `ur5e_touch_teleop` (`setup_servo:=false`) +
+`micro_module_control`, fake stylus/button/motor topics. A 0.4 s GREY click does not
+switch. A GREY hold with WHITE pressed partway does not switch. 1.2 s holds go
+macro → micro → macro on both nodes. WHITE in macro mode → 0 micro commands. WHITE in
+micro mode → 37 micro commands in 0.6 s. Not yet tested on the real arm, Touch or
+micro module.
+
+**Also:** removed a stray `ok` typed at the start of `src/touch_bridge.cpp` (an
+editor slip, 17:27) that broke the build.
+
+## Tool library: numbered, calibrated tools switched from the terminal (2026-10-30)
+
+**What:** the RCM tool now comes from a numbered library in `config/tools.yaml` (no longer
+the single `TOUCH_RCM_SHAFT_*` tool in `teleop_settings.py`). Each entry has a name, the
+tip and shaft direction in tool0, the shaft length, and the calibration file and date it
+came from. `ls_thesis/tools.py` loads it. `ros2 run ls_thesis tool_library.py
+list|add|remove|default` manages it. `add` takes the tip and direction from an ndi_tracking
+robot-tcp JSON (`--from`) or as numbers, plus a measured `--length`. The teleop starts on
+the library's `default` tool. Setting its `tool` parameter switches tools (0 = default).
+In `launch_system.sh ur5e-touch` the main terminal now runs `tool_library.py console`
+while the logs are tailed in the background: type a number + Enter to switch, `l` to list.
+A switch is **refused**, with the reason printed, in RCM mode, while WHITE drives the arm,
+or unless every joint has stayed under `TOOL_SWITCH_MAX_JOINT_SPEED` (0.01 rad/s) for
+`TOOL_SWITCH_STILL_TIME` (0.5 s). The node also refuses when there are no fresh
+`/joint_states`, or the message has no velocities. The library file is re-read on every
+switch, so a tool added while the stack runs can be selected without a restart. The active
+tool is published latched on `~/active_tool`, and the recorder writes it to META.yaml as
+`tool` (`at_start` + any `changes` during the run). Tool 1 is the NDI wand 8700340 from
+`robot_tcp_handeye_2026-10-26.json` with the 158.6 mm shaft: the same shaft start as the
+old settings to 0.01 mm, so behaviour is unchanged. `TOUCH_RCM_SHAFT_*` is only used if
+the library is empty or missing.
+
+**Why:** several tools are going on the quick-change coupling, each with its own
+calibration. Editing settings and restarting the stack for every swap is slow, and it is
+easy to run with the wrong tool. A wrong tool puts the RCM point and the insertion depth
+in the wrong place. The switch is a parameter so it gets a success/failure reply with no
+new interface types, and it also works from any terminal (`ros2 param set
+/ur5e_touch_teleop tool N`). It changes only the tool model, not the robot pose, so it is
+only safe while nothing depends on the old model: not in RCM mode (the latched point and
+the depth limits belong to the old tool), and not while WHITE or anything else is moving
+the arm. The recorder logs the tool, because the RCM settings stored in META.yaml no
+longer describe the tool actually used.
+
+**Tests:** private ROS domain 77, `ur5e_touch_teleop` alone (`setup_servo:=false`, haptics
+off) on a scratch copy of the library with a test tool 2 added, fake `/joint_states`,
+stylus and button topics, static TF. All 12 checks passed: startup on tool 1. Refused with
+no joint states, while moving, 0.3 s after stopping, with WHITE held, in RCM mode, and for
+an unknown number. Accepted when still for 0.5 s, after leaving RCM, and 0 → default.
+Console: piped numbers switch tools and print refusals and the active tool. Not yet tested
+on the real arm, or through `launch_system.sh` end to end.
+
+## Buzz / grind: speedj ramps over each 2 ms step (2026-10-30)
+
+**What:** with `SERVO_SMOOTH_SPEEDJ = True` (default), `ur5e_teleop.launch.py` passes
+`launch/ur_rsp_smooth_speedj.launch.py` as the driver's `description_launchfile`. That
+file is a copy of `ur_robot_driver`'s `ur_rsp.launch.py` (driver 32bb4c1); the only
+change is `script_filename`, which now points to `config/external_control_smooth_speedj.urscript`.
+That is ur_client_library 2.15.2's `external_control.urscript` with one change, in
+`speedThread`: the stock `speedj(qd, 40.0, steptime)` becomes `speedj(qd, qdd, steptime)`
+with `qdd = max |qd - last qd| / steptime`, clamped to 1-40 rad/s². This is the same
+thing the driver's own spline code (`jointSplineStep`) does. Nothing in the driver
+package or `/opt/ros` is changed. `False` restores the stock script.
+
+**Why:** the occasional buzzing / grinding sound. Spectra of the V7 rosbags
+(`WeirdVibrationSounds`, `FastCheckingRCMSimpleHolder`, `SlowCheckingRCMSimpleHolder`)
+at each stage of the pipeline:
+- Joint current (`/joint_states` effort) carried 0.3-1.0 A RMS at 120-250 Hz on the
+  base / shoulder / elbow in the buzzing and fast runs (peaks at 228-247 Hz and
+  119-134 Hz), against 0.04 A in the slow run.
+- The command at every stage had almost nothing there: twist, Servo output and
+  limiter output were all ≤ 0.0003 rad/s at 150-250 Hz.
+- The buzz followed command step size (r = 0.55-0.65) and joint acceleration
+  (0.48-0.53), not speed (−0.06 to 0.28).
+- Command timing was not the cause. In the 10-22 runs each command lands
+  0.4 ms after the robot tick, and missing / doubled cycles did not correlate with
+  the buzz (r −0.18 to −0.27).
+
+What does explain it: the stock speed thread reaches each new 2 ms set point at
+40 rad/s², so a step of a × 2 ms is done in a fraction of the cycle. That is a torque
+pulse every cycle, scaled by how hard the arm accelerates, and the heavy UR16e joints
+ring with it. Ramping over the whole step makes the speed piecewise linear instead of a
+staircase. The cost is about 1 ms of extra lag on average. The limiter's caps
+(≤ 25 rad/s²) keep `qdd` under the stock 40.
+
+**Tests:** both launch files parse. On a private domain, `ur_rsp_smooth_speedj.launch.py`
+publishes a `/robot_description` whose `script_filename` is the installed
+`ls_thesis/config/external_control_smooth_speedj.urscript`. **Not yet run on the real
+arm.** URScript can only be checked by the controller. If External Control stops with a
+script error on the pendant, set `SERVO_SMOOTH_SPEEDJ = False`. To check the effect,
+record a run with fast moves and compare the 150-250 Hz joint current against the runs
+above (analysis scripts were scratch-only; numbers above).
+
+## Micro module: startup deadlock, lost handshake, and motors barely moving (2026-10-30)
+
+**Symptoms (first real run of `ur5e-touch --with-micro`):** (1) the Touch never moved the
+micro module; (2) earlier, in keyboard mode, the Arduino ignored every command; (3) once
+unstuck by hand, it moved but the motor states hardly changed.
+
+**Causes and changes:**
+1. **Deadlock at startup.** After the handshake the Arduino reports its angles only in
+   reply to a command. `serial_bridge.py` published the one handshake state, and the
+   launcher started `micro_module_control` ~2 s later. That node subscribed with volatile
+   QoS (the bridge publishes transient local), so it never got the state, and it sends no
+   command until it has one. Fixed on both sides. `micro_module_control` now subscribes to
+   the states transient local. The bridge republishes the last state at 1 Hz with the
+   limits.
+2. **Handshake lost (`Serial_Control/ros2_bridge/serial_bridge.py`).** Opening the port
+   resets the Mega. The bridge answered strings left in the buffer from before the reset,
+   so its "OK" arrived during the bootloader and was lost. The firmware then waits for
+   "OK" forever and treats every command as a failed "OK". The bridge now waits 2 s after
+   opening, clears the input, and handshakes. A state arriving > 0.5 s after the last
+   command must be the startup string again (lost OK or a reset), so it re-sends "OK".
+   The firmware ignores a stray "OK" outside the handshake (not 12 digits).
+3. **Motors moved ~1/1000 of what they should (`micro_module_control.cpp`).** The loop
+   added each joint delta (rad) straight onto the motor commands (degrees). Lachlan's
+   original (`f3df5f3`) added the *absolute* joint → motor mapping every cycle instead,
+   which would run away. Now: command = motor angles at startup +
+   `GetMotorPositionsFromJointPositions(joints)` (the tendon model). Each joint delta is
+   applied only if all four motors stay inside their limits.
+   - Commands are rounded to whole degrees, not truncated (89.95 went out as 89).
+   - The damped inverse's joint limits were ±0.05 / ±0.025 rad. The tendon model puts
+     that at about ±1° of motor travel (~20° of motor per radian), so the damping held
+     every motor within a degree of rest. The limits are now found at startup by
+     stepping each joint until a motor would hit its limit, and logged.
+   - The 60 Hz prints of joint positions, limits, lambda and D are removed (they flooded
+     the launcher terminal).
+
+**Tests:** private ROS domain with a pseudo-terminal fake Arduino. It behaves like
+`motor_control_absolute.ino`, but drops the first "OK". Stale startup strings were left
+buffered before the bridge opened the port.
+- The bridge re-sent OK after 1 s and the handshake completed.
+- `micro_module_control` started 4 s after the handshake still got the state (the
+  deadlock case).
+- With a fake Touch in micro mode holding WHITE, ±30° pen tilts drove the motors over
+  93-97 / 88-93 / 82-87 / 84-93°, against ≤ 1° before.
+- Stylus *position* still barely moves the tip. The ×10 position target added in the
+  week-7 commit is metres beyond a 4 mm module's reach, and the damping swamps the
+  position rows. Lachlan's original drove orientation only.
+
+Not yet run on the real micro module. Motion direction and gain are unverified.
+
+## Micro module: stylus position control, and a responsive Touch (2026-10-30)
+
+**What (`micro_module_control.cpp`):**
+- **Position:** the tip target is origin + `MICRO_POSITION_SCALE` (0.05) × the stylus
+  movement, turned into the manipulator frame by the same 45° rotation as the stylus
+  orientation. It was 10× the stylus, unrotated: a 40 mm stroke asked for a target
+  0.4 m away from a 4 mm module.
+- **Task weighting:** position rows of the Jacobian and the position error are divided
+  by `POSITION_WEIGHT_LENGTH` (5 mm) before the inverse, so position (m) weighs about as
+  much as orientation (rad). Unweighted, the position rows are ~1/200 of the angle rows
+  and the damping swamped them. The per-cycle cap now applies to the weighted step.
+- **Damping:** the damped least squares had an extra unscaled `D²`:
+  `JᵀJ + D² + λ²D²` with λ = 1. Now `JᵀJ + λ²D²` with `LEAST_SQUARES_DAMPING_FACTOR`
+  0.3. D still rises from 1 to 2 at a joint limit.
+- **Orientation lag:** `MANIPULATOR_ROTATION_SCALE_FACTOR` is a per-cycle slerp share
+  toward 1:1 pen tilt, i.e. a lag, not a scale. 0.02 → 0.2: time constant ~0.8 s → ~80 ms.
+- A throttled log line (2 Hz) shows the tip target and the tip offset in mm while engaged.
+
+**Why:** stylus position barely moved the tip, and the user wants the Touch to feel
+responsive.
+
+**Tests:** private ROS domain, fake Arduino + `serial_bridge.py` + fake Touch in micro
+mode.
+- During a ±40 mm stylus circle, the tip (tendon model) stayed within ~0.1 mm of its
+  2-3 mm target. The motors swept 92-97 / 88-91 / 82-86 / 88-94°.
+- 30 mm stylus step: first motor change 29 ms, at the final angles in 69 ms (1.1 s
+  before the damping change).
+- 20° pen-tilt step: first change 39 ms, settled 0.36 s.
+
+Real servo speed and the 9600-baud link (~13 ms per command) come on top. Not yet run
+on the real module, so direction, frame and feel are unverified. Tilting while holding
+the stylus still asks the 4-DOF module for both a rotation and a fixed tip, so it
+compromises.
+
+## Tool tip from a single marker ball, no wand: `scripts/tip_ball_calibration.py` (2026-10-30)
+
+**What:** calibrates a tool tip in tool0 from one passive marker ball on the tip, for the
+micro module, which has no wand. You freedrive the arm with the ball in view. Vega frames
+with exactly one stray marker give the ball's camera position. The point fixed in tool0
+and the base → camera pose are fitted together from the robot kinematics alone
+(`ndi_tracking.robot_tcp.fit_robot_point`), best over an NDI delay sweep (−50 to
++100 ms), with outliers (> 3× the median residual) dropped once.
+- The tip is the ball centre moved `--ball-radius` back toward the holder.
+- The direction runs from `(0, 0, --holder-z)` on tool0 z to the tip.
+- Output goes to `config/calibrations/<name>_<date>.json`, with `tip_tool0_mm` /
+  `direction_tool0` as `tool_library.py add --from` expects.
+- `src/ndi_tracking` is used as a library and not changed.
+
+**Why:** `ndi_tracking robot-tcp --tip-ball` needs the wand on the tool, both to pick
+the ball out among the strays and for its hand-eye check. The micro module has no wand.
+
+**Tests:** synthetic. Tip (3, −8, 262) mm, base → camera pose, 0.25 mm marker noise,
+30 ms NDI delay, 20 sightings 30 mm off. The fit gave (2.98, −8.04, 261.99): 0.04 mm
+error, delay 30 ms, all 20 outliers dropped. Not yet run on the robot.
+
+**First real run (micro module tip ball, 14:40,
+`config/calibrations/micro_tip_2026-10-30_144004.json`):** ball centre in tool0
+(−9.15, 15.93, 436.25) mm, 2363 single-stray frames, swing 136°, residual 1.88 mm rms.
+The script then gained `--file` re-fits, and `--holder-z` became optional (default
+tool0 origin → ball). Re-analysis of the raw `.npz`:
+- TF updated at only ~19 Hz (52 ms steps; External Control was not running). With
+  robot poses slerp-interpolated, the result is unchanged: (−9.15, 15.94, 436.41) mm,
+  residual 1.53 mm.
+- The residual does not grow with speed (still: 1.48 mm, > 100 mm/s: 1.39 mm), so it
+  is not timing. It is pose-dependent.
+- A gravity-sag model of the module explains only 16 % of it.
+- The two halves of the run give tips 1.6 mm apart, mostly along z, so treat the offset
+  as ±1.5 mm.
+
+Most likely cause: the UR16e **factory kinematics**. The same 0.1-0.25° TF error seen
+in the 10-26 replays comes to ~0.8-1.9 mm at a 436 mm lever. Loading the arm's own
+kinematic calibration (`ur_calibration`, still not working) should tighten it.

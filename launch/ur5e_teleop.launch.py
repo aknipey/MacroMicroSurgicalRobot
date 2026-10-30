@@ -51,7 +51,8 @@ from ament_index_python.packages import get_package_prefix, get_package_share_di
 from moveit_configs_utils import MoveItConfigsBuilder
 
 from ls_thesis.teleop_settings import (
-    SERVO_LOOKAHEAD, SERVO_OUTPUT, SERVO_VELOCITY_RATE, TOUCH_STARTUP_DELAY, VELOCITY_LIMITER,
+    SERVO_LOOKAHEAD, SERVO_OUTPUT, SERVO_SMOOTH_SPEEDJ, SERVO_VELOCITY_RATE, TOUCH_STARTUP_DELAY,
+    VELOCITY_LIMITER,
 )
 from ls_thesis.ur5e_common import (
     EMULATOR_CONTROLLER, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC, LIMITER_INPUT_TOPIC, LIMITER_NODE,
@@ -195,6 +196,11 @@ def generate_launch_description():
                 "'", EMULATOR_CONTROLLER, "' if '", LaunchConfiguration("emulate_ur"), "' == 'true' else '",
                 VELOCITY_CONTROLLER if SERVO_OUTPUT == "velocity" else TELEOP_CONTROLLER, "'"]),
             "launch_rviz": "false",
+            # Same as the driver's ur_rsp.launch.py but with our robot script (see
+            # SERVO_SMOOTH_SPEEDJ); the stock one otherwise
+            "description_launchfile": PathJoinSubstitution([
+                FindPackageShare("ls_thesis" if SERVO_SMOOTH_SPEEDJ else "ur_robot_driver"), "launch",
+                "ur_rsp_smooth_speedj.launch.py" if SERVO_SMOOTH_SPEEDJ else "ur_rsp.launch.py"]),
         }.items(),
     )
 

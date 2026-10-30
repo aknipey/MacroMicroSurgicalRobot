@@ -19,7 +19,10 @@
 #   ur5e-keyboard  UR5e + MoveIt Servo + trajectory recorder; this terminal
 #               then jogs the arm from the keyboard.
 #   ur5e-touch  UR5e + MoveIt Servo + trajectory recorder + Touch driver;
-#               hold the stylus WHITE button to drive the arm.
+#               hold the stylus WHITE button to drive the arm. With
+#               --with-micro also the micro module: hold GREY 1 s to switch.
+#               Type a tool number + Enter in this terminal to switch tools
+#               (config/tools.yaml; not in RCM mode, robot stationary).
 #   ur5e        UR5e driver + legacy ur5e_control (ROS 1 port - needs a
 #               Cartesian controller the ROS 2 UR driver doesn't have).
 #   full        Full system: UR5e driver + Touch driver + serial bridge +
@@ -36,6 +39,9 @@
 #   --baud=RATE              Serial baud rate for the Arduino (default: 9600)
 #   --mock                   Simulate the UR5e (no robot needed) in the
 #                            'ur5e-keyboard' / 'ur5e-touch' modes.
+#   --with-micro             'ur5e-touch' mode: also start the serial bridge +
+#                            micro_module_control. Hold GREY 1 s (no WHITE)
+#                            to switch the stylus between arm and micro module.
 #   --with-rviz              Also start RViz + robot_state_publisher for
 #                            'touch' / 'keyboard' / 'ur5e' / 'full' modes.
 #   --no-gui                 Use joint_state_publisher instead of the GUI
@@ -73,6 +79,7 @@ CALIBRATION_FILE=""
 ARDUINO_PORT="/dev/ttyACM0"
 BAUD="9600"
 WITH_RVIZ="false"
+WITH_MICRO="false"
 GUI="true"
 DRY_RUN="false"
 MOCK="false"
@@ -85,6 +92,7 @@ for arg in "$@"; do
     --baud=*) BAUD="${arg#*=}" ;;
     --distro=*) ROS_DISTRO_ARG="${arg#*=}" ;;
     --with-rviz) WITH_RVIZ="true" ;;
+    --with-micro) WITH_MICRO="true" ;;
     --no-gui) GUI="false" ;;
     --dry-run) DRY_RUN="true" ;;
     --mock) MOCK="true" ;;
@@ -101,7 +109,7 @@ KIN_ARG=()
 [ -n "$CALIBRATION_FILE" ] && KIN_ARG=(kinematics_params_file:="$CALIBRATION_FILE")
 
 usage() {
-  sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 if [ "$MODE" = "help" ] || [ "$MODE" = "-h" ] || [ "$MODE" = "--help" ]; then
@@ -331,6 +339,15 @@ case "$MODE" in
       input:="$INPUT" launch_rviz:="$WITH_RVIZ"
     wait_for_service /servo_node/switch_command_type 90
 
+    if [ "$WITH_MICRO" = "true" ] && [ "$MODE" = "ur5e-touch" ]; then
+      check_serial_port "$ARDUINO_PORT"
+      run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
+        --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
+      wait_for_topic /micro_module_motor_states 15
+      run_bg micro_module_control ros2 run ls_thesis micro_module_control
+      echo ">> Stylus starts on the arm (MACRO). Hold GREY 1 s without WHITE to switch to MICRO and back."
+    fi
+
     echo ">> Move to a safe start pose any time with:"
     echo "     ros2 run ls_thesis trajectory_player.py home"
     echo ">> Replay the last recording with:"
@@ -381,4 +398,12 @@ fi
 echo
 echo ">> System is up (mode: ${MODE}). Press Ctrl+C to stop everything."
 echo ">> Tailing logs from ${LOG_DIR} - Ctrl+C here stops all nodes."
-tail -n +1 -f "${LOG_DIR}"/*.log
+if [ "$MODE" = "ur5e-touch" ]; then
+  # Logs in the background; this terminal reads tool numbers (tool library) instead
+  tail -n +1 -f "${LOG_DIR}"/*.log &
+  PIDS+=("$!")
+  ros2 run ls_thesis tool_library.py console || true
+  wait
+else
+  tail -n +1 -f "${LOG_DIR}"/*.log
+fi

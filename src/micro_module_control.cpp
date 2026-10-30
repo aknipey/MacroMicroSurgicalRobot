@@ -28,10 +28,22 @@
 // Touch position coordinates are output in millimetres, must convert to metres
 const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
 
-// Factor by which Touch rotational movements are scaled before being sent to the manipulator
-const double MANIPULATOR_ROTATION_SCALE_FACTOR = 0.02;
+// Share of the way from the tip's orientation to the pen's (1:1 tilt) taken each 60 Hz
+// cycle: a first-order lag, not a scale. 0.02 was a ~0.8 s time constant; 0.2 is ~80 ms.
+const double MANIPULATOR_ROTATION_SCALE_FACTOR = 0.2;
 
-// Maximum joint movement distance for a single update, in metres
+// Tip motion per unit of stylus motion. The module is a few millimetres long, so the
+// stylus is scaled down: 40 mm of hand motion moves the tip 2 mm. (It was 10x up: a
+// 40 mm stroke asked for a tip target 0.4 m away.)
+const double MICRO_POSITION_SCALE = 0.05;
+
+// Position errors (m) are divided by this length before the inverse kinematics, so they
+// weigh about as much as orientation errors (rad): the tip's lever arms are millimetres,
+// so unweighted the position rows of the Jacobian are ~1/200 of the angle rows and the
+// damping swamped them. ~ joint-to-tip lever.
+const double POSITION_WEIGHT_LENGTH = 0.005;
+
+// Maximum (weighted) pose step for a single update: rad, or POSITION_WEIGHT_LENGTH x this in metres
 const double JOINT_UPDATE_MAX_VELOCITY = 0.1;
 
 // Maximum error in end-effector pose, in metres
@@ -76,7 +88,10 @@ const double DISTAL_JOINT_SEPARATION = 0.001;
 // Length of a distal sub-module, in metres
 const double DISTAL_LENGTH = 0.00288;
 
-const double LEAST_SQUARES_DAMPING_FACTOR = 1;
+// lambda in the damped least squares inverse, against the weighted Jacobian (O(1)). D
+// grows from 1 mid-range to 2 at a joint limit, so the damping still rises near limits.
+// Lower = more responsive; was 1 (with a stray extra D^2: effective 2).
+const double LEAST_SQUARES_DAMPING_FACTOR = 0.3;
 
 typedef std::vector<Eigen::Matrix4d,Eigen::aligned_allocator<Eigen::Matrix4d> > TransformVector;
 
@@ -364,10 +379,6 @@ Eigen::MatrixXd GetInverseJacobianDamped(
 {
     Eigen::Matrix4d D = Eigen::Matrix4d::Identity();
 
-    PrintMatrix(jointPositions, "Joint positions");
-    PrintMatrix(minJointAngles, "Min joint angles");
-    PrintMatrix(maxJointAngles, "Max joint angles");
-
     double minAngle, maxAngle;
 
     for (int i = 0; i < jointPositions.size(); i++)
@@ -376,17 +387,86 @@ Eigen::MatrixXd GetInverseJacobianDamped(
         maxAngle = maxJointAngles(i);
 
         D(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
-        RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "lambda value: %.6f", pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1);
     }
 
-    PrintMatrix(D, "D matrix");
+    // (Joint positions, limits, lambda and D were printed here every cycle at 60 Hz,
+    // flooding the launch terminal; the limits are logged once at startup instead)
 
     Eigen::MatrixXd inverseJacobian(jacobian.cols(), jacobian.rows());
 
-    inverseJacobian = (jacobian.transpose() * jacobian + D*D  +
+    // Damped least squares (J^T J + lambda^2 D^2)^-1 J^T. There was an extra unscaled D^2
+    // term, so with lambda = 1 the damping was 2 D^2 and each cycle covered only a small
+    // part of the error (a 1.5 mm tip step took 1.1 s to settle)
+    inverseJacobian = (jacobian.transpose() * jacobian +
     leastSquaresDampingFactor * leastSquaresDampingFactor * D * D).colPivHouseholderQr().solve(jacobian.transpose());
 
     return inverseJacobian;
+}
+
+// Apply a total-angle delta to joint i (0 proximal pan, 1 proximal tilt, 2 distal pan, 3 distal tilt)
+void ApplyJointDelta(ManipulatorModule& proximal, ManipulatorModule& distal, int i, double delta)
+{
+    switch (i)
+    {
+        case 0: proximal.ApplyPanAngleDelta(delta); break;
+        case 1: proximal.ApplyTiltAngleDelta(delta); break;
+        case 2: distal.ApplyPanAngleDelta(delta); break;
+        default: distal.ApplyTiltAngleDelta(delta); break;
+    }
+}
+
+bool MotorsWithinLimits(const Eigen::Vector4d& motors, const Eigen::VectorXd& motorMin, const Eigen::VectorXd& motorMax)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        if (motors(i) < motorMin(i) || motors(i) > motorMax(i))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& proximal, const ManipulatorModule& distal);
+
+// Per-joint angle range (rad) over which every motor stays inside its limits, moving one
+// joint at a time from the current (zero) joint positions, for the damped inverse's joint
+// limits. Steps through the tendon model, so it follows its nonlinearity and the distal
+// tendons' coupling to the proximal joints.
+void GetJointRangeFromMotorLimits(
+    const ManipulatorModule& proximal,
+    const ManipulatorModule& distal,
+    const Eigen::VectorXd& motorReference,
+    const Eigen::VectorXd& motorMin,
+    const Eigen::VectorXd& motorMax,
+    Eigen::Vector4d& minJointAngles,
+    Eigen::Vector4d& maxJointAngles
+)
+{
+    const double step = 0.001;
+    const double maxTotalAngle = 2.0;
+    const int jointsOfType[4] = {
+        proximal.GetNumPanJoints(), proximal.GetNumTiltJoints(), distal.GetNumPanJoints(), distal.GetNumTiltJoints()
+    };
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int direction = -1; direction <= 1; direction += 2)
+        {
+            ManipulatorModule p = proximal, d = distal;
+            double total = 0.0;
+            while (std::abs(total) < maxTotalAngle)
+            {
+                ApplyJointDelta(p, d, i, direction * step);
+                if (!MotorsWithinLimits(motorReference + GetMotorPositionsFromJointPositions(p, d), motorMin, motorMax))
+                {
+                    break;
+                }
+                total += direction * step;
+            }
+            (direction < 0 ? minJointAngles : maxJointAngles)(i) = total / jointsOfType[i];
+        }
+    }
 }
 
 Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& proximal, const ManipulatorModule& distal)
@@ -512,18 +592,9 @@ void touchStateCallback(
 void touchButtonCallback(
     const omni_msgs::msg::OmniButtonEvent::ConstSharedPtr& omniButtonStates,
     bool& isGreyButtonPressed,
-    bool& isWhiteButtonPressed,
-    Pose& currentTouchPose,
-    Pose& touchOriginPose
+    bool& isWhiteButtonPressed
 )
 {
-    // Update control origin poses when grey button is pressed (rising edge)
-    if (omniButtonStates->grey_button && !isGreyButtonPressed)
-    {
-        touchOriginPose.position = currentTouchPose.position;
-        touchOriginPose.orientation = currentTouchPose.orientation;
-    }
-
     isGreyButtonPressed = (bool)omniButtonStates->grey_button;
     isWhiteButtonPressed = (bool)omniButtonStates->white_button;
 }
@@ -605,7 +676,12 @@ int main(int argc, char **argv)
 
     bool isGreyButtonPressed = false;
     bool isWhiteButtonPressed = false;
-    bool wasGreyButtonPressed = false;  // Track previous button state for edge detection
+    bool wasEngaged = false;  // Track previous engaged state for edge detection
+
+    // Which module the stylus drives, published latched by ur5e_touch_teleop (hold GREY
+    // 1 s to switch). Without that node running nothing is published and the micro
+    // module is always the active one.
+    bool isMicroModeActive = true;
 
     bool hasReceivedMotorStates = false;
     bool hasReceivedMotorMinAngles = false;
@@ -624,16 +700,33 @@ int main(int argc, char **argv)
             touchButtonCallback(
                 omniButtonStates,
                 isGreyButtonPressed,
-                isWhiteButtonPressed,
-                currentTouchPose,
-                touchOriginPose
+                isWhiteButtonPressed
             );
         }
     );
 
+    auto teleopModeSubscriber = node->create_subscription<std_msgs::msg::String>(
+        "/teleop_mode",
+        rclcpp::QoS(1).transient_local(),
+        [&](const std_msgs::msg::String::ConstSharedPtr modeMsg)
+        {
+            bool isMicro = modeMsg->data == "micro";
+            if (isMicro != isMicroModeActive)
+            {
+                RCLCPP_INFO(node->get_logger(), isMicro
+                    ? "Teleop mode MICRO - hold WHITE to drive the micro-manipulator"
+                    : "Teleop mode MACRO - micro-manipulator holding still");
+            }
+            isMicroModeActive = isMicro;
+        }
+    );
+
+    // Transient local, as serial_bridge publishes it: the Arduino only reports in reply to
+    // a command, so a state published before this node started would otherwise be lost
+    // and neither side would ever send first
     auto motorStatesSubscriber = node->create_subscription<motor_angles_msg::msg::MotorAngles>(
         "micro_module_motor_states",
-        rclcpp::QoS(1),
+        rclcpp::QoS(1).transient_local(),
         [&](const motor_angles_msg::msg::MotorAngles::ConstSharedPtr motorStatesMsg)
         {
             motorStatesCallback(
@@ -710,11 +803,14 @@ int main(int argc, char **argv)
     RCLCPP_INFO(node->get_logger(), "Received motor max angles: %.6f, %.6f, %.6f, %.6f", 
         motorMaxAngles(0), motorMaxAngles(1), motorMaxAngles(2), motorMaxAngles(3));
 
-    // Initialize joint angles to 0 (equilibrium position will be computed from motor commands)
+    // Joint angles 0 = the motor angles the Arduino reported at startup (its equilibrium
+    // after a reset). From then on every motor command is that reference plus the
+    // tendon model's motor angle for the current joint angles.
     proximal.SetTotalPanAngle(0.0);
     proximal.SetTotalTiltAngle(0.0);
     distal.SetTotalPanAngle(0.0);
     distal.SetTotalTiltAngle(0.0);
+    const Eigen::VectorXd motorReference = motorStates;
 
     Eigen::Matrix4d baseTransform = Eigen::Matrix4d::Identity();
 
@@ -766,13 +862,17 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d movementRotation;
 
+    // Joint limits for the damped inverse: where a motor would reach its limit. These were
+    // fixed at +-0.05 / +-0.025 rad, which the tendon model puts at only ~1 deg of motor
+    // travel (of 11-22 deg), so the damping held the motors within about a degree of rest.
     Eigen::Vector4d minJointAngles;
-
-    minJointAngles << -0.05, -0.05, -0.025, -0.025;
-
     Eigen::Vector4d maxJointAngles;
-
-    maxJointAngles << 0.05, 0.05, 0.025, 0.025;
+    GetJointRangeFromMotorLimits(proximal, distal, motorReference, motorMinAngles, motorMaxAngles,
+                                 minJointAngles, maxJointAngles);
+    RCLCPP_INFO(node->get_logger(), "Joint limits from the motor limits (rad per joint): "
+        "prox. pan %.3f..%.3f, prox. tilt %.3f..%.3f, dist. pan %.3f..%.3f, dist. tilt %.3f..%.3f",
+        minJointAngles(0), maxJointAngles(0), minJointAngles(1), maxJointAngles(1),
+        minJointAngles(2), maxJointAngles(2), minJointAngles(3), maxJointAngles(3));
 
     Eigen::Vector4d jointPositions;
     jointPositions << proximal.GetPanJointAngle(), proximal.GetTiltJointAngle(), distal.GetPanJointAngle(), distal.GetTiltJointAngle();
@@ -789,16 +889,22 @@ int main(int argc, char **argv)
         endPosition = GetTransformPosition(jointTransforms.back());
         endRotation = GetTransformRotation(jointTransforms.back());
 
-        // Update manipulator origin when grey button is first pressed (rising edge)
-        if (isGreyButtonPressed && !wasGreyButtonPressed)
+        // WHITE is the deadman, as for the arm; GREY is left to ur5e_touch_teleop
+        // (record / switch module)
+        bool isEngaged = isWhiteButtonPressed && isMicroModeActive;
+
+        // Update Touch and manipulator origins when teleoperation engages (rising edge)
+        if (isEngaged && !wasEngaged)
         {
+            touchOriginPose.position = currentTouchPose.position;
+            touchOriginPose.orientation = currentTouchPose.orientation;
             endOriginPosition = endPosition;
             endOriginRotation = endRotation;
             RCLCPP_INFO(node->get_logger(), "Button pressed - updating origin position and rotation");
         }
         
-        // Enable manipulator teleoperation if user is pressing the grey button on the Touch
-        if (isGreyButtonPressed)
+        // Enable manipulator teleoperation while engaged
+        if (isEngaged)
         {
             if (hasReceivedMotorStates && hasReceivedMotorMinAngles && hasReceivedMotorMaxAngles)
             {
@@ -827,28 +933,38 @@ int main(int argc, char **argv)
 
                 jointPositions << proximal.GetPanJointAngle(), proximal.GetTiltJointAngle(), distal.GetPanJointAngle(), distal.GetTiltJointAngle();
 
-                Eigen::MatrixXd inverseJacobian = GetInverseJacobianDamped(jacobian, jointPositions, minJointAngles, maxJointAngles, LEAST_SQUARES_DAMPING_FACTOR);
+                // Desired pose: origin + scaled-down stylus movement, turned into the
+                // manipulator frame by the same rotation as the stylus orientation
+                tf2::Vector3 touchDelta = tf2::quatRotate(
+                    touchToManipulatorRotation, currentTouchPose.position - touchOriginPose.position);
 
-                // Calculate desired pose: origin + scaled Touch movement
-                // Convert tf2::Vector3 to Eigen::Vector3d for position calculation
-                Eigen::Vector3d touchDelta(
-                    currentTouchPose.position.x() - touchOriginPose.position.x(),
-                    currentTouchPose.position.y() - touchOriginPose.position.y(),
-                    currentTouchPose.position.z() - touchOriginPose.position.z()
-                );
-                
-                Eigen::Vector3d desiredPos = endOriginPosition + touchDelta * 10.0;  // Scale factor for position
+                Eigen::Vector3d desiredPos = endOriginPosition
+                    + MICRO_POSITION_SCALE * Eigen::Vector3d(touchDelta.x(), touchDelta.y(), touchDelta.z());
 
                 Eigen::Matrix3d desiredRot = movementRotation;
 
                 Eigen::VectorXd poseDelta = GetPoseDelta(endPosition, desiredPos, endRotation, desiredRot);
 
-                if (poseDelta.norm() > JOINT_UPDATE_MAX_VELOCITY)
+                // Weight the position rows (m) up to the scale of the angle rows (rad)
+                Eigen::VectorXd taskWeights(6);
+                taskWeights << Eigen::Vector3d::Constant(1.0 / POSITION_WEIGHT_LENGTH), Eigen::Vector3d::Ones();
+                Eigen::MatrixXd weightedJacobian = taskWeights.asDiagonal() * jacobian;
+                Eigen::VectorXd weightedPoseDelta = taskWeights.asDiagonal() * poseDelta;
+
+                if (weightedPoseDelta.norm() > JOINT_UPDATE_MAX_VELOCITY)
                 {
-                    poseDelta = CapVectorMagnitude(poseDelta, JOINT_UPDATE_MAX_VELOCITY).eval();
+                    weightedPoseDelta = CapVectorMagnitude(weightedPoseDelta, JOINT_UPDATE_MAX_VELOCITY).eval();
                 }
 
-                Eigen::Vector4d jointDeltas = inverseJacobian * poseDelta;
+                Eigen::MatrixXd inverseJacobian = GetInverseJacobianDamped(weightedJacobian, jointPositions, minJointAngles, maxJointAngles, LEAST_SQUARES_DAMPING_FACTOR);
+
+                Eigen::Vector4d jointDeltas = inverseJacobian * weightedPoseDelta;
+
+                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 500,
+                    "Tip target offset (%.2f, %.2f, %.2f) mm, tip offset (%.2f, %.2f, %.2f) mm",
+                    1e3 * (desiredPos - endOriginPosition).x(), 1e3 * (desiredPos - endOriginPosition).y(),
+                    1e3 * (desiredPos - endOriginPosition).z(), 1e3 * (endPosition - endOriginPosition).x(),
+                    1e3 * (endPosition - endOriginPosition).y(), 1e3 * (endPosition - endOriginPosition).z());
 
                 RCLCPP_INFO_THROTTLE(
                     node->get_logger(),
@@ -861,42 +977,22 @@ int main(int argc, char **argv)
                     jointDeltas(3)
                 );
 
-                // Prevent joint updates if motors are at their angular limits
-                double newPosition = motorCommands(0) + jointDeltas(0);
-
-                if (newPosition >= motorMinAngles(0) &&
-                    newPosition <= motorMaxAngles(0))
+                // Apply each joint delta only if every motor stays inside its limits. The
+                // motors follow from the joint angles through the tendon model (a joint
+                // delta in rad was being added to the motor angles in degrees, so the
+                // motors moved ~1/1000 of what they should)
+                for (int i = 0; i < 4; i++)
                 {
-                    proximal.ApplyPanAngleDelta(jointDeltas(0));
-                    motorCommands(0) = newPosition;
+                    ManipulatorModule candidateProximal = proximal, candidateDistal = distal;
+                    ApplyJointDelta(candidateProximal, candidateDistal, i, jointDeltas(i));
+                    if (MotorsWithinLimits(motorReference + GetMotorPositionsFromJointPositions(candidateProximal, candidateDistal),
+                                           motorMinAngles, motorMaxAngles))
+                    {
+                        proximal = candidateProximal;
+                        distal = candidateDistal;
+                    }
                 }
-
-                newPosition = motorCommands(1) + jointDeltas(1);
-
-                if (newPosition >= motorMinAngles(1) &&
-                    newPosition <= motorMaxAngles(1))
-                {
-                    proximal.ApplyTiltAngleDelta(jointDeltas(1));
-                    motorCommands(1) = newPosition;
-                }
-
-                newPosition = motorCommands(2) + jointDeltas(2);
-
-                if (newPosition >= motorMinAngles(2) &&
-                    newPosition <= motorMaxAngles(2))
-                {
-                    distal.ApplyPanAngleDelta(jointDeltas(2));
-                    motorCommands(2) = newPosition;
-                }
-
-                newPosition = motorCommands(3) + jointDeltas(3);
-
-                if (newPosition >= motorMinAngles(3) &&
-                    newPosition <= motorMaxAngles(3))
-                {
-                    distal.ApplyTiltAngleDelta(jointDeltas(3));
-                    motorCommands(3) = newPosition;
-                }
+                motorCommands = motorReference + GetMotorPositionsFromJointPositions(proximal, distal);
 
                 // Clamp motor commands to limits
                 motorCommands(0) = clamp(motorCommands(0), motorMinAngles(0), motorMaxAngles(0));
@@ -906,18 +1002,20 @@ int main(int argc, char **argv)
 
                 RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 100, "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
 
+                // Whole degrees on the wire: round (assigning the double truncated, so
+                // 89.95 went out as 89)
                 motor_angles_msg::msg::MotorAngles motorCommandsMsg;
-                motorCommandsMsg.proximal_pan_angle = motorCommands(0);
-                motorCommandsMsg.proximal_tilt_angle = motorCommands(1);
-                motorCommandsMsg.distal_pan_angle = motorCommands(2);
-                motorCommandsMsg.distal_tilt_angle = motorCommands(3);
+                motorCommandsMsg.proximal_pan_angle = std::lround(motorCommands(0));
+                motorCommandsMsg.proximal_tilt_angle = std::lround(motorCommands(1));
+                motorCommandsMsg.distal_pan_angle = std::lround(motorCommands(2));
+                motorCommandsMsg.distal_tilt_angle = std::lround(motorCommands(3));
 
                 motorCommandsPublisher->publish(motorCommandsMsg);
             }
         }
 
-        // Update previous button state for next iteration
-        wasGreyButtonPressed = isGreyButtonPressed;
+        // Update previous engaged state for next iteration
+        wasEngaged = isEngaged;
 
         rate.sleep();
     }

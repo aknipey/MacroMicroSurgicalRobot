@@ -19,7 +19,7 @@ Additional dependencies and their installation instructions can be found in thes
 | `android_pose_subscriber`   | C++      | Touch → rviz marker visualisation.                                                                                        |
 | `android_pose_publisher.py` | Python   | Android-phone websocket → `PoseStamped`.                                                                                  |
 | `ur5e_keyboard_teleop.py`  | Python   | Keyboard → UR5e Cartesian jogging via MoveIt Servo.                                                                       |
-| `ur5e_touch_teleop.py`     | Python   | Touch stylus → UR5e teleoperation via MoveIt Servo (white button = clutch, grey = record).                                |
+| `ur5e_touch_teleop.py`     | Python   | Touch stylus → UR5e teleoperation via MoveIt Servo (white = clutch, grey click = record, grey hold 1 s = switch arm / micro). |
 | `trajectory_recorder.py`   | Python   | Records UR5e joint + tool-pose trajectories to YAML/CSV, shows the path in RViz.                                           |
 | `trajectory_player.py`     | Python   | Replays a recorded trajectory (or moves to a home pose) via the scaled joint trajectory controller.                        |
 
@@ -161,8 +161,10 @@ moving; the arm stops ~0.15 s after release.
 
 **Touch** (`ur5e_touch_teleop.py`): hold the **white** button to drive the arm.
 The stylus pose at the press is the origin; the tool then follows the stylus
-movement and tilt since then (release to re-centre the stylus). Press **grey**
-to start/stop recording. Mapping (`mapping:=toward_base`, the default): up is
+movement and tilt since then (release to re-centre the stylus). Click **grey**
+to start/stop recording (it acts on release). Hold **grey** for 1 s without
+touching white to switch the stylus between the arm (macro) and the
+micro-manipulator; see _Micro Module_. Mapping (`mapping:=toward_base`, the default): up is
 up, stylus towards the Touch body moves the tool horizontally towards the
 robot base, right is right as seen from the tool looking at the base, and pen
 tilts/twists tilt the wrist the same way. Parameters: `translation_scale`
@@ -191,6 +193,20 @@ The player asks for confirmation, moves to the recording's first pose over
 1. Add permissions for the Arduino device: `sudo chmod 777 /dev/ttyACM1`
 2. Start the serial bridge for the micro-module microcontroller (micro-ROS agent or serial bridge replacing `rosserial`).
 3. Start the control node: `ros2 run ls_thesis micro_module_control`
+
+Hold the stylus **white** button to drive the micro-manipulator (it used to be
+grey). With the arm teleop running too, both nodes share the stylus:
+
+```
+./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur5e-touch --with-micro --robot-ip=192.168.0.100
+```
+
+The stylus starts on the arm. Hold **grey** for 1 s without touching white to
+switch to the micro module, and again to switch back. `ur5e_touch_teleop`
+publishes the mode on `/teleop_mode` (latched, `macro` / `micro`), and each
+node ignores white while the other one is active. Without
+`ur5e_touch_teleop` running nothing is published, and the micro module is
+always the active one.
 
 Alternatively, `ros2_bridge/keyboard_control.py` drives the servos straight
 from the keyboard (no Touch device needed) — useful for bench-testing; this is

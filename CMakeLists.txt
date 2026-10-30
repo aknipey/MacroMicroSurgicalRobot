@@ -126,6 +126,7 @@ install(PROGRAMS
   src/stylus_replay.py
   src/ur_emulator.py
   src/joint_velocity_limiter.py
+  src/tool_library.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -143,6 +144,7 @@ install(DIRECTORY
 
 install(FILES
   lab_ur5e_1_calibration.yaml
+  config/external_control_smooth_speedj.urscript
   DESTINATION share/${PROJECT_NAME}/config
 )
 

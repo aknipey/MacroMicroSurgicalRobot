@@ -1,0 +1,29 @@
+# Tool library for the UR16e Touch teleop (ls_thesis/tools.py).
+# Number -> calibrated tool. tip_tool0_mm and direction_tool0 (holder -> tip) are in
+# the tool0 frame; shaft_length_mm runs back from the tip to the holder end (only
+# that segment can be the RCM point). Edit by hand or with
+#   ros2 run ls_thesis tool_library.py add|remove|default ...
+# The teleop re-reads this file on every tool switch.
+default: 1
+tools:
+  1:
+    name: NDI wand 8700340
+    tip_tool0_mm: [-0.4082, 9.8406, 366.8714]
+    direction_tool0: [-0.003086, 0.017979, 0.999834]
+    shaft_length_mm: 158.6
+    calibration: /home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json
+    date: '2026-10-26'
+    notes: wand in the holder (re-seated 2026-10-26); length = tip back to the first
+      marker (wand geometry), not measured
+  2:
+    name: Micro module
+    tip_tool0_mm: [-8.69, 17.015, 435.955]
+    direction_tool0: [-0.019914, 0.038992, 0.999041]
+    shaft_length_mm: 200.0
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/micro_tip_2026-10-30_144004.json
+    date: '2026-10-30'
+    notes: Single NDI ball on the micro tip, module at rest, no wand (scripts/tip_ball_calibration.py,
+      raw config/calibrations/raw/micro_tip_2026-10-30_144002.npz). Tip = mean of
+      the two half-run fits (-8.83, 16.98, 436.76) and (-8.55, 17.05, 435.15) mm;
+      +-1.5 mm (UR16e factory kinematics). Direction tool0 origin -> tip. RCM shaft
+      200 mm.

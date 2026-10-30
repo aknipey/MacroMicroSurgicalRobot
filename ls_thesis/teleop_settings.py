@@ -31,6 +31,10 @@ TOUCH_SCALE_ROTATION_EXPONENT = 0.5
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
+# Holding GREY this long (s) without touching WHITE switches the stylus between the
+# macro (UR arm) and micro (micro-manipulator) module. A shorter GREY click still
+# starts / stops recording, on release.
+TOUCH_MODE_SWITCH_HOLD_TIME = 1.0
 # Robot radians per stylus radian.
 TOUCH_ROTATION_SCALE = 1.0
 TOUCH_ENABLE_ROTATION = True
@@ -137,9 +141,19 @@ TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 # wand's first marker along the shaft.
 # src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json. 2026-10-22 (old seat):
 # [-0.0006, 0.00662, 0.20624] / [-0.00607, 0.01481, 0.99987], tip 2.5 mm from today's.
+# Only used when TOOL_LIBRARY has no tools: the library (below) is where tools live now.
 TOUCH_RCM_SHAFT_START = [0.00008, 0.00699, 0.20827]     # m
 TOUCH_RCM_SHAFT_DIRECTION = [-0.00309, 0.01798, 0.99983]
 TOUCH_RCM_SHAFT_LENGTH = 0.1586               # m
+# Numbered library of calibrated tools (ls_thesis/tools.py). The teleop starts on the
+# library's `default` tool; type a number in the launch_system.sh terminal (or
+# `ros2 param set /ur5e_touch_teleop tool N`) to switch. Add tools with
+# `ros2 run ls_thesis tool_library.py add ...`. The file is re-read on every switch.
+TOOL_LIBRARY = "~/ros2_ws/src/MacroMicroSurgicalRobot/config/tools.yaml"
+# A switch is refused in RCM mode, while WHITE drives the arm, or unless every joint
+# has stayed under this speed (rad/s) for TOOL_SWITCH_STILL_TIME (s).
+TOOL_SWITCH_MAX_JOINT_SPEED = 0.01
+TOOL_SWITCH_STILL_TIME = 0.5
 # Closest the shaft start (holder / collar) may come to the RCM point (m), so the
 # deepest insertion is SHAFT_LENGTH - this.
 TOUCH_RCM_DEPTH_MARGIN = 0.02
@@ -289,6 +303,15 @@ SERVO_SINGULARITY_STOP_GUARDED = 1e6
 # 15-20x trajectory mode, highest right before every joint fault). Trajectory mode
 # keeps ur_servo.yaml's 250 Hz. Read when Servo starts: needs a relaunch.
 SERVO_VELOCITY_RATE = 500.0
+# Run config/external_control_smooth_speedj.urscript on the robot instead of the
+# driver's stock script. The stock speed thread reaches every 2 ms joint speed set point
+# at a fixed 40 rad/s^2, i.e. in a fraction of the step: a torque kick per step. In the
+# V7 runs the big joints' current then carried 0.3-1.0 A RMS at 120-250 Hz while the
+# arm accelerated (the buzz / grind; 0.04 A in a slow run), with no such content in the
+# command itself. The copy spreads each change over the whole step (as the driver's own
+# spline mode does), so the joint speed ramps between set points. Real arm only (mock
+# hardware runs no URScript). Read at launch: needs a relaunch.
+SERVO_SMOOTH_SPEEDJ = True
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.
 VELOCITY_LIMITER = True

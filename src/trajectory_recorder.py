@@ -167,6 +167,10 @@ class TrajectoryRecorder(Node):
                                  self.on_touch_target, 100)
         self.create_subscription(PoseStamped, self.get_parameter("ur_tcp_topic").value,
                                  self.on_ur_tcp, 100)
+        # Teleop's active tool (tool library) at start, and any switch during a recording
+        self.active_tool = None
+        self.tool_log = None
+        self.create_subscription(String, "/ur5e_touch_teleop/active_tool", self.on_active_tool, latched)
         self.create_timer(1.0 / cfg.LOG_TF_FALLBACK_RATE, self.log_tf_fallback)
 
         self.create_service(Trigger, "~/start", self.on_start)
@@ -203,6 +207,7 @@ class TrajectoryRecorder(Node):
             self.get_logger().error(response.message)
             return response
         self.ndi = {"tracker_at_start": ndi_ok, "lost_at": None, "files": None}
+        self.tool_log = {"at_start": self.active_tool, "changes": []}
         self.samples = []
         self.path.poses = []
         self.start_time = self.get_clock().now()
@@ -277,6 +282,11 @@ class TrajectoryRecorder(Node):
     def host_time(self):
         return (self.get_clock().now() - self.start_time).nanoseconds * 1e-9
 
+    def on_active_tool(self, msg):
+        self.active_tool = json.loads(msg.data)
+        if self.recording and self.tool_log is not None:
+            self.tool_log["changes"].append({"t": round(self.host_time(), 3), **self.active_tool})
+
     def open_logs(self):
         self.run_start_wall = datetime.now()
         self.run_dir = os.path.join(self.log_dir, RUN_FOLDER)
@@ -340,6 +350,7 @@ class TrajectoryRecorder(Node):
                 "rosbag": bag_status,
                 "tcp_offset": self.tcp_offset_summary(),
                 "ndi": self.ndi,
+                "tool": self.tool_log,
                 "trajectory_source": trajectory_path,
                 "notes": {
                     "t": "host receive time, s since recording start (same clock for every file)",
@@ -352,6 +363,9 @@ class TrajectoryRecorder(Node):
                     "ndi": "tracker_at_start = NDI tracker following the recording when it started, "
                            "lost_at = s when it stopped following (null = never), "
                            "files = NDI_PATH.csv in this folder at stop",
+                    "tool": "teleop RCM tool (config/tools.yaml): at_start = active when recording "
+                            "started (null = teleop not running), changes = switches during the run "
+                            "(t as above); settings' TOUCH_RCM_SHAFT_* are only the no-library fallback",
                     "tcp_offset": "ee_frame -> pendant TCP, measured against TF at recording start; "
                                   "check_max_mm = largest drift from it in later checks during the "
                                   "run (should be ~0: more means TF uses the wrong arm kinematics)",

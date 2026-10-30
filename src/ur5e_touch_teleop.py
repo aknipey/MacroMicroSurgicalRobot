@@ -14,8 +14,15 @@ press (which re-captures the origin, so the robot does not jump). Tilt and
 twist are scaled by step ** `scale_rotation_exponent` (sqrt by default). The current
 scale is published latched on ~/motion_scale for the logs.
 
-Press the GREY button to start / stop recording a trajectory and the
-Touch / UR path logs (needs trajectory_recorder running).
+Click the GREY button to start / stop recording a trajectory and the
+Touch / UR path logs (needs trajectory_recorder running). It acts on release, as a
+click shorter than `mode_switch_hold_time` and not touching WHITE.
+
+Hold GREY for `mode_switch_hold_time` (1 s) without touching WHITE to switch the
+stylus between the macro (this arm) and micro (micro_module_control) module; the
+mode is published latched on `mode_topic` (/teleop_mode, "macro" or "micro").
+In micro mode WHITE drives the micro-manipulator instead and this node ignores it
+(no engage, no scale change, no RCM chord); GREY clicks still record.
 
 RCM (remote centre of motion) mode: while holding WHITE, click GREY. The tool tip
 (the `rcm_shaft_*` tool, see teleop_settings) is latched as a fixed pivot point,
@@ -30,6 +37,13 @@ GREY again to leave, which needs the tool retracted to `rcm_exit_depth`; it can 
 pulled out up to `rcm_retract_depth` past the point first. The RCM
 state is published on ~/rcm_active, ~/rcm_point, ~/rcm_error (shaft line to the
 point), ~/insertion_depth and ~/tool_tip.
+
+Tools: the RCM tool comes from the numbered library in `tool_library`
+(ls_thesis/tools.py), starting on its default. Set the `tool` parameter to switch
+(the launch_system.sh terminal does this when you type a number); the switch is
+refused in RCM mode, while WHITE drives the arm, or while any joint has moved faster
+than `tool_switch_max_joint_speed` in the last `tool_switch_still_time`. The library
+is re-read on every switch, and the active tool is published latched on ~/active_tool.
 
 While engaged, the stylus pose mapped into the robot frame (the tool0 pose the
 robot is being pulled towards) is published on ~/target_pose, once per stylus
@@ -72,6 +86,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
 from omni_msgs.msg import OmniButtonEvent, OmniFeedback, OmniState
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from rclpy.qos import DurabilityPolicy, QoSProfile
@@ -96,6 +111,7 @@ from ls_thesis.ur5e_common import (
     ur_singularity_name,
 )
 from ls_thesis import teleop_settings as cfg
+from ls_thesis import tools as tool_library
 from ls_thesis.haptics import PulsePlayer, limit_force, singularity_force
 
 # omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
@@ -287,6 +303,8 @@ class TouchTeleop(Node):
         self.declare_parameter("translation_scale", cfg.TOUCH_TRANSLATION_SCALE)
         self.declare_parameter("scale_steps", cfg.TOUCH_SCALE_STEPS)
         self.declare_parameter("double_click_time", cfg.TOUCH_DOUBLE_CLICK_TIME)
+        self.declare_parameter("mode_switch_hold_time", cfg.TOUCH_MODE_SWITCH_HOLD_TIME)
+        self.declare_parameter("mode_topic", "/teleop_mode")
         self.declare_parameter("scale_rotation_exponent", cfg.TOUCH_SCALE_ROTATION_EXPONENT)
         self.declare_parameter("enable_rotation", cfg.TOUCH_ENABLE_ROTATION)
         self.declare_parameter("rotation_scale", cfg.TOUCH_ROTATION_SCALE)
@@ -321,6 +339,10 @@ class TouchTeleop(Node):
         self.declare_parameter("rcm_shaft_direction", cfg.TOUCH_RCM_SHAFT_DIRECTION)
         self.declare_parameter("rcm_shaft_length", cfg.TOUCH_RCM_SHAFT_LENGTH)
         self.declare_parameter("rcm_depth_margin", cfg.TOUCH_RCM_DEPTH_MARGIN)
+        self.declare_parameter("tool_library", cfg.TOOL_LIBRARY)
+        self.declare_parameter("tool", 0)       # library number; 0 = the library's default
+        self.declare_parameter("tool_switch_max_joint_speed", cfg.TOOL_SWITCH_MAX_JOINT_SPEED)
+        self.declare_parameter("tool_switch_still_time", cfg.TOOL_SWITCH_STILL_TIME)
         self.declare_parameter("rcm_pivot_fade_depth", cfg.TOUCH_RCM_PIVOT_FADE_DEPTH)
         self.declare_parameter("rcm_pivot_fade_strength", cfg.TOUCH_RCM_PIVOT_FADE_STRENGTH)
         self.declare_parameter("rcm_tool0_gain", cfg.TOUCH_RCM_TOOL0_GAIN)
@@ -360,6 +382,7 @@ class TouchTeleop(Node):
         if not self.scale_steps or min(self.scale_steps) <= 0.0:
             raise ValueError(f"scale_steps must be positive, not {self.scale_steps}")
         self.double_click_time = p("double_click_time")
+        self.mode_switch_hold_time = p("mode_switch_hold_time")
         self.scale_rotation_exponent = p("scale_rotation_exponent")
         self.enable_rotation = p("enable_rotation")
         self.base_rotation_scale = p("rotation_scale")
@@ -402,7 +425,10 @@ class TouchTeleop(Node):
         if self.pose_source == "joint_states":
             latched_description = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.create_subscription(String, "/robot_description", self.on_robot_description, latched_description)
-            self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
+        # Joint speeds too, for the tool switch's standstill check
+        self.joint_states_time = None   # node clock (s) of the newest /joint_states
+        self.last_motion_time = None    # newest /joint_states with a joint over the switch speed
+        self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
         # Needs the joint angles, so only with pose_source "joint_states"
         self.singularity_guard = None
         if p("singularity_guard"):
@@ -415,11 +441,12 @@ class TouchTeleop(Node):
                                        "only MoveIt Servo's own singularity check is active")
         self.singularity_state = 0      # 0 clear, 1 limiting, 2 backing out (for the log messages)
 
-        self.rcm_tool = RcmTool(p("rcm_shaft_start"), p("rcm_shaft_direction"), p("rcm_shaft_length"))
-        self.rcm_max_depth = self.rcm_tool.length - p("rcm_depth_margin")
-        if not self.rcm_max_depth > 0.0:
-            raise ValueError(f"rcm_depth_margin ({p('rcm_depth_margin')} m) must be shorter than "
-                             f"rcm_shaft_length ({self.rcm_tool.length} m)")
+        # The RCM tool (rcm_tool, rcm_max_depth) is set by select_tool once the publishers exist
+        self.rcm_depth_margin = p("rcm_depth_margin")
+        self.tool_library = p("tool_library")
+        self.tool_switch_speed = p("tool_switch_max_joint_speed")
+        self.tool_switch_still_time = p("tool_switch_still_time")
+        self.tool_number = None
         self.rcm_pivot_fade_depth = p("rcm_pivot_fade_depth")
         self.rcm_pivot_fade_strength = p("rcm_pivot_fade_strength")
         if not self.rcm_pivot_fade_strength >= 1.0:
@@ -470,10 +497,14 @@ class TouchTeleop(Node):
         self.scale_pub = self.create_publisher(Float64, "~/motion_scale", latched)
         self.condition_pub = self.create_publisher(Float64, "~/condition_number", 10)
         self.rcm_active_pub = self.create_publisher(Bool, "~/rcm_active", latched)
+        self.mode_pub = self.create_publisher(String, p("mode_topic"), latched)
         self.rcm_point_pub = self.create_publisher(PointStamped, "~/rcm_point", latched)
         self.rcm_error_pub = self.create_publisher(Float64, "~/rcm_error", 10)
         self.insertion_depth_pub = self.create_publisher(Float64, "~/insertion_depth", 10)
         self.tool_tip_pub = self.create_publisher(PoseStamped, "~/tool_tip", 10)
+        self.active_tool_pub = self.create_publisher(String, "~/active_tool", latched)
+        self.select_tool(p("tool"))
+        self.add_on_set_parameters_callback(self.on_set_parameters)
         self.recorder = RecorderClient(self)
 
         self.touch_position = None      # metres, stylus frame
@@ -484,6 +515,9 @@ class TouchTeleop(Node):
         # Double-click detection on WHITE (node clock, s)
         self.white_press_time = None    # current press; None once it was used by a double click
         self.white_click_time = None    # start of the last short press-and-release
+        # GREY: a click records, a long hold without WHITE switches module
+        self.grey_press_time = None     # current press; None once WHITE spoiled it or it switched
+        self.mode = "macro"             # which module the stylus drives: "macro" or "micro"
 
         self.scale_index = 0
         self.set_scale(0)
@@ -511,6 +545,7 @@ class TouchTeleop(Node):
         self.tip_origin = None
         self.shaft_axis_origin = None
         self.rcm_active_pub.publish(Bool(data=False))
+        self.mode_pub.publish(String(data=self.mode))
         self.send_zero_force()      # clear a force left on by a node that died
 
         self.create_subscription(OmniState, p("state_topic"), self.on_state, 1)
@@ -537,7 +572,8 @@ class TouchTeleop(Node):
         self.create_timer(1.0 / p("publish_rate"), self.update)
         self.get_logger().info(
             "Touch teleop ready: hold WHITE to move, double-click WHITE to change scale, "
-            "GREY to start/stop recording, hold WHITE + click GREY for RCM mode "
+            "click GREY to start/stop recording, hold WHITE + click GREY for RCM mode, "
+            f"hold GREY {self.mode_switch_hold_time:.1f} s to switch macro/micro "
             f"(tilt {'on' if self.enable_rotation else 'off'}, twist {'on' if self.enable_twist else 'off'}, "
             f"max {self.max_linear:.2f} m/s)")
 
@@ -584,7 +620,21 @@ class TouchTeleop(Node):
     def on_button(self, msg):
         white, grey = bool(msg.white_button), bool(msg.grey_button)
         now = self.get_clock().now().nanoseconds * 1e-9
-        if white and not self.white_pressed:
+        if grey and not self.grey_pressed:
+            # With WHITE held GREY is the RCM chord, so a chord never records or switches
+            self.grey_press_time = None if white else now
+            if white and self.mode == "macro":
+                self.toggle_rcm()
+        if white:
+            self.grey_press_time = None     # touching WHITE spoils a GREY click or hold
+        elif not grey and self.grey_pressed:
+            # A release that beats the update timer past the hold time still switches
+            if not self.check_mode_switch(now) and self.grey_press_time is not None:
+                self.recorder.toggle()
+            self.grey_press_time = None
+        if self.mode == "micro":
+            pass    # WHITE drives the micro module, not this arm
+        elif white and not self.white_pressed:
             self.white_press_time = now
             if self.white_click_time is not None and now - self.white_click_time <= self.double_click_time:
                 self.set_scale(self.scale_index + 1)
@@ -595,13 +645,21 @@ class TouchTeleop(Node):
             short = self.white_press_time is not None and now - self.white_press_time <= self.double_click_time
             self.white_click_time = self.white_press_time if short else None
             self.release()
-        if grey and not self.grey_pressed:
-            # With WHITE held GREY is the RCM chord, so a chord never starts a recording
-            if white:
-                self.toggle_rcm()
-            else:
-                self.recorder.toggle()
         self.white_pressed, self.grey_pressed = white, grey
+
+    def check_mode_switch(self, now):
+        """Switch module once GREY has been held long enough on its own; True if it did."""
+        if self.grey_press_time is None or now - self.grey_press_time < self.mode_switch_hold_time:
+            return False
+        self.grey_press_time = None     # used up: its release does not record
+        self.release()
+        self.white_click_time = None
+        self.mode = "micro" if self.mode == "macro" else "macro"
+        self.mode_pub.publish(String(data=self.mode))
+        self.get_logger().info(
+            "Switched to MICRO - WHITE now drives the micro-manipulator" if self.mode == "micro"
+            else "Switched to MACRO - WHITE now drives the arm")
+        return True
 
     def toggle_rcm(self):
         """Latch the tool tip as the RCM point, or leave RCM mode if the tool is retracted."""
@@ -657,6 +715,69 @@ class TouchTeleop(Node):
 
     def on_joint_states(self, msg):
         self.joint_positions = dict(zip(msg.name, msg.position))
+        now = self.now()
+        self.joint_states_time = now
+        # No velocities in the message: treat it as moving, so a switch is never let through blind
+        if not msg.velocity or max(abs(v) for v in msg.velocity) > self.tool_switch_speed:
+            self.last_motion_time = now
+
+    def select_tool(self, number):
+        """Load tool `number` (0 = default) from the library as the RCM tool. Raises
+        ValueError if it is not there or not usable; the current tool is kept then. With
+        no library at all, falls back to the rcm_shaft_* parameters as tool 0."""
+        default, tools = tool_library.load_library(self.tool_library)
+        if not tools:
+            if self.tool_number is not None or number:
+                raise ValueError(f"no tools in {self.tool_library}")
+            shaft = RcmTool(*(self.get_parameter(name).value for name in
+                              ("rcm_shaft_start", "rcm_shaft_direction", "rcm_shaft_length")))
+            entry = {"name": "rcm_shaft_* parameters (no tool library)",
+                     "tip_tool0_mm": list(1e3 * shaft.tip_offset),
+                     "direction_tool0": list(shaft.direction),
+                     "shaft_length_mm": 1e3 * shaft.length}
+            self.get_logger().warn(f"No tools in {self.tool_library} - using the rcm_shaft_* parameters")
+            number = 0
+        else:
+            number = number or default or min(tools)
+            if number not in tools:
+                raise ValueError(f"no tool {number} in the library (have {', '.join(map(str, sorted(tools)))})")
+            entry = tools[number]
+        tool = tool_library.rcm_tool(entry)
+        max_depth = tool.length - self.rcm_depth_margin
+        if not max_depth > 0.0:
+            raise ValueError(f"tool {number} shaft ({1e3 * tool.length:.1f} mm) is not longer than "
+                             f"rcm_depth_margin ({1e3 * self.rcm_depth_margin:.1f} mm)")
+        self.rcm_tool, self.rcm_max_depth, self.tool_number = tool, max_depth, number
+        self.active_tool_pub.publish(String(data=tool_library.active_tool_message(number, entry)))
+        self.get_logger().info(f"Tool {tool_library.describe(number, entry)}")
+        return number
+
+    def tool_switch_blocker(self):
+        """Why a tool switch is not allowed right now, or None."""
+        if self.rcm_point is not None:
+            return "leave RCM mode first"
+        if self.clutched:
+            return "release WHITE first"
+        now = self.now()
+        if self.joint_states_time is None or now - self.joint_states_time > 0.5:
+            return "no fresh /joint_states - cannot tell whether the robot is stationary"
+        if self.last_motion_time is not None and now - self.last_motion_time < self.tool_switch_still_time:
+            return "the robot is moving - wait until it is stationary"
+        return None
+
+    def on_set_parameters(self, params):
+        for param in params:
+            if param.name == "tool":
+                reason = self.tool_switch_blocker()
+                if reason is None:
+                    try:
+                        self.select_tool(param.value)
+                    except (ValueError, OSError) as exc:
+                        reason = str(exc)
+                if reason is not None:
+                    self.get_logger().warn(f"Tool switch to {param.value} refused: {reason}")
+                    return SetParametersResult(successful=False, reason=reason)
+        return SetParametersResult(successful=True)
 
     def jacobian_at(self, positions):
         """Arm Jacobian for joint positions in urdf_chain.joint_names order."""
@@ -771,6 +892,7 @@ class TouchTeleop(Node):
 
     def update(self):
         self.singularity_cue = None     # set again by guard_singularity if it runs this cycle
+        self.check_mode_switch(self.now())
         self.update_motion()
         if self.force_pub is not None:
             self.update_haptics()
