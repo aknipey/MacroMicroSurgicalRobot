@@ -4,7 +4,7 @@
 # that segment can be the RCM point). Edit by hand or with
 #   ros2 run macro_micro_robot tool_library.py add|remove|default ...
 # The teleop re-reads this file on every tool switch.
-default: 1
+default: 3
 tools:
   1:
     name: NDI wand 8700340
@@ -27,3 +27,14 @@ tools:
       the two half-run fits (-8.83, 16.98, 436.76) and (-8.55, 17.05, 435.15) mm;
       +-1.5 mm (UR16e factory kinematics). Direction tool0 origin -> tip. RCM shaft
       200 mm.
+  3:
+    name: V2_holder_only
+    tip_tool0_mm: [-1.006, 16.3366, 324.9883]
+    direction_tool0: [-0.004345, 0.045207, 0.998968]
+    shaft_length_mm: 158.6
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-03_094111.json
+    date: '2026-11-03'
+    notes: 'NDI wand 8700340 in the SimpleHolder. Hand-eye 2026-11-03 09:41 with calibrated
+      kinematics (ur16e_kinematics_2026-11-03.yaml), scripts/wrist_jog.py +-30 deg
+      x2: mismatch 0.29 deg, spread 6.0 mm / 0.25 deg, halves 0.4 mm, wand still to
+      0.04 mm (rest before/after). Length = wand geometry, not measured.'

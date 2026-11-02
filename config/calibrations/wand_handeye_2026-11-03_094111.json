@@ -1,0 +1,71 @@
+{
+  "label": "TOOL0 -> WAND hand-eye (wand is the robot tool), 2026-11-03_094111",
+  "method": "handeye_wrist_jog",
+  "note": "No divot. Tip = the wand's calibrated tip through the hand-eye fit (refitted from the raw recording without mis-tracked frames); robot-tcp's robot-pivot tip is invalid without a divot.",
+  "raw": "/home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/raw/robot_tcp_20261103_094111.npz",
+  "wand_calibration": "8700340",
+  "date": "2026-11-03T09:41:11",
+  "robot_poses": 2936,
+  "ndi_frames_dropped": 0,
+  "handeye": {
+    "tool0_to_wand": [
+      [
+        -0.01007515388351421,
+        -0.9999483220222514,
+        -0.0013581454664268466,
+        0.15912386240713747
+      ],
+      [
+        -0.9990512557529165,
+        0.01012364503161477,
+        -0.04235681987348074,
+        -6.968913931386609
+      ],
+      [
+        0.042368380341289244,
+        0.0009301054554876065,
+        -0.9991016240859073,
+        167.25637150185787
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "pairs": 600,
+    "angle_mismatch_deg_rms": 0.29062229267934503,
+    "camera_pose_spread_mm_rms": 6.005720460248526,
+    "camera_pose_spread_deg_rms": 0.24870004596736747,
+    "ndi_delay_s": 0.010000000000000092,
+    "samples": 3510
+  },
+  "halves_tip_tool0_mm": [
+    [
+      -1.3050559577953986,
+      16.427286137657827,
+      324.95579668622986
+    ],
+    [
+      -1.6245099466666046,
+      16.222296931122077,
+      324.9874705853788
+    ]
+  ],
+  "halves_apart_mm": 0.3808866782773812,
+  "tip_tool0_mm": [
+    -1.006025508873513,
+    16.336620257671736,
+    324.9883488608962
+  ],
+  "direction_tool0": [
+    -0.00434535354851609,
+    0.045207450701653024,
+    0.9989681698150328
+  ],
+  "direction_angle_from_tool0_z_deg": 2.603,
+  "shaft_length_mm": 158.6,
+  "previous": null,
+  "quality_warnings": []
+}

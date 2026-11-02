@@ -2261,3 +2261,8 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   (a still lead-in left the first half with one wrist only), and warns if the arm is still moving when
   the recording ends. `wrist_jog.py` suggests `-d <motion + 60 s>`. The 10-26 recording gives the same
   result as before (halves 1.2 mm).
+- **Tool 3 `V2_holder_only` (2026-11-03 09:41), now the default:** wand 8700340 in the SimpleHolder,
+  hand-eye with calibrated kinematics (`wrist_jog.py`, 150 s recording, whole jog captured). Mismatch 0.29°,
+  spread 6.0 mm / 0.25°, halves 0.4 mm, wand still to 0.04 mm / 0.01° (rest before/after). Tip
+  (−1.01, 16.34, 324.99) mm, within ~1 mm of the 09:34 attempt. Tool 1 (10-26, nominal model) is kept for
+  comparison.
