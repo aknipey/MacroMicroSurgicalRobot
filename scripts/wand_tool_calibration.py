@@ -43,6 +43,8 @@ OUTLIER_MM = 30.0
 MAX_ANGLE_MISMATCH_DEG = 1.0
 MAX_SPREAD_DEG = 1.0
 MAX_HALVES_MM = 2.0
+# tool0 turned more than this from its first pose = the jog has started (deg)
+MOVING_DEG = 0.5
 
 
 def camera_pose_deviation(rt, rT, nt, nT, X, delay):
@@ -90,7 +92,16 @@ def main():
     tip, direction = tool_from_fit(X, wand)
     tilt = np.degrees(np.arccos(np.clip(direction[2], -1.0, 1.0)))
 
-    middle = rt[0] + (rt[-1] - rt[0]) / 2
+    # Halves of the *motion*, not of the recording: a long still lead-in (robot-tcp started
+    # well before trajectory_player) would otherwise leave the first half with one wrist only
+    turned = np.degrees((Rotation.from_matrix(rT[:, :3, :3]) * Rotation.from_matrix(rT[0, :3, :3]).inv())
+                        .magnitude())
+    moving = rt[turned > MOVING_DEG]
+    start, end = (moving[0], moving[-1]) if len(moving) else (rt[0], rt[-1])
+    middle = start + (end - start) / 2
+    print(f"  motion {start - rt[0]:.1f}-{end - rt[0]:.1f} s of {rt[-1] - rt[0]:.1f} s recorded"
+          + ("  <- still moving at the end: recording too short, the last wrist may be missing"
+             if rt[-1] - end < 1.0 else ""))
     halves = []
     for lo, hi in ((rt[0], middle), (middle, rt[-1])):
         robot = (rt >= lo) & (rt <= hi)

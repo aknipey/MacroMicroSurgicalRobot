@@ -113,8 +113,9 @@ def main():
     print(f"Wrists 1-2-3 one at a time, +-{args.amplitude:g} deg, peak {peak:.0f} deg/s, "
           f"{args.passes} passes: {duration:.0f} s of motion (+5 s player approach).")
     print(f"Wrote {path}")
-    # Margin for the 3 s robot-tcp lead-in, answering the player prompt and its 5 s approach
-    record = math.ceil(duration + 30)
+    # Margin for the 3 s robot-tcp lead-in, starting the player, its prompt and 5 s approach.
+    # Generous: a still lead-in costs nothing (wand_tool_calibration.py splits by motion), a cut-off end does
+    record = math.ceil(duration + 60)
     print("\nNext (the recording first, it waits 3 s before it starts):")
     print(f"  cd ~/ros2_ws/src/ndi_tracking && python3 -m ndi_tracking robot-tcp --wand-is-tool -d {record}")
     print(f"  ros2 run macro_micro_robot trajectory_player.py {path}")

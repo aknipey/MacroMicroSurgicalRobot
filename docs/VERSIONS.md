@@ -2251,3 +2251,13 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   instead of jogging by hand on the pendant. That needed External Control stopped and never repeated.
   Refuses > 45° or > 30°/s. Mock test (velocity-mode stack, 7 s per wrist): each wrist −30.0…+30.0°,
   other joints 0.0°, back at the start pose, `forward_velocity_controller` active again afterwards.
+- **Wand hand-eye attempts on the SimpleHolder (2026-11-03, calibrated kinematics, `wrist_jog.py`):**
+  09:26 run: the NDI wand pose moved 111 mm / 3.4° between the rest poses before and after (the robot
+  returned to within 0.02 mm), so the wand or the Vega moved during the wrist-3 swings. Halves 51 mm
+  apart: discarded. 09:34 run: good quality (mismatch 0.24°, spread 5.3 mm / 0.22°, both better than
+  10-26), tip (−0.05, 16.56, 324.99) mm. But the jog started 44 s into the 120 s recording, so the last
+  wrist-3 swing was cut off and the halves are 3.0 mm apart: redo.
+  Fixes: `wand_tool_calibration.py` splits the halves at the middle of the *motion*, not the recording
+  (a still lead-in left the first half with one wrist only), and warns if the arm is still moving when
+  the recording ends. `wrist_jog.py` suggests `-d <motion + 60 s>`. The 10-26 recording gives the same
+  result as before (halves 1.2 mm).
