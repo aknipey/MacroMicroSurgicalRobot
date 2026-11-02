@@ -2276,3 +2276,7 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   doesn't use it for motion, but the controller's TCP-speed safety limits do.
 - `code_version: unknown` in that replay: today's `colcon build` calls lacked `--symlink-install`, so the
   recorder's git lookup ran in install/ instead of the repo. Fix: clean rebuild with `--symlink-install`.
+- **Session A replays done** (12 + 1, all with NDI): results and caveats in
+  `logs/V8/CalibratedKinematics/REPLAYS_2026-11-03.md`. SlowChecking 2.87 → 1.30 mm rms, FastChecking
+  1.70 → 1.27, but RCMOnly 0.43 → 2.12 and WholeRun 0.90 → 1.26. Not a clean pair: the new tool's tip is
+  42 mm closer to the flange, swings are larger, and RCMOnly behaved differently. E0 next.
