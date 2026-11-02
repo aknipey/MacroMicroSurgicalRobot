@@ -2280,3 +2280,9 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   `logs/V8/CalibratedKinematics/REPLAYS_2026-11-03.md`. SlowChecking 2.87 → 1.30 mm rms, FastChecking
   1.70 → 1.27, but RCMOnly 0.43 → 2.12 and WholeRun 0.90 → 1.26. Not a clean pair: the new tool's tip is
   42 mm closer to the flange, swings are larger, and RCMOnly behaved differently. E0 next.
+- **Bug (from the 11-02 rename), fixed in `stylus_replay.py`:** it read the original run's motion scale and
+  RCM-at-start only from `/ur16e_touch_teleop/...`. Bags recorded before the rename use
+  `/ur5e_touch_teleop/...`, so every older run looked like "no motion_scale = 1:1". The V7 RCMOnly original
+  is 1:5, so **the 11-03 RCMOnly replays ran at 1:1: invalid** (tool0 moved ~2× and turned 68° vs 25° on
+  10-26). Fast/Slow/WholeRun are 1:1 originals and unaffected (tool0 motion matches 10-26 within a few mm).
+  Now reads both names, like `rcm_offset_check.py`. The 10-26 replays ran before the rename, so they're correct.

@@ -70,6 +70,10 @@ STATE_TOPIC = "/phantom/state"
 BUTTON_TOPIC = "/phantom/button"
 SCALE_TOPIC = "/ur16e_touch_teleop/motion_scale"
 RCM_ACTIVE_TOPIC = "/ur16e_touch_teleop/rcm_active"
+# Bags recorded before the 2026-11-02 rename have the teleop's topics under this node name.
+# Reading only the new name made every older run look like "no motion_scale = 1:1": the V7
+# RCMOnly original (1:5) was replayed at 1:1 on 2026-11-03.
+OLD_TELEOP_NODE = "/ur5e_touch_teleop/"
 PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 UR_JOINTS = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -139,6 +143,11 @@ def read_run(run_dir):
             "rcm": bag_first(run_dir, RCM_ACTIVE_TOPIC, Bool)}
 
 
+def renamed(topic):
+    """The same teleop topic as recorded before the 2026-11-02 rename."""
+    return topic.replace("/ur16e_touch_teleop/", OLD_TELEOP_NODE)
+
+
 def bag_first(run_dir, topic, msg_type):
     """The first value of a (latched) topic in the run's bag, or None: the teleop's
     motion_scale, or whether RCM mode was on when the recording started."""
@@ -147,7 +156,7 @@ def bag_first(run_dir, topic, msg_type):
         return None
     reader = SequentialReader()
     reader.open(StorageOptions(uri=bag_dir, storage_id="mcap"), ConverterOptions("cdr", "cdr"))
-    reader.set_filter(StorageFilter(topics=[topic]))
+    reader.set_filter(StorageFilter(topics=[topic, renamed(topic)]))
     if not reader.has_next():
         return None
     return deserialize_message(reader.read_next()[1], msg_type).data
