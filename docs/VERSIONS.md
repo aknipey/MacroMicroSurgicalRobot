@@ -2246,3 +2246,8 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   logging / the tool library, not motion. **Set back to `"position"` / `True` / `1.0` for Session B.**
 - An unsaved `logs/NEW_RUN` (2026-10-30 17:18, 136 s Touch run, no NDI) was moved to
   `logs/V8/UNSAVED_2026-10-30_171830` before the next recording could delete it.
+- **`scripts/wrist_jog.py`:** writes the hand-eye wrist jog (wrists 1-2-3 one at a time, ±30°,
+  A·sin(2πt/T), 14 s each, twice: 90 s) from the current pose as a `trajectory_player.py` file,
+  instead of jogging by hand on the pendant. That needed External Control stopped and never repeated.
+  Refuses > 45° or > 30°/s. Mock test (velocity-mode stack, 7 s per wrist): each wrist −30.0…+30.0°,
+  other joints 0.0°, back at the start pose, `forward_velocity_controller` active again afterwards.
