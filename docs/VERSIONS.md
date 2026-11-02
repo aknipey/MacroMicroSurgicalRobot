@@ -2294,3 +2294,6 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
 - `replay_batch.sh` default order: RCMOnly last. At 1:5 it ends with RCM on and the tool in; RCM can only
   be left back at its own RCM point, so the WholeRun replay after it refused to start (V9 batch, nothing
   moved past WholeRun's start pose). Run a different run after RCMOnly only after restarting the stack.
+- V9/PositionMode RCM set done (12 replays, no faults). **V9/TrajectoryMode: `SERVO_OUTPUT = "trajectory"`**, all
+  else unchanged. LargeVibrations is replayed only in modes that stream positions (trajectory, position):
+  it buzzed with speedj, and the user doesn't want it repeated in velocity mode.

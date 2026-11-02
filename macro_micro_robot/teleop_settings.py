@@ -288,9 +288,10 @@ SERVO_LOOKAHEAD = 0.05
 # forward_position_controller (the UR runs servoj, its lag cancelled by
 # SERVO_POSITION_LEAD). speedj buzzed / ground in some poses on the UR16e (a kick
 # every 2 ms set point); servoj never did. Read when Servo starts: needs a relaunch.
-# V9 (2026-11-03): position mode's first real-arm run, otherwise the Session A settings, so the V9 set
-# differs from V8/CalibratedKinematics only in the output mode. Session A was "velocity".
-SERVO_OUTPUT = "position"
+# V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
+# only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
+# V9/TrajectoryMode = this. Final choice after the comparison.
+SERVO_OUTPUT = "trajectory"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
