@@ -658,7 +658,7 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d endRotation;
     Pose currentTouchPose;
-    geometry_msgs::msg::PoseStamped currentUR5EPoseStamped;
+    geometry_msgs::msg::PoseStamped currentUR16EPoseStamped;
 
     Pose touchPoseDelta;
 
@@ -678,7 +678,7 @@ int main(int argc, char **argv)
     bool isWhiteButtonPressed = false;
     bool wasEngaged = false;  // Track previous engaged state for edge detection
 
-    // Which module the stylus drives, published latched by ur5e_touch_teleop (hold GREY
+    // Which module the stylus drives, published latched by ur16e_touch_teleop (hold GREY
     // 1 s to switch). Without that node running nothing is published and the micro
     // module is always the active one.
     bool isMicroModeActive = true;
@@ -889,7 +889,7 @@ int main(int argc, char **argv)
         endPosition = GetTransformPosition(jointTransforms.back());
         endRotation = GetTransformRotation(jointTransforms.back());
 
-        // WHITE is the deadman, as for the arm; GREY is left to ur5e_touch_teleop
+        // WHITE is the deadman, as for the arm; GREY is left to ur16e_touch_teleop
         // (record / switch module)
         bool isEngaged = isWhiteButtonPressed && isMicroModeActive;
 

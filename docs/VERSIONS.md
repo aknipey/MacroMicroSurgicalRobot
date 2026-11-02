@@ -6,7 +6,7 @@ browsed exactly:
 
 ```bash
 git show v2 --stat            # what the version is
-git diff v1 v2 -- src/ ls_thesis/ launch/   # what changed between two versions
+git diff v1 v2 -- src/ ls_thesis/ macro_micro_robot/ launch/   # what changed between two versions (ls_thesis/ before 2026-11-02)
 git worktree add /tmp/v2 v2   # a copy of the code as it ran
 ```
 
@@ -24,10 +24,11 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V6 | `v6` | 2026-10-19 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs; RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point, the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck. RCM: laparoscopic-style work, the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots. Real arm RCM runs in `logs/V6/` (BasicInRCM, ScalingInRCM, ExitingRCM): near the point the arm has to accelerate hard for small tip moves |
 | V7 | `v7` | 2026-10-19 – 10-26 | RCM sideways scaling: a sideways stylus move moves tool0 by the same amount at every depth (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5, to 130 mm), replacing V6's (depth / 10 mm)² fade; pivot continuous through 0 mm; tip can retract 5 mm past the point; RCM tool = NDI wand (hand-eye calibration). **Part 2:** haptic cues on the Touch (`TOUCH_HAPTIC_*`) through a new driver (`touch_server` + `touch_bridge`) replacing `omni_state`. **Tooling:** NDI Vega tracking of every run, recording refused without the tracker, replays with RCM chords / `--rcm`, UR16e hard-coded. Overview: section *V7 — summary of what changed from V6* | V6 real arm runs: near the RCM point the arm moved r(d) / d times the tip, so it accelerated hugely for small moves; fades tried first swung the arm when moving in and out. Part 2: feel limits and mode changes instead of watching for them. NDI: measure the RCM error independently of the robot's kinematics | Offline: tool0 0.50 mm per mm of stylus at 0-130 mm. Real arm, 14 NDI replays (2026-10-26): NDI RCM error 0.4-2.9 mm rms, teleop's own 0.05-0.23 mm (gap = UR16e factory kinematics, `logs/V7/REPLAYS_2026-10-26.md`). Haptics: OpenHaptics renders no force in a ROS process (fixed by the new driver); this Touch's force output is faulty |
 | V8 | `v8` | 2026-10-27 – 10-30 | GREY-hold macro/micro switch; numbered tool library switched from the launch terminal; smoother `speedj` on the robot (`SERVO_SMOOTH_SPEEDJ`); micro module made to work (startup deadlock, lost handshake, rad/deg motor maths, stylus position control, responsive damping); tool tip from one NDI ball, micro module = tool 2. Overview: section *V8 — summary of what changed from V7* | One stylus for arm and micro; tools change with the quick-change coupling; the arm buzzed / ground on accelerations; the Touch never moved the micro module | Sim / fakes: micro tip step settles in 69 ms (was 1.1 s), tracks within ~0.1 mm; speedj script loads (real-arm effect not yet measured). Real: tool switching; micro tip at (−8.7, 17.0, 436.0) mm ±1.5 mm |
-| (after V8) | not committed | 2026-10-30 | Rotation scaled the same as translation at every motion scale (`TOUCH_SCALE_ROTATION_EXPONENT` 0.5 → 1: 1:5 / 1:20 for both) instead of the square root (1:2.24 / 1:4.47) | User's choice: one scale for the whole motion | Test node: double-clicks cycle 1:1 / 1:5 / 1:20 with rotation 1:1 / 1:5 / 1:20 |
-| (after V8) | not committed | 2026-10-30 | NDI tracker no longer required to record: `LOG_REQUIRE_NDI` True → False (GREY click / replay record without it, with a warning and `ndi.tracker_at_start: false`) | User's choice: record runs without the Vega | - |
-| (after V8) | not committed | 2026-10-30 | `launch_system.sh`: each command in its own process group, shutdown stops the whole group (SIGINT → SIGTERM 15 s → SIGKILL 5 s); stops orphaned `ros2_control_node`s on the same ROS domain at start-up and refuses while a live session's driver runs | Orphaned `ros2_control_node`s from earlier sessions published stale `/joint_states` (poses 1-1.5 h old) into the live one | Dummy tree ignoring SIGINT: removed at 15 s; fake driver on the same domain refused, other domain allowed |
-| (after V8) | not committed | 2026-10-30 | `SERVO_OUTPUT = "position"` (new, now the default): Servo's joint velocities go through `joint_velocity_limiter`, which integrates them into its own joint positions and sends them `SERVO_POSITION_LEAD` (30 ms) ahead to `forward_position_controller`, so the UR runs `servoj` instead of `speedj` | The buzz / grind is `speedj`-only and pose-dependent (`LargeVibrations` 1.81 A vs `NEW_RUN` 0.22 A, same session, settings and command roughness); `servoj` never buzzed. Trajectory mode's ~140 ms lag came from Servo's re-basing, not `servoj` | Sim (emulator, `V3/CyclingScaling`): 58 / 62 ms, 4.9 mm (velocity 62 / 66 ms, 5.3 mm). Real arm: not yet run |
+| (after V8) | `1b9b502` | 2026-10-30 | Rotation scaled the same as translation at every motion scale (`TOUCH_SCALE_ROTATION_EXPONENT` 0.5 → 1: 1:5 / 1:20 for both) instead of the square root (1:2.24 / 1:4.47) | User's choice: one scale for the whole motion | Test node: double-clicks cycle 1:1 / 1:5 / 1:20 with rotation 1:1 / 1:5 / 1:20 |
+| (after V8) | `1b9b502` | 2026-10-30 | NDI tracker no longer required to record: `LOG_REQUIRE_NDI` True → False (GREY click / replay record without it, with a warning and `ndi.tracker_at_start: false`) | User's choice: record runs without the Vega | - |
+| (after V8) | `1b9b502` | 2026-10-30 | `launch_system.sh`: each command in its own process group, shutdown stops the whole group (SIGINT → SIGTERM 15 s → SIGKILL 5 s); stops orphaned `ros2_control_node`s on the same ROS domain at start-up and refuses while a live session's driver runs | Orphaned `ros2_control_node`s from earlier sessions published stale `/joint_states` (poses 1-1.5 h old) into the live one | Dummy tree ignoring SIGINT: removed at 15 s; fake driver on the same domain refused, other domain allowed |
+| (after V8) | `1b9b502` | 2026-10-30 | `SERVO_OUTPUT = "position"` (new, now the default): Servo's joint velocities go through `joint_velocity_limiter`, which integrates them into its own joint positions and sends them `SERVO_POSITION_LEAD` (30 ms) ahead to `forward_position_controller`, so the UR runs `servoj` instead of `speedj` | The buzz / grind is `speedj`-only and pose-dependent (`LargeVibrations` 1.81 A vs `NEW_RUN` 0.22 A, same session, settings and command roughness); `servoj` never buzzed. Trajectory mode's ~140 ms lag came from Servo's re-basing, not `servoj` | Sim (emulator, `V3/CyclingScaling`): 58 / 62 ms, 4.9 mm (velocity 62 / 66 ms, 5.3 mm). Real arm: not yet run |
+| (after V8) | not committed | 2026-11-02 | Renames only, no behaviour change: package `ls_thesis` → `macro_micro_robot` (Python folder, `include/` folder, every `ros2 launch/run`), `ur5e_*` → `ur16e_*` (files, nodes, topics, launch_system.sh modes, identifiers, docs). Overview: section *Rename: ls_thesis → macro_micro_robot, ur5e → ur16e* | The arm has always been the lab UR16e; the names came from the original UR5e project and made the code read as if it drove a UR5e | Clean mapped diff (only the listed exceptions differ), package builds, mock launch: `/ur16e_touch_teleop` up with its topics |
 
 **V7 SimpleHolder replays (2026-10-26, with NDI):** see `logs/V7/REPLAYS_2026-10-26.md`:
 results, original → replay map, and why the NDI error is mostly factory-kinematics error.
@@ -46,7 +47,7 @@ Runs are written to `logs/NEW_RUN/`, which the next recording deletes, so move e
 one by hand into `logs/V<n>/`. The exact settings for any run are in its `META.yaml`.
 
 **Comparing versions:** replay a reference run's stylus into the new version
-(`ros2 run ls_thesis stylus_replay.py V3/CyclingScaling` with the stack on
+(`ros2 run macro_micro_robot stylus_replay.py V3/CyclingScaling` with the stack on
 `input:=replay ur_type:=ur16e`), then `python3 scripts/plot_paths.py logs/V<n>`
 writes `METRICS.yaml` per run and `METRICS_SUMMARY.csv` per folder. Only replays
 of the same run have identical input, so compare those, not two hand-made runs.
@@ -2149,3 +2150,48 @@ mis-tracked frames at 33-35 s; without them the fit matches 10-26's quality (mis
 not applied. Both halves put the tip ~5-7 mm from tool 1 (y +5 to +7, z −3 to −4 mm, shaft
 +1.4°): the holder has probably moved since 10-26. The batch script's syntax and its
 NEW_RUN refusal were checked; it has not yet run on the arm.
+
+## Rename: ls_thesis → macro_micro_robot, ur5e → ur16e (2026-11-02, after V8)
+
+**What:** names only. The code does exactly what it did at `1b9b502`.
+
+| Before | After |
+|---|---|
+| package `ls_thesis` (`ros2 launch/run ls_thesis ...`) | `macro_micro_robot` |
+| `ls_thesis/` (Python helpers), `include/ls_thesis/` | `macro_micro_robot/`, `include/macro_micro_robot/` |
+| `ls_thesis/ur5e_common.py` | `macro_micro_robot/ur16e_common.py` |
+| `launch/ur5e_teleop.launch.py`, `rviz/ur5e_teleop.rviz` | `launch/ur16e_teleop.launch.py`, `rviz/ur16e_teleop.rviz` |
+| `src/ur5e_touch_teleop.py`, `ur5e_keyboard_teleop.py`, `ur5e_control.cpp` | `src/ur16e_touch_teleop.py`, `ur16e_keyboard_teleop.py`, `ur16e_control.cpp` |
+| nodes / topics `/ur5e_touch_teleop/...`, `ur5e_keyboard_teleop`, `ur5e_control` | `/ur16e_touch_teleop/...`, `ur16e_keyboard_teleop`, `ur16e_control` |
+| `launch_system.sh` modes `ur5e`, `ur5e-keyboard`, `ur5e-touch` | `ur16e`, `ur16e-keyboard`, `ur16e-touch` |
+| `lab_ur5e_1_calibration.yaml` (repo root) | `config/lab_ur5e_1_calibration.yaml` (same installed path) |
+
+**Kept as UR5e on purpose:** `lab_ur5e_1_calibration.yaml` really is a UR5e's calibration
+(upper arm 0.4250 m, forearm 0.3922 m, shoulder height 0.1623 m; a UR16e is 0.4784 / 0.3600 /
+0.1807 m), from the original project's arm. It is still loaded only for `ur_type:=ur5e`, and
+`ur5e` stays in the `ur_type` choices. No recorded run used a UR16e calibration file: every run
+used the UR16e factory kinematics, except the V3 `CyclingScaling` replays that ran with
+`ur_type:=ur5e` (see *V3*). The 0.6-3.5 mm `tcp_offset.check_max_mm` of the V3-V8 runs fits the
+factory model (a UR5e model would be ~30 mm off). The arm's own calibration is still not
+extracted (see the V7 replay notes).
+
+**Old recordings:** bags before this date have `/ur5e_touch_teleop/...` topics.
+`scripts/rcm_offset_check.py` reads both names. Historical sections above keep the old names,
+as they describe the code at their tags.
+
+**Outside this repo:** `ndi_tracking` default `--rcm-topic` → `/ur16e_touch_teleop/rcm_active`, and
+its `teleop_settings.py` path → `macro_micro_robot/` (`robot_tcp.py`, `__main__.py`,
+`ros_link.py`, README).
+
+**Also renamed:** the launch file's private `_ls_quieted` flag → `_quieted`.
+
+**After pulling:** `colcon build --packages-select macro_micro_robot --symlink-install`, then
+use the new names. `install/ls_thesis` from earlier builds is stale and can be deleted.
+
+**Why:** the arm has always been the lab UR16e. The names came from the original UR5e project,
+so the code read as if it drove a UR5e, and `ls_thesis` said nothing about what the package is.
+
+**Tests:** each changed file was compared with its `1b9b502` version after the same name
+mapping, and only the intended exceptions above differ. The package builds (scratch build),
+every Python file compiles, and `macro_micro_robot.*` imports. A mock launch
+(`use_mock_hardware:=true input:=replay`, private domain) started `/ur16e_touch_teleop`.

@@ -25,7 +25,7 @@ the same dead time, then the joint speed ramps to the command at `accel_limit` r
 (plus an optional first-order `velocity_tau`). This is an estimate - no real
 velocity-mode data has been logged yet.
 
-Started by ur5e_teleop.launch.py with use_mock_hardware:=true emulate_ur:=true.
+Started by ur16e_teleop.launch.py with use_mock_hardware:=true emulate_ur:=true.
 """
 
 from collections import deque
@@ -39,7 +39,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory
 
-from ls_thesis.ur5e_common import EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC
+from macro_micro_robot.ur16e_common import EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC
 
 UR_JOINTS = [
     "shoulder_pan_joint",

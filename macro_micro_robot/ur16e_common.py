@@ -1,6 +1,6 @@
-"""Shared helpers for the UR5e teleoperation / trajectory nodes.
+"""Shared helpers for the UR16e teleoperation / trajectory nodes.
 
-UR5e motion in ROS 2 goes through MoveIt Servo:
+UR16e motion in ROS 2 goes through MoveIt Servo:
 
     keyboard / Touch node --TwistStamped--> /servo_node/delta_twist_cmds
     servo_node --JointTrajectory--> /scaled_joint_trajectory_controller/joint_trajectory

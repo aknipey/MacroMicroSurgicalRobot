@@ -26,7 +26,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# ls_thesis copy of ur_robot_driver/launch/ur_rsp.launch.py (Universal_Robots_ROS2_Driver
+# macro_micro_robot copy of ur_robot_driver/launch/ur_rsp.launch.py (Universal_Robots_ROS2_Driver
 # 32bb4c1), passed to ur_control.launch.py as description_launchfile when
 # SERVO_SMOOTH_SPEEDJ is on. Only script_filename differs; re-copy it if the driver
 # is updated.
@@ -79,11 +79,11 @@ def generate_launch_description():
     script_sender_port = LaunchConfiguration("script_sender_port")
     trajectory_port = LaunchConfiguration("trajectory_port")
 
-    # ls_thesis: the one change from ur_robot_driver's ur_rsp.launch.py - the robot runs
+    # macro_micro_robot: the one change from ur_robot_driver's ur_rsp.launch.py - the robot runs
     # config/external_control_smooth_speedj.urscript (speedj ramps over each step).
     script_filename = PathJoinSubstitution(
         [
-            FindPackageShare("ls_thesis"),
+            FindPackageShare("macro_micro_robot"),
             "config",
             "external_control_smooth_speedj.urscript",
         ]

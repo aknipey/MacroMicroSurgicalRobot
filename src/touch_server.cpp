@@ -41,7 +41,7 @@
 #include <ctime>
 #include <mutex>
 
-#include "ls_thesis/touch_packets.hpp"
+#include "macro_micro_robot/touch_packets.hpp"
 
 namespace
 {

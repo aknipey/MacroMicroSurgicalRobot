@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Records UR5e trajectories (joint angles + tool pose) while you teleoperate.
+"""Records UR16e trajectories (joint angles + tool pose) while you teleoperate.
 
 Services (std_srvs/Trigger):
     /trajectory_recorder/start   begin a new recording
@@ -64,9 +64,9 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from ls_thesis import teleop_settings as cfg
-from ls_thesis.run_logger import CsvStream
-from ls_thesis.ur5e_common import ndi_tracker_listening
+from macro_micro_robot import teleop_settings as cfg
+from macro_micro_robot.run_logger import CsvStream
+from macro_micro_robot.ur16e_common import ndi_tracker_listening
 
 UR_JOINTS = [
     "shoulder_pan_joint",
@@ -127,7 +127,7 @@ class TrajectoryRecorder(Node):
         self.declare_parameter("log_dir", cfg.LOG_DIR)
         self.declare_parameter("keep_all_runs", cfg.LOG_KEEP_ALL_RUNS)
         self.declare_parameter("stylus_topic", "/phantom/state")
-        self.declare_parameter("touch_target_topic", "/ur5e_touch_teleop/target_pose")
+        self.declare_parameter("touch_target_topic", "/ur16e_touch_teleop/target_pose")
         self.declare_parameter("ur_tcp_topic", "/tcp_pose_broadcaster/pose")
 
         self.output_dir = os.path.expanduser(self.get_parameter("output_dir").value)
@@ -170,7 +170,7 @@ class TrajectoryRecorder(Node):
         # Teleop's active tool (tool library) at start, and any switch during a recording
         self.active_tool = None
         self.tool_log = None
-        self.create_subscription(String, "/ur5e_touch_teleop/active_tool", self.on_active_tool, latched)
+        self.create_subscription(String, "/ur16e_touch_teleop/active_tool", self.on_active_tool, latched)
         self.create_timer(1.0 / cfg.LOG_TF_FALLBACK_RATE, self.log_tf_fallback)
 
         self.create_service(Trigger, "~/start", self.on_start)

@@ -261,8 +261,8 @@ def set_speed(qd):
 end
 
 thread speedThread():
-  textmsg("ExternalControl: Starting speed thread (ls_thesis: speedj ramps over each step)")
-  # ls_thesis change: the stock thread runs speedj(qd, 40.0, steptime), so every 2 ms set
+  textmsg("ExternalControl: Starting speed thread (macro_micro_robot: speedj ramps over each step)")
+  # macro_micro_robot change: the stock thread runs speedj(qd, 40.0, steptime), so every 2 ms set
   # point is reached at 40 rad/s^2 within a fraction of the step - a torque kick per step,
   # heard as a buzz / grind on the big joints whenever the arm accelerates. Spread each
   # change over the whole step instead (as jointSplineStep does for spline motion): the

@@ -28,8 +28,8 @@ from datetime import datetime
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
-from ls_thesis import teleop_settings as cfg
-from ls_thesis import tools as tool_library
+from macro_micro_robot import teleop_settings as cfg
+from macro_micro_robot import tools as tool_library
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NDI_DIR = os.path.normpath(os.path.join(PKG, "..", "ndi_tracking"))
@@ -156,7 +156,7 @@ def main():
         return
     name = old["name"] if old is not None else f"NDI wand {args.wand}"
     print("\nTo use it (replaces the library entry; the teleop re-reads it on the next tool switch or start):")
-    print(f"  ros2 run ls_thesis tool_library.py add {args.tool} \"{name}\" --from {out} "
+    print(f"  ros2 run macro_micro_robot tool_library.py add {args.tool} \"{name}\" --from {out} "
           f"--length {args.length} --force --notes \"wand in the holder, re-calibrated {stamp_out[:10]}\"")
 
 

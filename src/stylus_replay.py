@@ -3,10 +3,10 @@
 of the stack can be tested with exactly the same hand motion.
 
     # Stack without the Touch driver (teleop node listens, nothing else publishes)
-    ros2 launch ls_thesis ur5e_teleop.launch.py input:=replay
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py input:=replay
     # Second terminal, as often as you like:
-    ros2 run ls_thesis stylus_replay.py V2/Up_10CM            # run folder, relative to logs/
-    ros2 run ls_thesis stylus_replay.py ~/some/other/run      # or any run folder
+    ros2 run macro_micro_robot stylus_replay.py V2/Up_10CM            # run folder, relative to logs/
+    ros2 run macro_micro_robot stylus_replay.py ~/some/other/run      # or any run folder
 
 1. Reads the stylus pose and buttons from the run's STYLUS_RAW.csv (full rate, from
    the start of the recording - the rosbag misses up to ~2 s while `ros2 bag record`
@@ -53,7 +53,7 @@ from std_msgs.msg import Bool, Float64
 from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-from ls_thesis.ur5e_common import (
+from macro_micro_robot.ur16e_common import (
     RECORDER_START_SERVICE,
     RECORDER_STOP_SERVICE,
     TRAJECTORY_ACTION,
@@ -64,12 +64,12 @@ from ls_thesis.ur5e_common import (
     call_service,
     set_servo_paused,
 )
-from ls_thesis import teleop_settings as cfg
+from macro_micro_robot import teleop_settings as cfg
 
 STATE_TOPIC = "/phantom/state"
 BUTTON_TOPIC = "/phantom/button"
-SCALE_TOPIC = "/ur5e_touch_teleop/motion_scale"
-RCM_ACTIVE_TOPIC = "/ur5e_touch_teleop/rcm_active"
+SCALE_TOPIC = "/ur16e_touch_teleop/motion_scale"
+RCM_ACTIVE_TOPIC = "/ur16e_touch_teleop/rcm_active"
 PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 UR_JOINTS = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -201,7 +201,7 @@ class StylusReplay(Node):
             sys.exit(f"{others[0].node_name} is publishing {STATE_TOPIC} - stop the Touch driver "
                      "(launch with input:=replay) so the replay is the only stylus")
         if not self.get_subscriptions_info_by_topic(STATE_TOPIC):
-            sys.exit(f"Nothing subscribes to {STATE_TOPIC} - is ur5e_teleop.launch.py input:=replay running?")
+            sys.exit(f"Nothing subscribes to {STATE_TOPIC} - is ur16e_teleop.launch.py input:=replay running?")
 
     def wait_for_ndi_tracker(self, timeout=5.0):
         """True once the NDI tracker follows the recorder (discovery of a fresh process

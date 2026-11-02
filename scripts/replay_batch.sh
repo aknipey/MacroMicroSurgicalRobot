@@ -77,7 +77,7 @@ for spec in "${RUNS[@]}"; do
     target="${LOGS}/${DEST}/${name}_Replay${n}"
     echo
     echo "=== ${run} ${flags[*]:-} -> ${DEST}/${name}_Replay${n}  ($i/${REPEATS})"
-    ros2 run ls_thesis stylus_replay.py "$run" --yes "${flags[@]}" || true
+    ros2 run macro_micro_robot stylus_replay.py "$run" --yes "${flags[@]}" || true
     # REPLAY.yaml is only written once the recorder has stopped and saved
     if [ ! -f "${LOGS}/NEW_RUN/REPLAY.yaml" ]; then
       echo "!!! The replay did not finish with a saved recording - stopping the batch." >&2

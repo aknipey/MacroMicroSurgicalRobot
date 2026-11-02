@@ -96,7 +96,7 @@ Put the pen in the holder on the Touch base. It calibrates there when the driver
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur16e robot_ip:=192.168.0.100 input:=none
+ros2 launch macro_micro_robot ur16e_teleop.launch.py ur_type:=ur16e robot_ip:=192.168.0.100 input:=none
 ```
 
 Wait until you see **`System successfully started!`**. RViz will also open.
@@ -115,7 +115,7 @@ Terminal 1 should say **`Robot connected to reverse interface. Ready to receive 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch ls_thesis touch_driver.launch.py
+ros2 launch macro_micro_robot touch_driver.launch.py
 ```
 
 You should see `Found Touch.`, `touch_server running` and `Receiving Touch state from touch_server`.
@@ -126,7 +126,7 @@ Use this, not omni_common's `omni_state`: with `omni_state` the pen tracks fine 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5
+ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5
 ```
 
 Wait for **`Touch teleop ready`**.
@@ -188,12 +188,12 @@ Same as Part B, but **no robot needed, nothing on the pendant**. The arm only mo
 # Terminal 1
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur16e use_mock_hardware:=true input:=touch
+ros2 launch macro_micro_robot ur16e_teleop.launch.py ur_type:=ur16e use_mock_hardware:=true input:=touch
 
 # Terminal 2 (the fake arm starts in a bad pose, so move it home first)
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
-ros2 run ls_thesis trajectory_player.py home
+ros2 run macro_micro_robot trajectory_player.py home
 ```
 
 `input:=touch` starts the Touch driver and the Touch control for you.
@@ -214,7 +214,7 @@ source ~/ros2_ws/install/setup.bash
 ### Main launch (robot driver + MoveIt Servo + recorder + RViz)
 
 ```bash
-ros2 launch ls_thesis ur5e_teleop.launch.py [options]
+ros2 launch macro_micro_robot ur16e_teleop.launch.py [options]
 ```
 
 | Option | Default | What it does |
@@ -227,12 +227,12 @@ ros2 launch ls_thesis ur5e_teleop.launch.py [options]
 | `kinematics_params_file:=` | UR16e factory values | This robot's own calibration file (see "Robot calibration" below) |
 | `trajectory_dir:=` | `~/ros2_ws/trajectories` | Folder where recordings are saved |
 
-Show all options: `ros2 launch ls_thesis ur5e_teleop.launch.py --show-args`
+Show all options: `ros2 launch macro_micro_robot ur16e_teleop.launch.py --show-args`
 
 ### Touch driver
 
 ```bash
-ros2 launch ls_thesis touch_driver.launch.py
+ros2 launch macro_micro_robot touch_driver.launch.py
 ```
 
 No options. It publishes the stylus on `/phantom/state` and the buttons on `/phantom/button`, and renders `/phantom/force_feedback`. Two processes: `touch_server` owns the device (OpenHaptics only, no ROS) and `touch_bridge` publishes the topics. OpenHaptics renders no force in a process that has ROS 2's libraries loaded, so omni_common's `omni_state` (one process) never produced any. A force not refreshed for 0.25 s drops to zero.
@@ -240,7 +240,7 @@ No options. It publishes the stylus on `/phantom/state` and the buttons on `/pha
 ### Touch control
 
 ```bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p option:=value -p option:=value
+ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p option:=value -p option:=value
 ```
 
 | Option | Default | What it does |
@@ -269,19 +269,19 @@ ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p option:=value -p option:=v
 Example with several options:
 
 ```bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5 -p enable_rotation:=false
+ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5 -p enable_rotation:=false
 ```
 
 Example changing `axis_map`:
 
 ```bash
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p mapping:=fixed -p "axis_map:=['x','y','z']"
+ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p mapping:=fixed -p "axis_map:=['x','y','z']"
 ```
 
 ### Keyboard control (instead of the Touch)
 
 ```bash
-ros2 run ls_thesis ur5e_keyboard_teleop.py --ros-args -p option:=value
+ros2 run macro_micro_robot ur16e_keyboard_teleop.py --ros-args -p option:=value
 ```
 
 | Option | Default | What it does |
@@ -301,7 +301,7 @@ Keys: `w/s` `a/d` `r/f` = move X/Y/Z · `u/o` `i/k` `j/l` = rotate · `SPACE` = 
 ⚠️ **This moves the real robot on its own.** Keep the area clear and a hand on the emergency stop.
 
 ```bash
-ros2 run ls_thesis trajectory_player.py <file> [options]
+ros2 run macro_micro_robot trajectory_player.py <file> [options]
 ```
 
 | Option | Default | What it does |
@@ -315,9 +315,9 @@ ros2 run ls_thesis trajectory_player.py <file> [options]
 Examples:
 
 ```bash
-ros2 run ls_thesis trajectory_player.py latest --speed 0.5
-ros2 run ls_thesis trajectory_player.py ~/ros2_ws/trajectories/trajectory_XXXX.yaml
-ros2 run ls_thesis trajectory_player.py home
+ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5
+ros2 run macro_micro_robot trajectory_player.py ~/ros2_ws/trajectories/trajectory_XXXX.yaml
+ros2 run macro_micro_robot trajectory_player.py home
 ```
 
 ### Recorder settings (starts automatically with the main launch)

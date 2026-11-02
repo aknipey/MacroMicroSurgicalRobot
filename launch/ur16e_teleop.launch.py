@@ -1,24 +1,24 @@
-"""UR5e teleoperation stack: UR driver + MoveIt Servo + trajectory recorder (+ Touch).
+"""UR16e teleoperation stack: UR driver + MoveIt Servo + trajectory recorder (+ Touch).
 
     # Real robot, keyboard (run the keyboard node in a second terminal)
-    ros2 launch ls_thesis ur5e_teleop.launch.py robot_ip:=192.168.0.100
-    ros2 run ls_thesis ur5e_keyboard_teleop.py
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py robot_ip:=192.168.0.100
+    ros2 run macro_micro_robot ur16e_keyboard_teleop.py
 
     # Real robot, Touch stylus
-    ros2 launch ls_thesis ur5e_teleop.launch.py robot_ip:=192.168.0.100 input:=touch
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py robot_ip:=192.168.0.100 input:=touch
 
     # Replay a logged run's stylus instead of the Touch (same hand motion every time)
-    ros2 launch ls_thesis ur5e_teleop.launch.py input:=replay replay_run:=V2/Up_10CM
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py input:=replay replay_run:=V2/Up_10CM
     # ...or input:=replay alone, then in a second terminal (repeat as often as you like):
-    ros2 run ls_thesis stylus_replay.py V2/Up_10CM
+    ros2 run macro_micro_robot stylus_replay.py V2/Up_10CM
 
     # No robot: simulated (mock) hardware, same commands otherwise
-    ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py use_mock_hardware:=true
     # ...with the real arm's delays added (ur_emulator.py), for latency testing
-    ros2 launch ls_thesis ur5e_teleop.launch.py use_mock_hardware:=true emulate_ur:=true
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py use_mock_hardware:=true emulate_ur:=true
 
     # Defaults to the lab UR16e (factory kinematics). Other models / a calibration file:
-    ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur5e robot_ip:=<ip> kinematics_params_file:=<file>
+    ros2 launch macro_micro_robot ur16e_teleop.launch.py ur_type:=ur5e robot_ip:=<ip> kinematics_params_file:=<file>
 
 Terminal output is kept short: nodes from other packages (UR driver, controller
 spawners, MoveIt, Touch driver) only print warnings and errors, and launch's own
@@ -50,11 +50,11 @@ from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
-from ls_thesis.teleop_settings import (
+from macro_micro_robot.teleop_settings import (
     SERVO_LOOKAHEAD, SERVO_OUTPUT, SERVO_SMOOTH_SPEEDJ, SERVO_VELOCITY_RATE, TOUCH_STARTUP_DELAY,
     VELOCITY_LIMITER,
 )
-from ls_thesis.ur5e_common import (
+from macro_micro_robot.ur16e_common import (
     EMULATOR_CONTROLLER, EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC,
     LIMITER_INPUT_TOPIC, LIMITER_NODE, POSITION_CONTROLLER, SERVO_COMMAND_TOPIC, SERVO_POSITION_TOPIC,
     SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
@@ -119,11 +119,11 @@ _node_execute = Node.execute
 
 def _execute_quietly(self, context):
     package = perform_substitutions(context, normalize_to_list_of_substitutions(self.node_package))
-    if _quiet["on"] and package != "ls_thesis" and not getattr(self, "_ls_quieted", False):
+    if _quiet["on"] and package != "macro_micro_robot" and not getattr(self, "_quieted", False):
         executable = perform_substitutions(context, normalize_to_list_of_substitutions(self.node_executable))
         for level in ["warn"] + EXTRA_LOG_LEVELS.get(executable, []):
             self.cmd.extend([[TextSubstitution(text="--log-level")], [TextSubstitution(text=level)]])
-        self._ls_quieted = True
+        self._quieted = True
     return _node_execute(self, context)
 
 
@@ -133,8 +133,8 @@ Node.execute = _execute_quietly
 def package_node(script, name, **kwargs):
     """Node for one of this package's scripts: the installed one, or straight from the
     source tree before the next colcon build."""
-    if os.path.exists(os.path.join(get_package_prefix("ls_thesis"), "lib", "ls_thesis", script)):
-        return Node(package="ls_thesis", executable=script, name=name, output="screen", **kwargs)
+    if os.path.exists(os.path.join(get_package_prefix("macro_micro_robot"), "lib", "macro_micro_robot", script)):
+        return Node(package="macro_micro_robot", executable=script, name=name, output="screen", **kwargs)
     source = Path(__file__).resolve().parent.parent / "src" / script
     parameters = kwargs.pop("parameters", [])
     arguments = ["--ros-args", "-r", f"__node:={name}"]
@@ -145,7 +145,7 @@ def package_node(script, name, **kwargs):
 
 
 def generate_launch_description():
-    pkg_share = FindPackageShare("ls_thesis")
+    pkg_share = FindPackageShare("macro_micro_robot")
     use_touch = IfCondition(EqualsSubstitution(LaunchConfiguration("input"), "touch"))
     # The teleop node runs for the real Touch and for a replayed one; the driver only for the real one
     use_stylus = IfCondition(PythonExpression(["'", LaunchConfiguration("input"), "' in ('touch', 'replay')"]))
@@ -154,7 +154,7 @@ def generate_launch_description():
 
     ur_type = LaunchConfiguration("ur_type")
 
-    # The lab UR5e calibration only applies to that arm; any other type falls back
+    # The old lab UR5e calibration only applies to that arm; any other type falls back
     # to its factory kinematics unless a calibration file is passed explicitly.
     default_kinematics = PythonExpression([
         "'", PathJoinSubstitution([pkg_share, "config", "lab_ur5e_1_calibration.yaml"]), "' if '",
@@ -168,7 +168,7 @@ def generate_launch_description():
                               description="UR model being driven, e.g. ur16e"),
         DeclareLaunchArgument("robot_ip", default_value="192.168.0.100"),
         DeclareLaunchArgument("use_mock_hardware", default_value="false",
-                              description="Simulate the UR5e instead of connecting to it"),
+                              description="Simulate the UR16e instead of connecting to it"),
         DeclareLaunchArgument("kinematics_params_file",
                               default_value=default_kinematics),
         DeclareLaunchArgument("input", default_value="keyboard", choices=["keyboard", "touch", "replay", "none"],
@@ -203,7 +203,7 @@ def generate_launch_description():
             # Same as the driver's ur_rsp.launch.py but with our robot script (see
             # SERVO_SMOOTH_SPEEDJ); the stock one otherwise
             "description_launchfile": PathJoinSubstitution([
-                FindPackageShare("ls_thesis" if SERVO_SMOOTH_SPEEDJ else "ur_robot_driver"), "launch",
+                FindPackageShare("macro_micro_robot" if SERVO_SMOOTH_SPEEDJ else "ur_robot_driver"), "launch",
                 "ur_rsp_smooth_speedj.launch.py" if SERVO_SMOOTH_SPEEDJ else "ur_rsp.launch.py"]),
         }.items(),
     )
@@ -219,7 +219,7 @@ def generate_launch_description():
 
     # MoveIt Servo, as ur_moveit.launch.py would start it but sending JointTrajectory
     # to the trajectory controller instead of Float64MultiArray positions (see
-    # ur5e_common for why). Its output settings are read-only, hence started here.
+    # ur16e_common for why). Its output settings are read-only, hence started here.
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="ur_moveit_config")
         .robot_description_semantic(Path("srdf") / "ur.srdf.xacro", {"name": ur_type})
@@ -280,8 +280,8 @@ def generate_launch_description():
 
     # Installed node, or straight from the source tree before the next colcon build
     emulator_condition = IfCondition(LaunchConfiguration("emulate_ur"))
-    if os.path.exists(os.path.join(get_package_prefix("ls_thesis"), "lib", "ls_thesis", "ur_emulator.py")):
-        ur_emulator = Node(package="ls_thesis", executable="ur_emulator.py", name="ur_emulator",
+    if os.path.exists(os.path.join(get_package_prefix("macro_micro_robot"), "lib", "macro_micro_robot", "ur_emulator.py")):
+        ur_emulator = Node(package="macro_micro_robot", executable="ur_emulator.py", name="ur_emulator",
                            output="screen", condition=emulator_condition)
     else:
         source = Path(__file__).resolve().parent.parent / "src" / "ur_emulator.py"
@@ -289,7 +289,7 @@ def generate_launch_description():
                                      condition=emulator_condition)
 
     recorder = Node(
-        package="ls_thesis",
+        package="macro_micro_robot",
         executable="trajectory_recorder.py",
         name="trajectory_recorder",
         output="screen",
@@ -299,12 +299,12 @@ def generate_launch_description():
     rviz = Node(
         package="rviz2",
         executable="rviz2",
-        arguments=["-d", PathJoinSubstitution([pkg_share, "rviz", "ur5e_teleop.rviz"])],
+        arguments=["-d", PathJoinSubstitution([pkg_share, "rviz", "ur16e_teleop.rviz"])],
         condition=IfCondition(LaunchConfiguration("launch_rviz")),
         output="log",
     )
 
-    # ls_thesis's own Touch driver, not omni_common's omni_state: forces from omni_state
+    # macro_micro_robot's own Touch driver, not omni_common's omni_state: forces from omni_state
     # never reach the motors (OpenHaptics renders none in a ROS process)
     touch_driver = IncludeLaunchDescription(
         PathJoinSubstitution([pkg_share, "launch", "touch_driver.launch.py"]),
@@ -315,9 +315,9 @@ def generate_launch_description():
     touch_teleop = TimerAction(
         period=TOUCH_STARTUP_DELAY,
         actions=[Node(
-            package="ls_thesis",
-            executable="ur5e_touch_teleop.py",
-            name="ur5e_touch_teleop",
+            package="macro_micro_robot",
+            executable="ur16e_touch_teleop.py",
+            name="ur16e_touch_teleop",
             output="screen",
             condition=use_stylus,
         )],
@@ -327,7 +327,7 @@ def generate_launch_description():
     stylus_replay = TimerAction(
         period=TOUCH_STARTUP_DELAY + 5.0,
         actions=[Node(
-            package="ls_thesis",
+            package="macro_micro_robot",
             executable="stylus_replay.py",
             name="stylus_replay",
             output="screen",

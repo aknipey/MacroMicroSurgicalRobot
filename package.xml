@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>ls_thesis</name>
+  <name>macro_micro_robot</name>
   <version>0.1.0</version>
   <description>Provides all required hardware interfacing for my thesis project.</description>
 
@@ -45,7 +45,7 @@
   <exec_depend>xacro</exec_depend>
   <exec_depend>rviz2</exec_depend>
 
-  <!-- UR5e keyboard / Touch teleop and trajectory record + replay -->
+  <!-- UR16e keyboard / Touch teleop and trajectory record + replay -->
   <exec_depend>ur_robot_driver</exec_depend>
   <exec_depend>ur_moveit_config</exec_depend>
   <exec_depend>moveit_servo</exec_depend>

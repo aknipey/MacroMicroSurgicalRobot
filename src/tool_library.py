@@ -21,10 +21,10 @@ import sys
 import threading
 from datetime import date
 
-from ls_thesis import teleop_settings as cfg
-from ls_thesis import tools as tool_library
+from macro_micro_robot import teleop_settings as cfg
+from macro_micro_robot import tools as tool_library
 
-TELEOP_NODE = "/ur5e_touch_teleop"
+TELEOP_NODE = "/ur16e_touch_teleop"
 
 
 def cmd_list(args):

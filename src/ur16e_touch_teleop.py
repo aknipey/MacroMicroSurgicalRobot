@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Touch (Geomagic / 3D Systems) stylus teleoperation of the UR5e through MoveIt Servo.
+"""Touch (Geomagic / 3D Systems) stylus teleoperation of the UR16e through MoveIt Servo.
 
 Hold the WHITE button to drive the robot (clutch / deadman). The stylus pose
 at the moment the button goes down is the origin: while held, the robot tool
@@ -39,7 +39,7 @@ state is published on ~/rcm_active, ~/rcm_point, ~/rcm_error (shaft line to the
 point), ~/insertion_depth and ~/tool_tip.
 
 Tools: the RCM tool comes from the numbered library in `tool_library`
-(ls_thesis/tools.py), starting on its default. Set the `tool` parameter to switch
+(macro_micro_robot/tools.py), starting on its default. Set the `tool` parameter to switch
 (the launch_system.sh terminal does this when you type a number); the switch is
 refused in RCM mode, while WHITE drives the arm, or while any joint has moved faster
 than `tool_switch_max_joint_speed` in the last `tool_switch_still_time`. The library
@@ -96,7 +96,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from ls_thesis.ur5e_common import (
+from macro_micro_robot.ur16e_common import (
     SERVO_TWIST_TOPIC,
     LowPass,
     RcmTool,
@@ -110,9 +110,9 @@ from ls_thesis.ur5e_common import (
     start_servo_twist_mode,
     ur_singularity_name,
 )
-from ls_thesis import teleop_settings as cfg
-from ls_thesis import tools as tool_library
-from ls_thesis.haptics import PulsePlayer, limit_force, singularity_force
+from macro_micro_robot import teleop_settings as cfg
+from macro_micro_robot import tools as tool_library
+from macro_micro_robot.haptics import PulsePlayer, limit_force, singularity_force
 
 # omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
 # transposed, so its "offset * rotation" is a right multiply), so the offset cancels
@@ -291,7 +291,7 @@ class ConstantVelocityKalman:
 
 class TouchTeleop(Node):
     def __init__(self):
-        super().__init__("ur5e_touch_teleop")
+        super().__init__("ur16e_touch_teleop")
 
         self.declare_parameter("state_topic", "/phantom/state")
         self.declare_parameter("button_topic", "/phantom/button")
@@ -352,7 +352,7 @@ class TouchTeleop(Node):
         self.declare_parameter("rcm_gain", cfg.TOUCH_RCM_GAIN)
         self.declare_parameter("rcm_max_error", cfg.TOUCH_RCM_MAX_ERROR)
         self.declare_parameter("force_topic", "/phantom/force_feedback")
-        # touch_server (ls_thesis touch_driver.launch.py) renders the RCM walls itself
+        # touch_server (macro_micro_robot touch_driver.launch.py) renders the RCM walls itself
         self.declare_parameter("haptic_scene_port", 47102)
         self.declare_parameter("haptics", cfg.TOUCH_HAPTICS)
         self.declare_parameter("haptic_max_force", cfg.TOUCH_HAPTIC_MAX_FORCE)
@@ -559,7 +559,7 @@ class TouchTeleop(Node):
             self.velocity_watchdog = VelocityWatchdog(self)
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
-                    "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
+                    "Could not configure MoveIt Servo - is ur16e_teleop.launch.py running?")
             set_servo_speed_limits(self, self.max_linear, self.max_angular)
             # With the guard on, Servo's own check would only halt the arm where the guard
             # is trying to back it out; without it, Servo's check is all there is
@@ -1072,7 +1072,7 @@ class TouchTeleop(Node):
         return self.rcm_tool.pivot_slope(axial, self.rcm_tool0_gain, self.rcm_tool0_gain_depth,
                                          self.rcm_pivot_fade_depth, self.rcm_pivot_fade_strength)
 
-    # touch_server's TouchScenePacket (include/ls_thesis/touch_packets.hpp)
+    # touch_server's TouchScenePacket (include/macro_micro_robot/touch_packets.hpp)
     SCENE_FORMAT = "<II3d3d7d"
     SCENE_MAGIC = 0x54534331
 

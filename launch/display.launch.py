@@ -8,7 +8,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    pkg_share = FindPackageShare('ls_thesis')
+    pkg_share = FindPackageShare('macro_micro_robot')
 
     default_model_path = PathJoinSubstitution([pkg_share, 'urdf', 'micro_module.urdf'])
     default_rviz_path = PathJoinSubstitution([pkg_share, 'rviz', 'urdf.rviz'])

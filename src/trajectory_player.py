@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Replays a trajectory saved by trajectory_recorder.py on the UR5e.
+"""Replays a trajectory saved by trajectory_recorder.py on the UR16e.
 
-    ros2 run ls_thesis trajectory_player.py ~/ros2_ws/trajectories/trajectory_XXXX.yaml
-    ros2 run ls_thesis trajectory_player.py latest --speed 0.5
-    ros2 run ls_thesis trajectory_player.py home     # move to a ready pose (elbow up, tool down)
+    ros2 run macro_micro_robot trajectory_player.py ~/ros2_ws/trajectories/trajectory_XXXX.yaml
+    ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5
+    ros2 run macro_micro_robot trajectory_player.py home     # move to a ready pose (elbow up, tool down)
 
 1. Pauses MoveIt Servo (teleop shares the scaled_joint_trajectory_controller) and activates it.
 2. Moves to the first recorded joint configuration over --approach-time seconds.
@@ -32,14 +32,14 @@ from rclpy.signals import SignalHandlerOptions
 from rclpy.utilities import remove_ros_args
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-from ls_thesis.ur5e_common import (
+from macro_micro_robot.ur16e_common import (
     TRAJECTORY_ACTION,
     TRAJECTORY_CONTROLLER,
     activate_controller,
     servo_controller,
     set_servo_paused,
 )
-from ls_thesis import teleop_settings as cfg
+from macro_micro_robot import teleop_settings as cfg
 
 DEFAULT_DIR = os.path.expanduser("~/ros2_ws/trajectories")
 
@@ -150,7 +150,7 @@ class TrajectoryPlayer(Node):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Replay a recorded UR5e trajectory")
+    parser = argparse.ArgumentParser(description="Replay a recorded UR16e trajectory")
     parser.add_argument("file", help="trajectory YAML from trajectory_recorder, 'latest', or 'home'")
     parser.add_argument("--speed", type=float, default=cfg.PLAYER_DEFAULT_SPEED,
                         help=f"playback speed factor (default {cfg.PLAYER_DEFAULT_SPEED})")

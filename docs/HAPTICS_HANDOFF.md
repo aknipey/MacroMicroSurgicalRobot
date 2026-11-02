@@ -22,7 +22,7 @@ Force feedback on the Touch stylus while teleoperating the UR16e:
 | Singularity push | Up to 0.5 N along the stylus direction that leads out of the singularity, from the guard's gradient; 30 ms low-pass | teleop → `/phantom/force_feedback` | Offline (150/150 poses) + mock arm. **Not yet tried on the real arm/Touch** |
 
 The total force is capped at 1.0 N (`TOUCH_HAPTIC_MAX_FORCE`; hard cap 2 N in `touch_server`) and
-slew-limited. All settings are `TOUCH_HAPTIC_*` in `ls_thesis/teleop_settings.py`.
+slew-limited. All settings are `TOUCH_HAPTIC_*` in `macro_micro_robot/teleop_settings.py`.
 `TOUCH_HAPTICS = False` turns them all off.
 
 ## How to run
@@ -31,15 +31,15 @@ Three terminals, each first `source /opt/ros/jazzy/setup.bash && source ~/ros2_w
 
 ```bash
 # 1 robot (then press Play on the pendant)
-ros2 launch ls_thesis ur5e_teleop.launch.py ur_type:=ur16e robot_ip:=192.168.0.100 input:=none
+ros2 launch macro_micro_robot ur16e_teleop.launch.py ur_type:=ur16e robot_ip:=192.168.0.100 input:=none
 # 2 Touch driver: NOT omni_common's omni_state (its forces never reach the motors)
-ros2 launch ls_thesis touch_driver.launch.py
+ros2 launch macro_micro_robot touch_driver.launch.py
 # 3 teleop
-ros2 run ls_thesis ur5e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5
+ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p max_linear_speed:=0.05 -p translation_scale:=0.5
 ```
 
 Only one program can own the Touch at a time: close TouchCheckup and any `omni_state` first.
-After C++ changes: `colcon build --packages-select ls_thesis --symlink-install`, then restart
+After C++ changes: `colcon build --packages-select macro_micro_robot --symlink-install`, then restart
 terminal 2. Python and settings changes only need terminal 3 restarted.
 
 ## What was found (in order)
@@ -52,9 +52,9 @@ terminal 2. Python and settings changes only need terminal 3 restarted.
    and the same program merely *linked* against librcl lifts it 0 mm.
    **Fix:** the Touch driver is split in two. `src/touch_server.cpp` links only HD/HDU and
    owns the device; `src/touch_bridge.cpp` is a ROS node publishing the same `/phantom/*`
-   topics as `omni_state`. They talk over UDP on localhost (`include/ls_thesis/touch_packets.hpp`;
+   topics as `omni_state`. They talk over UDP on localhost (`include/macro_micro_robot/touch_packets.hpp`;
    state → 47101, forces and scene → 47102). They start together with
-   `launch/touch_driver.launch.py`, which `ur5e_teleop.launch.py` (input:=touch) and
+   `launch/touch_driver.launch.py`, which `ur16e_teleop.launch.py` (input:=touch) and
    `scripts/launch_system.sh` now use. Never link anything ROS into `touch_server`.
 2. **omni_state's damping term shook the pen.** It subtracted 1 N s/m of a 20 Hz-filtered velocity,
    which lags enough at ~25 Hz to push along the motion (2 N while the cue asked for 0.3 N).
@@ -86,9 +86,9 @@ terminal 2. Python and settings changes only need terminal 3 restarted.
 5. **Commit and tag V7.** Part 1 (RCM sideways scaling) and part 2 (haptics + new Touch driver)
    are both uncommitted on branch `basic-mapping`; VERSIONS.md has V7 marked "not tagged yet".
    Uncommitted: CMakeLists.txt, README.md, docs (RUN_UR16E_TOUCH, VERSIONS, this file),
-   launch (ur5e_teleop + new touch_driver), ls_thesis (teleop_settings, ur5e_common, new haptics.py),
-   scripts (launch_system.sh, new touch_diagnostics/), src (ur5e_touch_teleop.py, new
-   touch_server.cpp, touch_bridge.cpp), include/ls_thesis/touch_packets.hpp.
+   launch (ur16e_teleop + new touch_driver), macro_micro_robot (teleop_settings, ur16e_common, new haptics.py),
+   scripts (launch_system.sh, new touch_diagnostics/), src (ur16e_touch_teleop.py, new
+   touch_server.cpp, touch_bridge.cpp), include/macro_micro_robot/touch_packets.hpp.
 
 ## Cautions for testing
 
@@ -106,9 +106,9 @@ terminal 2. Python and settings changes only need terminal 3 restarted.
 |---|---|
 | `src/touch_server.cpp` | Device loop (OpenHaptics only): state out, forces in, walls rendered at 1 kHz, cap + slew limit, 0.25 s timeout |
 | `src/touch_bridge.cpp` | ROS side: `/phantom/state`, `/button`, `/pose`, `/joint_states`, `/applied_force`; forwards `/phantom/force_feedback` |
-| `include/ls_thesis/touch_packets.hpp` | UDP packet layouts and ports (the Python scene format is `"<II3d3d7d"`) |
+| `include/macro_micro_robot/touch_packets.hpp` | UDP packet layouts and ports (the Python scene format is `"<II3d3d7d"`) |
 | `launch/touch_driver.launch.py` | Starts both |
-| `ls_thesis/haptics.py` | Taps (`PulsePlayer`), singularity push, force limiting |
-| `src/ur5e_touch_teleop.py` | `update_haptics`, `send_scene` (walls), `check_crossing` (click), `singularity_haptic_force` |
-| `ls_thesis/ur5e_common.py` | `SingularityGuard.twist_gradient` (direction out of the singularity) |
+| `macro_micro_robot/haptics.py` | Taps (`PulsePlayer`), singularity push, force limiting |
+| `src/ur16e_touch_teleop.py` | `update_haptics`, `send_scene` (walls), `check_crossing` (click), `singularity_haptic_force` |
+| `macro_micro_robot/ur16e_common.py` | `SingularityGuard.twist_gradient` (direction out of the singularity) |
 | `scripts/touch_diagnostics/` | Lift tests that found the OpenHaptics + ROS problem |

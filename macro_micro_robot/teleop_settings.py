@@ -103,7 +103,7 @@ TOUCH_KALMAN_ROTATION_NOISE = 0.01       # rad
 # 0 = compare with the current target, as before.
 TOUCH_LOOP_DELAY = 0.05
 
-# Singularity guard (SingularityGuard in ur5e_common): works on each twist before Servo,
+# Singularity guard (SingularityGuard in ur16e_common): works on each twist before Servo,
 # using the condition number c of the arm Jacobian (the number Servo uses; ~8 at HOME).
 # On a UR5e/UR16e, c = 30 / 60 is wrist 2 about 15 / 8 deg from 0 (or 180), or the
 # elbow about 18 / 11 deg from straight. From SLOW, motion *into* the singularity is
@@ -145,10 +145,10 @@ TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 TOUCH_RCM_SHAFT_START = [0.00008, 0.00699, 0.20827]     # m
 TOUCH_RCM_SHAFT_DIRECTION = [-0.00309, 0.01798, 0.99983]
 TOUCH_RCM_SHAFT_LENGTH = 0.1586               # m
-# Numbered library of calibrated tools (ls_thesis/tools.py). The teleop starts on the
+# Numbered library of calibrated tools (macro_micro_robot/tools.py). The teleop starts on the
 # library's `default` tool; type a number in the launch_system.sh terminal (or
-# `ros2 param set /ur5e_touch_teleop tool N`) to switch. Add tools with
-# `ros2 run ls_thesis tool_library.py add ...`. The file is re-read on every switch.
+# `ros2 param set /ur16e_touch_teleop tool N`) to switch. Add tools with
+# `ros2 run macro_micro_robot tool_library.py add ...`. The file is re-read on every switch.
 TOOL_LIBRARY = "~/ros2_ws/src/MacroMicroSurgicalRobot/config/tools.yaml"
 # A switch is refused in RCM mode, while WHITE drives the arm, or unless every joint
 # has stayed under this speed (rad/s) for TOOL_SWITCH_STILL_TIME (s).
@@ -188,7 +188,7 @@ TOUCH_RCM_GAIN = 8.0
 # RCM mode may be left at any depth.
 TOUCH_RCM_MAX_ERROR = 0.005
 
-# Haptic cues (force feedback on the stylus, ls_thesis/haptics.py), all while WHITE is
+# Haptic cues (force feedback on the stylus, macro_micro_robot/haptics.py), all while WHITE is
 # held: a soft wall at the deepest RCM insertion and at the retract limit, a click as
 # the tip target crosses the RCM point, a small tap when RCM mode turns on or off (two
 # when it refuses to turn off), and a push out of a singularity.
@@ -206,7 +206,7 @@ TOUCH_HAPTIC_MAX_FORCE = 0.01
 TOUCH_HAPTIC_SLEW_RATE = 2.0           # 0.01 N in 5 ms
 # RCM depth walls: N per m of stylus past the limit, one sided (like TouchCheckup's Box,
 # which feels smooth: free inside, pushed back only when pressing into a wall). They are
-# rendered by touch_server in the Touch's own 1 kHz loop (needs ls_thesis
+# rendered by touch_server in the Touch's own 1 kHz loop (needs macro_micro_robot
 # touch_driver.launch.py): computed here and sent over ROS they arrived tens of ms late
 # and shook the pen violently (2026-10-19). Only the total force cap above applies.
 # 0 = off. On SN 22129000559 any spring wall buzzed at its edge: its force passes the
@@ -392,14 +392,14 @@ LOG_BAG_TOPICS = [
     "/phantom/joint_states",    # Touch encoder angles: shows a sticking/skipping joint directly
     "/phantom/force_feedback",  # haptic cues sent to the stylus (N)
     "/phantom/applied_force",   # force touch_server actually rendered, incl. RCM walls / detent (N)
-    "/ur5e_touch_teleop/target_pose",
-    "/ur5e_touch_teleop/motion_scale",
-    "/ur5e_touch_teleop/condition_number",     # singularity guard: arm Jacobian condition number
-    "/ur5e_touch_teleop/rcm_active",           # RCM mode on / off
-    "/ur5e_touch_teleop/rcm_point",            # latched RCM point (base frame)
-    "/ur5e_touch_teleop/rcm_error",            # distance shaft line -> RCM point (m)
-    "/ur5e_touch_teleop/insertion_depth",      # tip depth past the RCM point (m)
-    "/ur5e_touch_teleop/tool_tip",             # tool tip pose (shaft axis = its z)
+    "/ur16e_touch_teleop/target_pose",
+    "/ur16e_touch_teleop/motion_scale",
+    "/ur16e_touch_teleop/condition_number",     # singularity guard: arm Jacobian condition number
+    "/ur16e_touch_teleop/rcm_active",           # RCM mode on / off
+    "/ur16e_touch_teleop/rcm_point",            # latched RCM point (base frame)
+    "/ur16e_touch_teleop/rcm_error",            # distance shaft line -> RCM point (m)
+    "/ur16e_touch_teleop/insertion_depth",      # tip depth past the RCM point (m)
+    "/ur16e_touch_teleop/tool_tip",             # tool tip pose (shaft axis = its z)
     "/servo_node/delta_twist_cmds",
     "/servo_node/status",
     "/scaled_joint_trajectory_controller/joint_trajectory",

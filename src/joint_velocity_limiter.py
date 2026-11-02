@@ -39,7 +39,7 @@ the measured joints, again whenever the arm was moved by something else while th
 node was idle, and is never allowed more than `max_position_error` ahead of them. Each
 command is sent `lead` seconds ahead at the current speed, to cancel servoj's own lag.
 
-Started by ur5e_teleop.launch.py when SERVO_OUTPUT is "position", or "velocity" with
+Started by ur16e_teleop.launch.py when SERVO_OUTPUT is "position", or "velocity" with
 VELOCITY_LIMITER on.
 """
 
@@ -53,8 +53,8 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray, String
 
-from ls_thesis import teleop_settings as cfg
-from ls_thesis.ur5e_common import (
+from macro_micro_robot import teleop_settings as cfg
+from macro_micro_robot.ur16e_common import (
     LIMITER_INPUT_TOPIC,
     LIMITER_NODE,
     SERVO_VELOCITY_TOPIC,

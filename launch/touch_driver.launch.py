@@ -5,7 +5,7 @@ Drop-in for `ros2 launch omni_common omni_state.launch.py`: the same /phantom/st
 in. omni_state's forces never reach the motors, because OpenHaptics renders no force
 in a process that has ROS 2's libraries loaded (see src/touch_server.cpp).
 
-    ros2 launch ls_thesis touch_driver.launch.py
+    ros2 launch macro_micro_robot touch_driver.launch.py
 """
 
 from launch import LaunchDescription
@@ -15,7 +15,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         # Not a ROS node (it ignores the --ros-args launch adds); owns the Touch
-        Node(package="ls_thesis", executable="touch_server", name="touch_server", output="screen"),
-        Node(package="ls_thesis", executable="touch_bridge", name="omni_haptic_node", output="screen",
+        Node(package="macro_micro_robot", executable="touch_server", name="touch_server", output="screen"),
+        Node(package="macro_micro_robot", executable="touch_bridge", name="omni_haptic_node", output="screen",
              parameters=[{"omni_name": "phantom", "reference_frame": "/map"}]),
     ])

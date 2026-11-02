@@ -5,7 +5,8 @@
     cd ~/ros2_ws/src/MacroMicroSurgicalRobot/logs/V7
     python3 ../../scripts/rcm_offset_check.py FastCheckingRCMSimpleHolder_Replay1 ...
 
-Per run: the teleop's latched RCM point (bag /ur5e_touch_teleop/rcm_point, the last one:
+Per run: the teleop's latched RCM point (bag /ur16e_touch_teleop/rcm_point, or
+/ur5e_touch_teleop/rcm_point in bags recorded before the 2026-11-02 rename; the last one:
 it is latched, so the first can be the previous run's), the NDI's latched point, the pivot
 of the kinematic shaft lines (UR_PATH tool0 + the run's TOUCH_RCM_SHAFT_* settings) and of
 the NDI-measured shaft lines. The camera pose in base_link comes from pairing UR_PATH tool0
@@ -66,7 +67,7 @@ def run(d):
     cam2base = lambda p: Cb[:3, :3] @ p + Cb[:3, 3]
     # teleop latched point + time (bag)
     rd = SequentialReader(); rd.open(StorageOptions(uri=f'{d}/rosbag', storage_id='mcap'), ConverterOptions('', ''))
-    rd.set_filter(StorageFilter(topics=['/ur5e_touch_teleop/rcm_point', '/ur5e_touch_teleop/rcm_active']))
+    rd.set_filter(StorageFilter(topics=[f'/{node}/{t}' for node in ('ur16e_touch_teleop', 'ur5e_touch_teleop') for t in ('rcm_point', 'rcm_active')]))
     tele_rcm = None
     while rd.has_next():
         topic, data, _ = rd.read_next()

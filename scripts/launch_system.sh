@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# launch_system.sh - one-command launcher for the ls_thesis (Macro-Micro Surgical
+# launch_system.sh - one-command launcher for the macro_micro_robot (Macro-Micro Surgical
 # Robot) stack and all of its runtime dependencies (Touch driver, Arduino serial
-# bridge, UR5e driver, control nodes, RViz).
+# bridge, UR16e driver, control nodes, RViz).
 #
 # This replaces manually opening N terminals, sourcing ROS 2 in each one, and
 # running the commands from MICRO_MODULE_STARTUP.md / README.md by hand.
@@ -12,21 +12,21 @@
 #
 # Modes:
 #   display     RViz + robot/joint state publishers only. No hardware needed.
-#   touch       Touch stylus teleop of the micro-manipulator (no UR5e).
+#   touch       Touch stylus teleop of the micro-manipulator (no UR16e).
 #               Touch driver (touch_server + touch_bridge) + serial bridge + micro_module_control.
 #   keyboard    Keyboard teleop of the micro-manipulator. No Touch device
 #               needed - only the Arduino. Good for bench-testing the servos.
-#   ur5e-keyboard  UR5e + MoveIt Servo + trajectory recorder; this terminal
+#   ur16e-keyboard  UR16e + MoveIt Servo + trajectory recorder; this terminal
 #               then jogs the arm from the keyboard.
-#   ur5e-touch  UR5e + MoveIt Servo + trajectory recorder + Touch driver;
+#   ur16e-touch UR16e + MoveIt Servo + trajectory recorder + Touch driver;
 #               hold the stylus WHITE button to drive the arm. With
 #               --with-micro also the micro module: hold GREY 1 s to switch.
 #               Type a tool number + Enter in this terminal to switch tools
 #               (config/tools.yaml; not in RCM mode, robot stationary).
-#   ur5e        UR5e driver + legacy ur5e_control (ROS 1 port - needs a
+#   ur16e       UR16e driver + legacy ur16e_control (ROS 1 port - needs a
 #               Cartesian controller the ROS 2 UR driver doesn't have).
-#   full        Full system: UR5e driver + Touch driver + serial bridge +
-#               micro_module_control + ur5e_control.
+#   full        Full system: UR16e driver + Touch driver + serial bridge +
+#               micro_module_control + ur16e_control.
 #   stop        Stop every process started by a previous run of this script.
 #   help        Show this message.
 #
@@ -37,13 +37,13 @@
 #   --arduino-port=PORT      Serial port for the micro-module Arduino
 #                            (default: /dev/ttyACM0)
 #   --baud=RATE              Serial baud rate for the Arduino (default: 9600)
-#   --mock                   Simulate the UR5e (no robot needed) in the
-#                            'ur5e-keyboard' / 'ur5e-touch' modes.
-#   --with-micro             'ur5e-touch' mode: also start the serial bridge +
+#   --mock                   Simulate the UR16e (no robot needed) in the
+#                            'ur16e-keyboard' / 'ur16e-touch' modes.
+#   --with-micro             'ur16e-touch' mode: also start the serial bridge +
 #                            micro_module_control. Hold GREY 1 s (no WHITE)
 #                            to switch the stylus between arm and micro module.
 #   --with-rviz              Also start RViz + robot_state_publisher for
-#                            'touch' / 'keyboard' / 'ur5e' / 'full' modes.
+#                            'touch' / 'keyboard' / 'ur16e' / 'full' modes.
 #   --no-gui                 Use joint_state_publisher instead of the GUI
 #                            version in 'display' mode.
 #   --distro=NAME            ROS 2 distro to source (default: $ROS_DISTRO or
@@ -167,7 +167,7 @@ if [ "$MODE" = "stop" ]; then
 fi
 
 case "$MODE" in
-  display|touch|keyboard|ur5e|ur5e-keyboard|ur5e-touch|full) ;;
+  display|touch|keyboard|ur16e|ur16e-keyboard|ur16e-touch|full) ;;
   *)
     echo "Unknown mode: $MODE" >&2
     usage
@@ -326,7 +326,7 @@ if [ "$DRY_RUN" = "false" ]; then
   # Before the PID file is replaced, so `launch_system.sh stop` can still stop the
   # previous run if that is what is holding the driver
   case "$MODE" in
-    ur5e|ur5e-keyboard|ur5e-touch|full) check_no_running_driver ;;
+    ur16e|ur16e-keyboard|ur16e-touch|full) check_no_running_driver ;;
   esac
   mkdir -p "$(dirname "$PID_FILE")"
   rm -f "$PID_FILE"
@@ -341,15 +341,15 @@ fi
 case "$MODE" in
 
   display)
-    echo ">> [rviz] ros2 launch ls_thesis display.launch.py gui:=${GUI}"
+    echo ">> [rviz] ros2 launch macro_micro_robot display.launch.py gui:=${GUI}"
     if [ "$DRY_RUN" = "true" ]; then
       exit 0
     fi
-    exec ros2 launch ls_thesis display.launch.py gui:="${GUI}"
+    exec ros2 launch macro_micro_robot display.launch.py gui:="${GUI}"
     ;;
 
   touch)
-    run_bg touch_driver ros2 launch ls_thesis touch_driver.launch.py
+    run_bg touch_driver ros2 launch macro_micro_robot touch_driver.launch.py
     wait_for_topic /phantom/state 15
 
     check_serial_port "$ARDUINO_PORT"
@@ -357,10 +357,10 @@ case "$MODE" in
       --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
     wait_for_topic /micro_module_motor_states 15
 
-    run_bg micro_module_control ros2 run ls_thesis micro_module_control
+    run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
 
     if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch ls_thesis display.launch.py gui:=false
+      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
     fi
     ;;
 
@@ -371,7 +371,7 @@ case "$MODE" in
     wait_for_topic /micro_module_motor_states 15
 
     if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch ls_thesis display.launch.py gui:=false
+      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
     fi
 
     echo ">> [keyboard_control] running in foreground - this terminal now reads your keypresses."
@@ -383,56 +383,56 @@ case "$MODE" in
       --ros-args -p port:="$ARDUINO_PORT"
     ;;
 
-  ur5e)
+  ur16e)
     run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
       ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
       launch_rviz:=false
     wait_for_service /controller_manager/list_controllers 60
 
-    run_bg ur5e_control ros2 run ls_thesis ur5e_control
+    run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
 
     if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch ls_thesis display.launch.py gui:=false
+      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
     fi
     ;;
 
-  ur5e-keyboard|ur5e-touch)
+  ur16e-keyboard|ur16e-touch)
     INPUT="keyboard"
-    [ "$MODE" = "ur5e-touch" ] && INPUT="touch"
+    [ "$MODE" = "ur16e-touch" ] && INPUT="touch"
     if [ "$MOCK" = "false" ]; then
-      echo ">> Make sure the External Control program is running on the UR5e Teach Pendant."
+      echo ">> Make sure the External Control program is running on the UR16e Teach Pendant."
     fi
-    run_bg ur5e_teleop ros2 launch ls_thesis ur5e_teleop.launch.py \
+    run_bg ur16e_teleop ros2 launch macro_micro_robot ur16e_teleop.launch.py \
       ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" use_mock_hardware:="$MOCK" "${KIN_ARG[@]}" \
       input:="$INPUT" launch_rviz:="$WITH_RVIZ"
     wait_for_service /servo_node/switch_command_type 90
 
-    if [ "$WITH_MICRO" = "true" ] && [ "$MODE" = "ur5e-touch" ]; then
+    if [ "$WITH_MICRO" = "true" ] && [ "$MODE" = "ur16e-touch" ]; then
       check_serial_port "$ARDUINO_PORT"
       run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
         --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
       wait_for_topic /micro_module_motor_states 15
-      run_bg micro_module_control ros2 run ls_thesis micro_module_control
+      run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
       echo ">> Stylus starts on the arm (MACRO). Hold GREY 1 s without WHITE to switch to MICRO and back."
     fi
 
     echo ">> Move to a safe start pose any time with:"
-    echo "     ros2 run ls_thesis trajectory_player.py home"
+    echo "     ros2 run macro_micro_robot trajectory_player.py home"
     echo ">> Replay the last recording with:"
-    echo "     ros2 run ls_thesis trajectory_player.py latest --speed 0.5"
+    echo "     ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5"
 
-    if [ "$MODE" = "ur5e-keyboard" ]; then
-      echo ">> [ur5e_keyboard_teleop] running in foreground - this terminal now reads your keypresses."
+    if [ "$MODE" = "ur16e-keyboard" ]; then
+      echo ">> [ur16e_keyboard_teleop] running in foreground - this terminal now reads your keypresses."
       if [ "$DRY_RUN" = "true" ]; then
         exit 0
       fi
-      ros2 run ls_thesis ur5e_keyboard_teleop.py
+      ros2 run macro_micro_robot ur16e_keyboard_teleop.py
       exit 0
     fi
     ;;
 
   full)
-    run_bg touch_driver ros2 launch ls_thesis touch_driver.launch.py
+    run_bg touch_driver ros2 launch macro_micro_robot touch_driver.launch.py
     wait_for_topic /phantom/state 15
 
     check_serial_port "$ARDUINO_PORT"
@@ -445,16 +445,16 @@ case "$MODE" in
       launch_rviz:=false
     wait_for_service /controller_manager/list_controllers 60
 
-    echo ">> Start the LS_ROS_CONTROL program on the UR5e Teach Pendant now, then press Enter."
+    echo ">> Start the LS_ROS_CONTROL program on the UR16e Teach Pendant now, then press Enter."
     if [ "$DRY_RUN" = "false" ]; then
       read -r
     fi
 
-    run_bg micro_module_control ros2 run ls_thesis micro_module_control
-    run_bg ur5e_control ros2 run ls_thesis ur5e_control
+    run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
+    run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
 
     if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch ls_thesis display.launch.py gui:=false
+      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
     fi
     ;;
 esac
@@ -466,11 +466,11 @@ fi
 echo
 echo ">> System is up (mode: ${MODE}). Press Ctrl+C to stop everything."
 echo ">> Tailing logs from ${LOG_DIR} - Ctrl+C here stops all nodes."
-if [ "$MODE" = "ur5e-touch" ]; then
+if [ "$MODE" = "ur16e-touch" ]; then
   # Logs in the background; this terminal reads tool numbers (tool library) instead
   tail -n +1 -f "${LOG_DIR}"/*.log &
   PIDS+=("$!")
-  ros2 run ls_thesis tool_library.py console || true
+  ros2 run macro_micro_robot tool_library.py console || true
   wait
 else
   tail -n +1 -f "${LOG_DIR}"/*.log

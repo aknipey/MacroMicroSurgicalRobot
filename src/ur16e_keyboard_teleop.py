@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Keyboard jogging of the UR5e end effector through MoveIt Servo.
+"""Keyboard jogging of the UR16e end effector through MoveIt Servo.
 
-Needs the UR driver + MoveIt Servo running (see launch/ur5e_teleop.launch.py),
+Needs the UR driver + MoveIt Servo running (see launch/ur16e_teleop.launch.py),
 then run in its own terminal:
 
-    ros2 run ls_thesis ur5e_keyboard_teleop.py
+    ros2 run macro_micro_robot ur16e_keyboard_teleop.py
 
 A terminal only reports key presses, not releases, so a key moves the robot for
 a short window after each press. Holding a key keeps it moving via the OS key
@@ -21,7 +21,7 @@ import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
 
-from ls_thesis.ur5e_common import (
+from macro_micro_robot.ur16e_common import (
     SERVO_TWIST_TOPIC,
     RecorderClient,
     VelocityWatchdog,
@@ -31,7 +31,7 @@ from ls_thesis.ur5e_common import (
     set_servo_speed_limits,
     start_servo_twist_mode,
 )
-from ls_thesis import teleop_settings as cfg
+from macro_micro_robot import teleop_settings as cfg
 
 # key: (twist field, axis, sign)
 KEY_BINDINGS = {
@@ -44,7 +44,7 @@ KEY_BINDINGS = {
 }
 
 HELP = """
-==================== UR5e KEYBOARD TELEOP ====================
+==================== UR16e KEYBOARD TELEOP ====================
  Translate        w/s : +X/-X     a/d : +Y/-Y     r/f : +Z/-Z
  Rotate           u/o : roll      i/k : pitch     j/l : yaw
  SPACE : stop      +/- : speed up/down      t : toggle frame
@@ -56,7 +56,7 @@ HELP = """
 
 class KeyboardTeleop(Node):
     def __init__(self):
-        super().__init__("ur5e_keyboard_teleop")
+        super().__init__("ur16e_keyboard_teleop")
 
         self.declare_parameter("linear_speed", cfg.KEYBOARD_LINEAR_SPEED)
         self.declare_parameter("angular_speed", cfg.KEYBOARD_ANGULAR_SPEED)
@@ -83,7 +83,7 @@ class KeyboardTeleop(Node):
             self.velocity_watchdog = VelocityWatchdog(self)
             if not start_servo_twist_mode(self):
                 self.get_logger().error(
-                    "Could not configure MoveIt Servo - is ur5e_teleop.launch.py running?")
+                    "Could not configure MoveIt Servo - is ur16e_teleop.launch.py running?")
             set_servo_speed_limits(self, cfg.KEYBOARD_MAX_LINEAR_SPEED, cfg.KEYBOARD_MAX_ANGULAR_SPEED)
             # Back to Servo's own singularity check, in case the Touch node raised it
             set_servo_singularity_thresholds(self, cfg.SERVO_SINGULARITY_SLOWDOWN, cfg.SERVO_SINGULARITY_STOP)

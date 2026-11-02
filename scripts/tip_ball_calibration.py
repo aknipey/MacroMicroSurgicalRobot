@@ -18,7 +18,7 @@ tool0 z to the tip; neither affects the fitted ball position, and the raw record
 saved, so re-fit with `--file <raw .npz>` and other values instead of recording again.
 The result is written to config/calibrations/tip_ball_<date>.json
 (tip_tool0_mm / direction_tool0, as robot-tcp writes them), ready for
-    ros2 run ls_thesis tool_library.py add N "name" --from <that file> --length <mm>
+    ros2 run macro_micro_robot tool_library.py add N "name" --from <that file> --length <mm>
 
 Uses src/ndi_tracking (its Vega client and the fit) as a library; nothing there changes.
 """
@@ -214,7 +214,7 @@ def main():
                    "robot_poses": r["poses"], "outliers": r["outliers"], "ndi_delay_s": r["delay"],
                    "base_to_camera": r["Y"].tolist(), "frames": {str(k): v for k, v in counts.items()}},
                   f, indent=2)
-    print(f"\nsaved {path}\nadd it:  ros2 run ls_thesis tool_library.py add N \"name\" --from {path} --length <mm>")
+    print(f"\nsaved {path}\nadd it:  ros2 run macro_micro_robot tool_library.py add N \"name\" --from {path} --length <mm>")
 
 
 if __name__ == "__main__":

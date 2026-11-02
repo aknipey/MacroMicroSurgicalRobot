@@ -23,14 +23,14 @@ import os
 import numpy as np
 import yaml
 
-from ls_thesis.ur5e_common import RcmTool
+from macro_micro_robot.ur16e_common import RcmTool
 
 HEADER = """\
-# Tool library for the UR16e Touch teleop (ls_thesis/tools.py).
+# Tool library for the UR16e Touch teleop (macro_micro_robot/tools.py).
 # Number -> calibrated tool. tip_tool0_mm and direction_tool0 (holder -> tip) are in
 # the tool0 frame; shaft_length_mm runs back from the tip to the holder end (only
 # that segment can be the RCM point). Edit by hand or with
-#   ros2 run ls_thesis tool_library.py add|remove|default ...
+#   ros2 run macro_micro_robot tool_library.py add|remove|default ...
 # The teleop re-reads this file on every tool switch.
 """
 

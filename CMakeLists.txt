@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(ls_thesis)
+project(macro_micro_robot)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
@@ -42,10 +42,10 @@ ament_target_dependencies(pose tf2)
 add_library(manipulator_module src/ManipulatorModule.cpp)
 target_link_libraries(manipulator_module Eigen3::Eigen)
 
-## ur5e_control node
-add_executable(ur5e_control src/ur5e_control.cpp)
-target_link_libraries(ur5e_control pose)
-ament_target_dependencies(ur5e_control
+## ur16e_control node
+add_executable(ur16e_control src/ur16e_control.cpp)
+target_link_libraries(ur16e_control pose)
+ament_target_dependencies(ur16e_control
   rclcpp
   rclcpp_action
   std_msgs
@@ -109,7 +109,7 @@ add_executable(touch_bridge src/touch_bridge.cpp)
 ament_target_dependencies(touch_bridge rclcpp geometry_msgs sensor_msgs omni_msgs)
 
 install(TARGETS
-  ur5e_control
+  ur16e_control
   micro_module_control
   android_pose_subscriber
   touch_bridge
@@ -119,8 +119,8 @@ install(TARGETS
 ## Python nodes
 install(PROGRAMS
   src/android_pose_publisher.py
-  src/ur5e_keyboard_teleop.py
-  src/ur5e_touch_teleop.py
+  src/ur16e_keyboard_teleop.py
+  src/ur16e_touch_teleop.py
   src/trajectory_recorder.py
   src/trajectory_player.py
   src/stylus_replay.py
@@ -130,7 +130,7 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-## Python helpers shared by the UR5e nodes (import ls_thesis.ur5e_common)
+## Python helpers shared by the UR16e nodes (import macro_micro_robot.ur16e_common)
 ament_python_install_package(${PROJECT_NAME})
 
 ## Resources (launch files, model, visualisation, meshes)
@@ -143,7 +143,7 @@ install(DIRECTORY
 )
 
 install(FILES
-  lab_ur5e_1_calibration.yaml
+  config/lab_ur5e_1_calibration.yaml
   config/external_control_smooth_speedj.urscript
   DESTINATION share/${PROJECT_NAME}/config
 )
