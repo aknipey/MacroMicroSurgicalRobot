@@ -2291,3 +2291,6 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   tool 3, stock speedj, rotation exponent 0.5), so V9 vs V8/CalibratedKinematics differs only in the output
   mode. Mock check with today's code: `forward_position_controller` active, RCMOnly replay at 1:5 ran with no
   errors. **First real-arm run of position mode: supervised.**
+- `replay_batch.sh` default order: RCMOnly last. At 1:5 it ends with RCM on and the tool in; RCM can only
+  be left back at its own RCM point, so the WholeRun replay after it refused to start (V9 batch, nothing
+  moved past WholeRun's start pose). Run a different run after RCMOnly only after restarting the stack.

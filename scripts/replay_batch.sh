@@ -35,8 +35,10 @@ for arg in "$@"; do
   esac
 done
 if [ "${#RUNS[@]}" -eq 0 ]; then
+  # RCMOnly last: at 1:5 it ends with the tool in and RCM mode on, which can only be left
+  # back at its own RCM point, so a different run after it refuses to start (2026-11-03)
   RUNS=(V7/FastCheckingRCMSimpleHolder V7/SlowCheckingRCMSimpleHolder
-        V7/RCMOnlySimpleHolder:--rcm V7/WholeRunDrinkBottleSimpleHolder)
+        V7/WholeRunDrinkBottleSimpleHolder V7/RCMOnlySimpleHolder:--rcm)
 fi
 
 set +u
