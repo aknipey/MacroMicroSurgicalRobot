@@ -1,0 +1,57 @@
+% =============================================================================
+%  Chapter 5 - Low-Latency, Smooth Teleoperation of the Macro Stage (~12-15 pp)
+%  Plan: ../../planning/03_chapter_plan.md#chapter-5
+%  The core results chapter. Story: each fix exposed the next limit.
+%  V1 crawl -> V2/V3 trajectory (~140 ms) -> 60 % delivery diagnosis ->
+%  velocity mode (V4) vibrates and faults -> V5 filters + 500 Hz + limiter ->
+%  benchmarks -> stick-slip "catches" are the Touch -> buzz is speedj + pose ->
+%  position mode.
+% =============================================================================
+\chapter{Low-Latency, Smooth Teleoperation of the Macro Stage}
+\label{ch:latency}
+
+\section{Baseline: Position Output and the Re-Basing Crawl}
+\label{sec:lat-baseline}
+
+\section{Trajectory Output and Motion Scaling}
+\label{sec:lat-trajectory}
+
+\section{Diagnosing the Lag: Displacement Delivery Ratio}
+\label{sec:lat-delivery}
+% 60 % delivery on both the real arm and the emulator; emulator validation
+
+\section{Velocity Output: Lower Lag, New Failure Modes}
+\label{sec:lat-velocity}
+
+\subsection{Commanded Vibration: Tremor Amplified by Feedforward}
+\label{sec:lat-tremor}
+
+\subsection{Update-Rate Staircases and Torque Chatter}
+\label{sec:lat-chatter}
+
+\subsection{Joint Faults}
+\label{sec:lat-faults}
+
+\section{Filtering and Rate Design}
+\label{sec:lat-filtering}
+
+\subsection{Kalman Estimation of the Quantised Stylus}
+\label{sec:lat-kalman}
+
+\subsection{Command Low-Pass: the Lag--Smoothness Trade-Off}
+\label{sec:lat-lowpass}
+
+\subsection{500\,Hz Command Chain and Joint Velocity Limiter}
+\label{sec:lat-limiter}
+
+\section{Benchmark Comparison of Output Modes}
+\label{sec:lat-benchmarks}
+
+\section{Residual Hesitations: Haptic Device Stick-Slip}
+\label{sec:lat-stickslip}
+
+\section{The Pose-Dependent Buzz and Position-Mode Streaming}
+\label{sec:lat-buzz}
+
+\section{Summary}
+\label{sec:lat-summary}

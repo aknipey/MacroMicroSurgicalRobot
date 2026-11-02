@@ -38,6 +38,10 @@
   <!-- Linear algebra -->
   <depend>eigen</depend>
 
+  <!-- ur_calibration_extract (UR primary interface + calibration YAML) -->
+  <depend>ur_client_library</depend>
+  <depend>yaml_cpp_vendor</depend>
+
   <!-- Runtime-only packages used by the display launch file -->
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>

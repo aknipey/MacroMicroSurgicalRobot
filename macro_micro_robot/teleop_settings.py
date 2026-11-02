@@ -27,7 +27,8 @@ TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # Tilt and twist are scaled by step ** this, on top of TOUCH_ROTATION_SCALE /
 # TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
 # 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
-TOUCH_SCALE_ROTATION_EXPONENT = 1.0
+# SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to 1.0 for Session B.
+TOUCH_SCALE_ROTATION_EXPONENT = 0.5
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
@@ -287,7 +288,8 @@ SERVO_LOOKAHEAD = 0.05
 # forward_position_controller (the UR runs servoj, its lag cancelled by
 # SERVO_POSITION_LEAD). speedj buzzed / ground in some poses on the UR16e (a kick
 # every 2 ms set point); servoj never did. Read when Servo starts: needs a relaunch.
-SERVO_OUTPUT = "position"
+# SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to "position" for Session B.
+SERVO_OUTPUT = "velocity"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
@@ -315,7 +317,8 @@ SERVO_VELOCITY_RATE = 500.0
 # command itself. The copy spreads each change over the whole step (as the driver's own
 # spline mode does), so the joint speed ramps between set points. Real arm only (mock
 # hardware runs no URScript). Read at launch: needs a relaunch.
-SERVO_SMOOTH_SPEEDJ = True
+# SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to True for Session B.
+SERVO_SMOOTH_SPEEDJ = False
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.
 VELOCITY_LIMITER = True

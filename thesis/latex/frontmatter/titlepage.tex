@@ -1,0 +1,25 @@
+% =============================================================================
+%  Title page (UNSW School of Mechanical and Manufacturing Engineering format)
+% =============================================================================
+\begin{titlepage}
+  \centering
+  \includegraphics[width=6cm]{titlepage/unsw_logo.jpg}\par
+  \vspace{1cm}
+  {\Large \thesisschool\par \thesisfaculty\par \thesisuniversity\par}
+  \vspace{1.5cm}
+  {\huge\bfseries \thesistitle\par}
+  \ifdefempty{\thesissubtitle}{}{\vspace{0.4cm}{\Large \thesissubtitle\par}}
+  \vspace{1.5cm}
+  {\Large by\par}
+  \vspace{0.3cm}
+  {\LARGE\bfseries \thesisauthor\par}
+  \vfill
+  {\large Thesis submitted as a requirement for the degree of\par \thesisdegree\par}
+  \vspace{1cm}
+  {\large
+  \begin{tabularx}{\textwidth}{|X|X|}
+    \hline
+    Submitted: \thesissubmitted & Student zID: \thesiszid \\ \hline
+    Supervisor: \thesissupervisor & \ifdefempty{\thesiscosupervisor}{Course: \thesiscourse}{Co-supervisor: \thesiscosupervisor} \\ \hline
+  \end{tabularx}\par}
+\end{titlepage}

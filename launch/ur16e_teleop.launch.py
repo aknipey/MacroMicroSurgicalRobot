@@ -17,7 +17,8 @@
     # ...with the real arm's delays added (ur_emulator.py), for latency testing
     ros2 launch macro_micro_robot ur16e_teleop.launch.py use_mock_hardware:=true emulate_ur:=true
 
-    # Defaults to the lab UR16e (factory kinematics). Other models / a calibration file:
+    # Defaults to the lab UR16e with the nominal ur_description model, not this arm's calibration
+    # (docs/UR_CALIBRATION_FIX.md). Other models / a calibration file:
     ros2 launch macro_micro_robot ur16e_teleop.launch.py ur_type:=ur5e robot_ip:=<ip> kinematics_params_file:=<file>
 
 Terminal output is kept short: nodes from other packages (UR driver, controller
@@ -155,7 +156,7 @@ def generate_launch_description():
     ur_type = LaunchConfiguration("ur_type")
 
     # The old lab UR5e calibration only applies to that arm; any other type falls back
-    # to its factory kinematics unless a calibration file is passed explicitly.
+    # to its nominal ur_description model unless a calibration file is passed explicitly.
     default_kinematics = PythonExpression([
         "'", PathJoinSubstitution([pkg_share, "config", "lab_ur5e_1_calibration.yaml"]), "' if '",
         ur_type, "' == 'ur5e' else '",
@@ -293,7 +294,8 @@ def generate_launch_description():
         executable="trajectory_recorder.py",
         name="trajectory_recorder",
         output="screen",
-        parameters=[{"output_dir": LaunchConfiguration("trajectory_dir")}],
+        parameters=[{"output_dir": LaunchConfiguration("trajectory_dir"),
+                     "kinematics_params_file": LaunchConfiguration("kinematics_params_file")}],
     )
 
     rviz = Node(

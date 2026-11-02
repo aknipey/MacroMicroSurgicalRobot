@@ -2195,3 +2195,54 @@ so the code read as if it drove a UR5e, and `ls_thesis` said nothing about what 
 mapping, and only the intended exceptions above differ. The package builds (scratch build),
 every Python file compiles, and `macro_micro_robot.*` imports. A mock launch
 (`use_mock_hardware:=true input:=replay`, private domain) started `/ur16e_touch_teleop`.
+
+## Arm's own kinematic calibration: `ur_calibration_extract` (2026-11-03, after V8)
+
+**What:** a new tool that reads the UR16e's factory calibration from the controller into a
+`kinematics_params_file`, and a `kinematics:` block in every run's `META.yaml`. Nothing changes for
+existing launches: the default is still the nominal UR16e model until a calibration file is passed.
+Full write-up: [UR_CALIBRATION_FIX.md](UR_CALIBRATION_FIX.md).
+
+- `ros2 launch macro_micro_robot ur_calibration_extract.launch.py` →
+  `config/calibrations/ur16e_kinematics_<date>.yaml`. Use it with `launch_system.sh --calibration-file=`.
+- `src/ur_calibration_extract.cpp`, plus `vendor/ur_calibration/` (byte-identical upstream `jazzy` @ `67578e0`
+  `calibration.hpp/.cpp`, BSD-3); `CMakeLists.txt` / `package.xml` (+ `ur_client_library`, `yaml_cpp_vendor`).
+- `trajectory_recorder.py` gets a `kinematics_params_file` parameter, passed in by `ur16e_teleop.launch.py`.
+  `META.yaml kinematics:` = file, `model` (nominal / calibrated), sha256, calibration hash.
+
+**Why:** every run so far used the nominal model, not this arm's calibration. The driver logged an ERROR
+saying so at every connection (125 logs, 10-01 to 10-30). This is the main suspect for the 0.6–1.2 mm
+TF/controller drift and the 0.17–3.7 mm NDI pivot offset (see *2026-10-26 replay set*). The driver's own
+`ur_calibration` (3.8.0) couldn't produce the file because of two upstream bugs:
+1. It never connects. It calls `Pipeline::run()` without `Pipeline::init()`, and with ur_client_library
+   2.15.2 only `init()` opens the socket (`Stream is invalid` forever). Fixed upstream `0089621`.
+2. Once connected, it writes link rotations in the wrong Euler convention (intrinsic XYZ instead of URDF's
+   fixed-axis XYZ). The file loads, passes the driver's hash check, and is still wrong: up to 3.2 mm at
+   the flange for a synthetic UR16e calibration. Fixed upstream `81df755`. The 11-03 plan's "one-line
+   patch" would have missed this.
+
+Fixed here rather than in `src/Universal_Robots_ROS2_Driver`: that repo is outside the edit scope, a
+patch would be lost on pull, and updating the driver to 3.10 mid-experiments brings unrelated changes.
+The extractor also refuses to write a file whose URDF reading doesn't reproduce the controller's raw D-H
+model (≤1e-9, 10 000 poses), and it records how far the nominal model is from this arm.
+
+**Tests:** offline only (no robot): real UR10e and synthetic UR16e calibrations pass the check at ~1e-13;
+the output parses in xacro; an unreachable robot gives exit 1 after 3 tries. See the write-up §5.
+**Real robot not yet run.**
+
+**Next:** extract on the arm (driver must then print `Calibration checked successfully.`), redo the wand
+hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remaining_experiments.md` §1.3).
+
+**Same day, after the tests above:**
+- **Real arm, first extraction (2026-11-03):** `config/calibrations/ur16e_kinematics_2026-11-03.yaml`, hash
+  `calib_912036121568766846`. Check passed (max element 2.0e-14). **Nominal UR16e vs this arm: flange
+  position max 2.42 mm, RMS 1.44 mm; rotation max 0.42°** (10 000 random poses). Read-only, the arm did
+  not move. The controller reported per-joint checksums 0xFFFFFFFF and `calibration_status: 1`. The
+  hash is computed from the D-H values, so the checksums don't matter. What status 1 means is unknown.
+- **Session A settings (`teleop_settings.py`):** `SERVO_OUTPUT = "velocity"`, `SERVO_SMOOTH_SPEEDJ = False`,
+  `TOUCH_SCALE_ROTATION_EXPONENT = 0.5`, the values the 2026-10-26 replays ran with (their `META.settings`;
+  smooth speedj didn't exist then). This way the calibrated-kinematics replays differ from that set only in
+  the kinematic model and the re-calibrated end effector. Other settings that differ from 10-26 affect
+  logging / the tool library, not motion. **Set back to `"position"` / `True` / `1.0` for Session B.**
+- An unsaved `logs/NEW_RUN` (2026-10-30 17:18, 136 s Touch run, no NDI) was moved to
+  `logs/V8/UNSAVED_2026-10-30_171830` before the next recording could delete it.

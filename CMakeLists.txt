@@ -28,6 +28,8 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(ur_client_library REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
 
 ###########
 ## Build ##
@@ -87,6 +89,17 @@ ament_target_dependencies(android_pose_subscriber
   tf2_geometry_msgs
 )
 
+## ur_calibration_extract: reads the arm's factory calibration into a kinematics_params_file.
+## Replaces the driver's ur_calibration, which in our 3.8.0 checkout never connects and writes wrong
+## link rotations (docs/UR_CALIBRATION_FIX.md). vendor/ur_calibration = byte-identical upstream sources.
+add_executable(ur_calibration_extract
+  src/ur_calibration_extract.cpp
+  vendor/ur_calibration/src/calibration.cpp
+)
+target_include_directories(ur_calibration_extract PRIVATE vendor/ur_calibration/include)
+target_link_libraries(ur_calibration_extract ur_client_library::urcl yaml-cpp Eigen3::Eigen)
+ament_target_dependencies(ur_calibration_extract rclcpp)
+
 #############
 ## Install ##
 #############
@@ -113,6 +126,7 @@ install(TARGETS
   micro_module_control
   android_pose_subscriber
   touch_bridge
+  ur_calibration_extract
   DESTINATION lib/${PROJECT_NAME}
 )
 

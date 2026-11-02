@@ -1,0 +1,95 @@
+% =============================================================================
+%  SNIPPETS - copy-paste templates. NOT compiled (main.tex never \inputs this).
+% =============================================================================
+
+% ---- Single figure ------------------------------------------------------------
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{latency/lag_by_version.pdf}
+  \caption[Short caption for the List of Figures]{Long caption. Say what to look at.}
+  \label{fig:lat-lag-by-version}
+\end{figure}
+
+% ---- Placeholder until the plot exists ----------------------------------------
+\begin{figure}[tbp]
+  \centering
+  \placeholderfig{0.8\linewidth}{6cm}{Lag (position / angle) for V1--V8, real arm vs emulator}
+  \caption{...}
+  \label{fig:...}
+\end{figure}
+
+% ---- Side-by-side subfigures --------------------------------------------------
+\begin{figure}[tbp]
+  \centering
+  \begin{subfigure}[b]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{latency/spectrum_velocity.pdf}
+    \caption{Velocity output (\ver{4})}\label{fig:lat-spec-a}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{latency/spectrum_v5.pdf}
+    \caption{With filters and limiter (\ver{5})}\label{fig:lat-spec-b}
+  \end{subfigure}
+  \caption{Tool vibration spectra.}
+  \label{fig:lat-spec}
+\end{figure}
+
+% ---- Plot straight from a CSV in data/ (pgfplots) -------------------------------
+\begin{figure}[tbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.85\linewidth, height=6cm, xlabel={Command filter cutoff (\si{\hertz})},
+                 ylabel={Added lag (\si{\milli\second})}, grid=major, legend pos=north east]
+      \addplot+[mark=*] table[x=cutoff_hz, y=lag_ms, col sep=comma] {data/filter_tradeoff.csv};
+      \addlegendentry{Measured}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{...}\label{fig:...}
+\end{figure}
+
+% ---- Booktabs table -------------------------------------------------------------
+\begin{table}[tbp]
+  \centering
+  \caption{Benchmark comparison of output modes (long / short benchmark).}
+  \label{tab:lat-benchmarks}
+  \begin{tabular}{lccc}
+    \toprule
+    Metric & Trajectory (\ver{3}) & Velocity (\ver{5}) & Velocity tuned (\ver{5}) \\
+    \midrule
+    Lag, translation (\si{\milli\second}) & 160 / 150 & 62 / 58 & 74 / 66 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ---- Table with notes ------------------------------------------------------------
+\begin{table}[tbp]
+  \centering
+  \begin{threeparttable}
+    \caption{...}\label{tab:...}
+    \begin{tabular}{lc}
+      \toprule A & B\tnote{a} \\ \midrule 1 & 2 \\ \bottomrule
+    \end{tabular}
+    \begin{tablenotes}\footnotesize \item[a] Note. \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+% ---- Equation with references ------------------------------------------------------
+\begin{equation}
+  \tan\theta = \frac{\rcmgain}{\lever}\,\abs{\vec{s}}
+  \label{eq:rcm-scaling}
+\end{equation}
+% refer with \cref{eq:rcm-scaling}, \cref{fig:...}, \cref{tab:...}, \cref{ch:rcm}
+
+% ---- Glossary use ---------------------------------------------------------------------
+% first use expands: \gls{rcm} -> "remote centre of motion (RCM)", later "RCM"
+% plural: \glspl{dof}; symbol: \gls{sym:k}
+
+% ---- Draft notes (only shown with `make draft`) ------------------------------------------
+\TODO{rerun with calibrated kinematics}
+\FIG{lag vs version bar chart}
+\CITE{Butterworth group delay}
+\CHECK{number from logs/V5/LongBenchmarkTuned/METRICS.yaml}
+
+% ---- Code excerpt (appendix) -----------------------------------------------------------
+\begin{lstlisting}[language=Python, caption={Speed thread change in the URScript}]
+qdd = max(abs(qd - last_qd)) / steptime
+\end{lstlisting}

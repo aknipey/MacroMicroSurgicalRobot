@@ -32,8 +32,10 @@
 #
 # Options:
 #   --robot-ip=IP            Robot IP address (default: 192.168.0.100)
-#   --calibration-file=PATH  Robot kinematics calibration YAML
-#                            (default: UR16e factory kinematics)
+#   --calibration-file=PATH  Robot kinematics calibration YAML, from
+#                            ur_calibration_extract.launch.py (default: nominal
+#                            UR16e model, NOT this arm's calibration;
+#                            see docs/UR_CALIBRATION_FIX.md)
 #   --arduino-port=PORT      Serial port for the micro-module Arduino
 #                            (default: /dev/ttyACM0)
 #   --baud=RATE              Serial baud rate for the Arduino (default: 9600)
@@ -104,7 +106,7 @@ for arg in "$@"; do
   esac
 done
 
-# Empty = let the launch files pick the UR16e factory kinematics
+# Empty = let the launch files pick the nominal UR16e model
 KIN_ARG=()
 [ -n "$CALIBRATION_FILE" ] && KIN_ARG=(kinematics_params_file:="$CALIBRATION_FILE")
 

@@ -1,0 +1,84 @@
+% =============================================================================
+%  Chapter 2 - Literature Review                               (~12-15 pages)
+%  Plan: ../../planning/03_chapter_plan.md#chapter-2
+%  Start from the Thesis A review (~/Desktop/Thesis A/Lit Review/Lit Review.tex) and
+%  reshape it so every section ends in a gap that a later chapter answers.
+%  New topics the results now need (see planning/06_literature_to_find.md):
+%  teleop latency/transparency, servo-level robot interfaces (speedj/servoj,
+%  MoveIt Servo), tremor filtering, singularity handling, RCM control and
+%  motion scaling, haptic device limits, kinematic calibration, tool changers.
+% =============================================================================
+\chapter{Literature Review}
+\label{ch:literature}
+
+\section{Minimally Invasive Surgery and Surgical Robotics}
+\label{sec:lit-mis}
+
+\subsection{Commercial Systems and the Cost Barrier}
+\label{sec:lit-commercial}
+
+\subsection{Low-Cost and Open-Architecture Platforms}
+\label{sec:lit-open}
+
+\section{Macro--Micro Architectures and Continuum Manipulators}
+\label{sec:lit-macro-micro}
+
+\subsection{Tendon-Driven Continuum Tips}
+\label{sec:lit-continuum}
+
+\subsection{Industrial Arms as the Macro Stage}
+\label{sec:lit-industrial-macro}
+
+\section{Teleoperation of the Macro Stage}
+\label{sec:lit-teleop}
+
+\subsection{Latency, Transparency and Operator Performance}
+\label{sec:lit-latency}
+
+\subsection{Servo-Level Robot Interfaces and Real-Time Streaming Control}
+\label{sec:lit-servo-interfaces}
+% velocity vs position streaming, MoveIt Servo, UR External Control (speedj/servoj)
+
+\subsection{Tremor, Noise and Command Filtering}
+\label{sec:lit-filtering}
+% physiological tremor band, low-pass vs adaptive (One Euro) vs Kalman estimation
+
+\subsection{Motion Scaling and Clutching}
+\label{sec:lit-scaling}
+
+\section{Constrained Motion and Safety}
+\label{sec:lit-safety}
+
+\subsection{Kinematic Singularities in Teleoperation}
+\label{sec:lit-singularities}
+
+\subsection{Remote Centre of Motion: Mechanical versus Software Constraints}
+\label{sec:lit-rcm}
+
+\subsection{Haptic Cues, Virtual Fixtures and Device Limitations}
+\label{sec:lit-haptics}
+
+\section{Accuracy and Validation}
+\label{sec:lit-validation}
+
+\subsection{Robot Kinematic Calibration}
+\label{sec:lit-calibration}
+
+\subsection{Independent Measurement: Optical and Electromagnetic Tracking}
+\label{sec:lit-tracking}
+
+\section{Modularity and Tool Exchange}
+\label{sec:lit-modularity}
+
+\subsection{Tool Changers and Kinematic Couplings}
+\label{sec:lit-couplings}
+
+\subsection{Post-Exchange Calibration and Recovery}
+\label{sec:lit-post-swap}
+
+\section{Synthesis and Research Gaps}
+\label{sec:lit-gaps}
+% the four Thesis A gaps, sharpened: (G1) macro-stage dynamics and smooth,
+% low-lag teleop on open stacks; (G2) repeatable exchange + recalibration;
+% (G3) integrated safety (singularity, RCM, haptic awareness); (G4) unified,
+% repeatable, independent evaluation.

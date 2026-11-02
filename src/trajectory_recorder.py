@@ -40,6 +40,7 @@ Plot with scripts/plot_paths.py.
 """
 
 import csv
+import hashlib
 import json
 import os
 import shutil
@@ -116,6 +117,22 @@ def git_version(path):
         return "unknown"
 
 
+def kinematics_summary(path):
+    """Which kinematic model TF used: the kinematics_params_file, its sha256 and calibration hash, and
+    whether it is a nominal (ur_description default) or a robot calibration (docs/UR_CALIBRATION_FIX.md)."""
+    if not path:
+        return {"file": None, "model": "unknown (launch did not pass kinematics_params_file)"}
+    summary = {"file": path, "model": "nominal" if "default_kinematics" in path else "calibrated"}
+    try:
+        with open(path, "rb") as f:
+            summary["sha256"] = hashlib.sha256(f.read()).hexdigest()
+        with open(path) as f:
+            summary["hash"] = (yaml.safe_load(f).get("kinematics") or {}).get("hash")
+    except (OSError, yaml.YAMLError, AttributeError) as e:
+        summary["error"] = str(e)
+    return summary
+
+
 class TrajectoryRecorder(Node):
     def __init__(self):
         super().__init__("trajectory_recorder")
@@ -129,6 +146,8 @@ class TrajectoryRecorder(Node):
         self.declare_parameter("stylus_topic", "/phantom/state")
         self.declare_parameter("touch_target_topic", "/ur16e_touch_teleop/target_pose")
         self.declare_parameter("ur_tcp_topic", "/tcp_pose_broadcaster/pose")
+        # Only recorded in META (factory vs calibrated runs must be told apart)
+        self.declare_parameter("kinematics_params_file", "")
 
         self.output_dir = os.path.expanduser(self.get_parameter("output_dir").value)
         self.log_dir = os.path.expanduser(self.get_parameter("log_dir").value)
@@ -349,6 +368,8 @@ class TrajectoryRecorder(Node):
                 "rows": rows,
                 "rosbag": bag_status,
                 "tcp_offset": self.tcp_offset_summary(),
+                "kinematics": kinematics_summary(
+                    self.get_parameter("kinematics_params_file").value),
                 "ndi": self.ndi,
                 "tool": self.tool_log,
                 "trajectory_source": trajectory_path,
@@ -366,6 +387,9 @@ class TrajectoryRecorder(Node):
                     "tool": "teleop RCM tool (config/tools.yaml): at_start = active when recording "
                             "started (null = teleop not running), changes = switches during the run "
                             "(t as above); settings' TOUCH_RCM_SHAFT_* are only the no-library fallback",
+                    "kinematics": "kinematics_params_file TF was built from: model nominal = "
+                                  "ur_description default, calibrated = this arm's controller "
+                                  "calibration (ur_calibration_extract); hash = its calibration hash",
                     "tcp_offset": "ee_frame -> pendant TCP, measured against TF at recording start; "
                                   "check_max_mm = largest drift from it in later checks during the "
                                   "run (should be ~0: more means TF uses the wrong arm kinematics)",

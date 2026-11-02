@@ -1,0 +1,71 @@
+% =============================================================================
+%  Chapter 4 - System Overview and Experimental Methods        (~8-10 pages)
+%  Plan: ../../planning/03_chapter_plan.md#chapter-4
+%  Everything the result chapters rely on: hardware, software chain, the
+%  measurement tools and the metrics (defined once, used everywhere).
+% =============================================================================
+\chapter{System Overview and Experimental Methods}
+\label{ch:methods}
+
+\section{Hardware Platform}
+\label{sec:methods-hardware}
+
+\subsection{Macro Stage: UR16e Collaborative Arm}
+\label{sec:methods-ur16e}
+
+\subsection{Micro Stage: Tendon-Driven Micro-Manipulator}
+\label{sec:methods-micro}
+
+\subsection{Operator Interface: 3D Systems Touch}
+\label{sec:methods-touch}
+
+\subsection{Independent Measurement: NDI Polaris Vega}
+\label{sec:methods-ndi}
+
+\section{Software Architecture}
+\label{sec:methods-software}
+% stylus -> teleop node -> MoveIt Servo -> joint_velocity_limiter -> controller -> UR
+
+\subsection{Teleoperation Control Law}
+\label{sec:methods-control-law}
+% clutch, target mapping, feedforward + correction, speed caps
+
+\subsection{Robot Output Modes}
+\label{sec:methods-output-modes}
+% trajectory / velocity (speedj) / position (servoj), as used across versions
+
+\section{Experimental Methods}
+\label{sec:methods-experiments}
+
+\subsection{Run Recording and Metadata}
+\label{sec:methods-recording}
+
+\subsection{Stylus Replay: Identical Input Across Versions}
+\label{sec:methods-replay}
+
+\subsection{UR Emulator for Offline Latency Studies}
+\label{sec:methods-emulator}
+
+\subsection{Hand--Eye and Tool Calibration}
+\label{sec:methods-calibration}
+
+\subsection{Benchmark Trajectories}
+\label{sec:methods-benchmarks}
+
+\section{Performance Metrics}
+\label{sec:methods-metrics}
+
+\subsection{Lag and Tracking Error}
+\label{sec:methods-lag}
+
+\subsection{Vibration, Jitter and Jerk}
+\label{sec:methods-vibration}
+
+\subsection{RCM Error}
+\label{sec:methods-rcm-error}
+
+\subsection{Exchange Time and Repeatability}
+\label{sec:methods-exchange-metrics}
+
+\section{Safety Procedures}
+\label{sec:methods-safety}

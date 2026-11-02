@@ -98,6 +98,11 @@ mode and flag (`--arduino-port`, `--calibration-file`, `--baud`, `--with-rviz`,
 `--dry-run`, ...), or `./src/MacroMicroSurgicalRobot/scripts/launch_system.sh
 stop` to kill a run whose terminal you already closed.
 
+**Arm calibration:** by default ROS uses the nominal UR16e model, not this arm's factory calibration.
+Extract it with `ros2 launch macro_micro_robot ur_calibration_extract.launch.py` (the driver's own
+`ur_calibration` is broken in our 3.8.0 checkout) and pass the result with `--calibration-file=`.
+See [docs/UR_CALIBRATION_FIX.md](docs/UR_CALIBRATION_FIX.md).
+
 The rest of this section documents what the script does under the hood, for
 manual/single-terminal use or debugging.
 
