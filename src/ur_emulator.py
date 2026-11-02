@@ -9,12 +9,16 @@ forward_position_controller:
 
     servo_node --JointTrajectory-->      /ur_emulator/joint_trajectory  (SERVO_OUTPUT "trajectory")
     servo_node --Float64MultiArray qd--> /ur_emulator/commands          (SERVO_OUTPUT "velocity")
+    joint_velocity_limiter --q-->        /ur_emulator/positions         (SERVO_OUTPUT "position")
     ur_emulator --positions--> /forward_position_controller/commands -> mock joints
 
 Trajectory mode does what scaled_joint_trajectory_controller does (samples the newest
 trajectory at the current time, linear between points) and then what the UR does with
 that set point: `dead_time` of pure delay and a first-order lag `tau`. Fitted to the
 real UR16e logs of 2026-10-12 (logs/V3/*): 16 ms + 15 ms, 0.1-0.4 mrad RMS.
+
+Position mode (forward_position_controller, the UR's servoj on each 2 ms set point)
+gets the same dead time and lag as trajectory mode, without the sampling.
 
 Velocity mode models forward_velocity_controller + the driver's `speedj(qd, 40, 2 ms)`:
 the same dead time, then the joint speed ramps to the command at `accel_limit` rad/s^2
@@ -35,7 +39,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory
 
-from ls_thesis.ur5e_common import EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC
+from ls_thesis.ur5e_common import EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC
 
 UR_JOINTS = [
     "shoulder_pan_joint",
@@ -66,6 +70,7 @@ class UrEmulator(Node):
         self.qd = np.zeros(6)           # emulated joint velocities (velocity mode)
         self.trajectory = None          # (times s, positions [n x 6]) of the newest trajectory
         self.velocity_command = None    # qd, kept until the next one (no timeout, like the real controller)
+        self.position_command = None    # q, kept until the next one
         self.setpoints = deque()        # (time s, mode, value) waiting out dead_time
         self.active = None              # the set point the emulated UR is following
         self.previous = None
@@ -76,6 +81,7 @@ class UrEmulator(Node):
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
         self.create_subscription(JointTrajectory, EMULATOR_TRAJECTORY_TOPIC, self.on_trajectory, 10)
         self.create_subscription(Float64MultiArray, EMULATOR_VELOCITY_TOPIC, self.on_velocity, 10)
+        self.create_subscription(Float64MultiArray, EMULATOR_POSITION_TOPIC, self.on_position, 10)
         self.create_timer(1.0 / p("rate"), self.step)
         self.get_logger().info(
             f"Emulating the UR: dead time {self.dead_time * 1000:.0f} ms, position lag {self.tau * 1000:.0f} ms, "
@@ -98,7 +104,7 @@ class UrEmulator(Node):
                 self.get_logger().info("Joints moved by another controller - following them until it stops")
             self.overridden = self.q is not None
             self.q, self.qd = measured, np.zeros(6)
-            self.trajectory = self.velocity_command = self.active = None
+            self.trajectory = self.velocity_command = self.position_command = self.active = None
             self.setpoints.clear()
             self.sent.clear()
 
@@ -111,12 +117,17 @@ class UrEmulator(Node):
         times = np.array([start + p.time_from_start.sec + p.time_from_start.nanosec * 1e-9 for p in msg.points])
         positions = np.array([[p.positions[i] for i in order] for p in msg.points])
         self.trajectory = (times, positions)
-        self.velocity_command = None
+        self.velocity_command = self.position_command = None
 
     def on_velocity(self, msg):
         if len(msg.data) == 6:
             self.velocity_command = np.array(msg.data)
-            self.trajectory = None
+            self.trajectory = self.position_command = None
+
+    def on_position(self, msg):
+        if len(msg.data) == 6:
+            self.position_command = np.array(msg.data)
+            self.trajectory = self.velocity_command = None
 
     def set_point(self, now):
         """(mode, value) the controller asks for right now, before the UR's delay."""
@@ -125,6 +136,8 @@ class UrEmulator(Node):
             return "position", np.array([np.interp(now, times, positions[:, j]) for j in range(6)])
         if self.velocity_command is not None:
             return "velocity", self.velocity_command
+        if self.position_command is not None:
+            return "position", self.position_command
         return None
 
     def step(self):

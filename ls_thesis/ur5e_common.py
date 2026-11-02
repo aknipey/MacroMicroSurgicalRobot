@@ -5,11 +5,14 @@ UR5e motion in ROS 2 goes through MoveIt Servo:
     keyboard / Touch node --TwistStamped--> /servo_node/delta_twist_cmds
     servo_node --JointTrajectory--> /scaled_joint_trajectory_controller/joint_trajectory
     (or, with SERVO_OUTPUT "velocity", Float64MultiArray joint velocities to
-    /joint_velocity_limiter/commands -> /forward_velocity_controller/commands)
+    /joint_velocity_limiter/commands -> /forward_velocity_controller/commands;
+    with SERVO_OUTPUT "position", the same velocities, integrated by the limiter into
+    positions -> /forward_position_controller/commands, i.e. the UR's servoj)
 
 Servo must not output Float64MultiArray positions: in position mode it re-bases every
 step on the measured joint state, so on the real arm (which takes ~40 ms to reach a
-command) the robot only ever moves ~10% of the commanded speed.
+command) the robot only ever moves ~10% of the commanded speed. SERVO_OUTPUT
+"position" avoids that by integrating its own command instead (joint_velocity_limiter).
 Recorded trajectories are replayed through the same controller's action interface.
 """
 
@@ -35,10 +38,13 @@ TELEOP_CONTROLLER = "scaled_joint_trajectory_controller"
 SERVO_COMMAND_TOPIC = f"/{TELEOP_CONTROLLER}/joint_trajectory"
 VELOCITY_CONTROLLER = "forward_velocity_controller"
 SERVO_VELOCITY_TOPIC = f"/{VELOCITY_CONTROLLER}/commands"
+POSITION_CONTROLLER = "forward_position_controller"
+SERVO_POSITION_TOPIC = f"/{POSITION_CONTROLLER}/commands"
 # ur_emulator.py (mock hardware with the real arm's delays) takes Servo's output here
 # and drives the mock joints through forward_position_controller
 EMULATOR_TRAJECTORY_TOPIC = "/ur_emulator/joint_trajectory"
 EMULATOR_VELOCITY_TOPIC = "/ur_emulator/commands"
+EMULATOR_POSITION_TOPIC = "/ur_emulator/positions"
 EMULATOR_CONTROLLER = "forward_position_controller"
 # joint_velocity_limiter.py (velocity mode) sits between Servo and the velocity
 # controller (or ur_emulator): Servo publishes here, the limiter's output_topic

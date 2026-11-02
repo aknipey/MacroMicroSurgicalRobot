@@ -11,7 +11,7 @@ Double-click WHITE to cycle the motion scale (1:1 -> 1:5 -> 1:20 by default,
 `scale_steps`). Nothing waits to see whether a press becomes a double click:
 both presses engage straight away, and the new scale applies from the second
 press (which re-captures the origin, so the robot does not jump). Tilt and
-twist are scaled by step ** `scale_rotation_exponent` (sqrt by default). The current
+twist are scaled by step ** `scale_rotation_exponent` (1 by default: the same as translation). The current
 scale is published latched on ~/motion_scale for the logs.
 
 Click the GREY button to start / stop recording a trajectory and the
@@ -699,7 +699,7 @@ class TouchTeleop(Node):
         step = self.scale_steps[self.scale_index]
         self.translation_scale = self.base_translation_scale * step
         self.deadband = self.base_deadband * step
-        # Tilt and twist are scaled less than translation (sqrt of it by default)
+        # Tilt and twist scale with translation (exponent 1 by default; < 1 scales them less)
         rotation_step = step ** self.scale_rotation_exponent
         self.rotation_scale = self.base_rotation_scale * rotation_step
         self.twist_scale = self.base_twist_scale * rotation_step

@@ -55,12 +55,16 @@ from ls_thesis.teleop_settings import (
     VELOCITY_LIMITER,
 )
 from ls_thesis.ur5e_common import (
-    EMULATOR_CONTROLLER, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC, LIMITER_INPUT_TOPIC, LIMITER_NODE,
-    SERVO_COMMAND_TOPIC, SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
+    EMULATOR_CONTROLLER, EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC,
+    LIMITER_INPUT_TOPIC, LIMITER_NODE, POSITION_CONTROLLER, SERVO_COMMAND_TOPIC, SERVO_POSITION_TOPIC,
+    SERVO_VELOCITY_TOPIC, TELEOP_CONTROLLER, VELOCITY_CONTROLLER,
 )
 
-if SERVO_OUTPUT not in ("trajectory", "velocity"):
-    raise ValueError(f"SERVO_OUTPUT must be 'trajectory' or 'velocity', not {SERVO_OUTPUT!r}")
+if SERVO_OUTPUT not in ("trajectory", "velocity", "position"):
+    raise ValueError(f"SERVO_OUTPUT must be 'trajectory', 'velocity' or 'position', not {SERVO_OUTPUT!r}")
+# The UR controller each output mode streams to (emulate_ur:=true aside)
+OUTPUT_CONTROLLER = {"trajectory": TELEOP_CONTROLLER, "velocity": VELOCITY_CONTROLLER,
+                     "position": POSITION_CONTROLLER}[SERVO_OUTPUT]
 
 # Launch's own per-process chatter, hidden unless verbose:=true
 LAUNCH_CHATTER = ("process started with pid", "process has finished cleanly")
@@ -194,7 +198,7 @@ def generate_launch_description():
             # The controller MoveIt Servo streams to
             "initial_joint_controller": PythonExpression([
                 "'", EMULATOR_CONTROLLER, "' if '", LaunchConfiguration("emulate_ur"), "' == 'true' else '",
-                VELOCITY_CONTROLLER if SERVO_OUTPUT == "velocity" else TELEOP_CONTROLLER, "'"]),
+                OUTPUT_CONTROLLER, "'"]),
             "launch_rviz": "false",
             # Same as the driver's ur_rsp.launch.py but with our robot script (see
             # SERVO_SMOOTH_SPEEDJ); the stock one otherwise
@@ -223,8 +227,9 @@ def generate_launch_description():
     )
     servo_yaml_path = Path(get_package_share_directory("ur_moveit_config")) / "config" / "ur_servo.yaml"
     servo_yaml = yaml.safe_load(servo_yaml_path.read_text())
-    use_limiter = SERVO_OUTPUT == "velocity" and VELOCITY_LIMITER
-    if SERVO_OUTPUT == "velocity":
+    # Position mode always needs the limiter: it integrates Servo's velocities
+    use_limiter = SERVO_OUTPUT == "position" or (SERVO_OUTPUT == "velocity" and VELOCITY_LIMITER)
+    if SERVO_OUTPUT in ("velocity", "position"):
         servo_yaml.update({
             "command_out_type": "std_msgs/Float64MultiArray",
             # Through joint_velocity_limiter.py when it is on
@@ -251,6 +256,10 @@ def generate_launch_description():
     def start_servo(context):
         servo_params = dict(servo_yaml)
         emulate = context.launch_configurations.get("emulate_ur") == "true"
+        if SERVO_OUTPUT == "position":
+            limiter_out = EMULATOR_POSITION_TOPIC if emulate else SERVO_POSITION_TOPIC
+        else:
+            limiter_out = EMULATOR_VELOCITY_TOPIC if emulate else SERVO_VELOCITY_TOPIC
         velocity_out = EMULATOR_VELOCITY_TOPIC if emulate else SERVO_VELOCITY_TOPIC
         if emulate and not use_limiter:
             servo_params["command_out_topic"] = (
@@ -264,7 +273,7 @@ def generate_launch_description():
         actions = [RegisterEventHandler(OnProcessExit(target_action=wait_robot_description, on_exit=[servo_node]))]
         if use_limiter:
             actions.append(package_node("joint_velocity_limiter.py", LIMITER_NODE,
-                                        parameters=[{"output_topic": velocity_out}]))
+                                        parameters=[{"output_topic": limiter_out, "output": SERVO_OUTPUT}]))
         return actions
 
     servo = OpaqueFunction(function=start_servo)

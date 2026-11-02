@@ -25,9 +25,9 @@ TOUCH_TRANSLATION_SCALE = 1.0
 # far as your hand. Starts on the first entry.
 TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # Tilt and twist are scaled by step ** this, on top of TOUCH_ROTATION_SCALE /
-# TOUCH_TWIST_SCALE. 0.5 = sqrt (1:5 -> rotation 1:2.24, 1:20 -> 1:4.47),
-# 1 = same as translation, 0 = rotation never scaled.
-TOUCH_SCALE_ROTATION_EXPONENT = 0.5
+# TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
+# 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
+TOUCH_SCALE_ROTATION_EXPONENT = 1.0
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
@@ -282,8 +282,12 @@ SERVO_LOOKAHEAD = 0.05
 # What Servo sends the robot: "trajectory" = joint trajectories to
 # scaled_joint_trajectory_controller (the UR tracks positions, adding SERVO_LOOKAHEAD
 # and its own servoj lag), "velocity" = joint velocities to forward_velocity_controller
-# (the UR runs speedj, no lookahead). Read when Servo starts: needs a relaunch.
-SERVO_OUTPUT = "velocity"
+# (the UR runs speedj, no lookahead), "position" = Servo's joint velocities through
+# joint_velocity_limiter, which integrates them into joint positions for
+# forward_position_controller (the UR runs servoj, its lag cancelled by
+# SERVO_POSITION_LEAD). speedj buzzed / ground in some poses on the UR16e (a kick
+# every 2 ms set point); servoj never did. Read when Servo starts: needs a relaunch.
+SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
@@ -333,6 +337,20 @@ VELOCITY_LIMITER_MAX_ACCELERATION = [8.0, 8.0, 15.0, 25.0, 25.0, 25.0]
 # acceleration caps. 0 = off.
 VELOCITY_LIMITER_SMOOTHING = 0.003
 
+# ------------------------------------------------------- Position mode (only)
+# Position mode always runs joint_velocity_limiter (it does the integrating), with the
+# VELOCITY_LIMITER_* caps and smoothing above and Servo at SERVO_VELOCITY_RATE.
+# How far ahead (s) of the integrated position each command is sent, at the current
+# joint speed: q + qd * lead. The UR's servoj (driver: lookahead 0.03 s, the minimum,
+# gain 2000) reaches a set point ~16 ms dead time + ~15 ms lag later (ur_emulator's
+# fit to the V3 logs), so 0.03 cancels that at steady speed. 0 = plain servoj lag.
+SERVO_POSITION_LEAD = 0.03
+# Furthest (rad, per joint) the integrated position may run ahead of the measured
+# joints. Normal tracking at the speed caps is ~0.08 rad (2.5 rad/s x ~31 ms); past
+# this the arm is not following (stopped, blocked) and the command is held back
+# instead of winding up.
+SERVO_POSITION_MAX_ERROR = 0.15
+
 # -------------------------------------------------------------------- Keyboard
 KEYBOARD_LINEAR_SPEED = 0.05     # m/s, starting speed
 KEYBOARD_ANGULAR_SPEED = 0.3     # rad/s, starting speed
@@ -356,10 +374,12 @@ RECORDER_SAMPLE_RATE = 25.0      # Hz
 # LOG_KEEP_ALL_RUNS every run is also copied to LOG_DIR/runs/<date_time>/.
 LOG_DIR = "~/ros2_ws/src/MacroMicroSurgicalRobot/logs"
 LOG_KEEP_ALL_RUNS = False
-# Refuse to start a recording (GREY button or replay) unless the NDI tracker
+# True = refuse to start a recording (GREY button or replay) unless the NDI tracker
 # (`python3 -m ndi_tracking run`, src/ndi_tracking) is following it, so no run ends
-# up without NDI data. False = record anyway, with a warning at start and stop.
-LOG_REQUIRE_NDI = True
+# up without NDI data. False = record anyway, with a warning at start and stop and
+# META.yaml ndi.tracker_at_start: false. Off since 2026-10-30 (user's choice); it was
+# added 2026-10-26 after replays were recorded without NDI unnoticed.
+LOG_REQUIRE_NDI = False
 # Without tcp_pose_broadcaster (mock hardware) the UR path falls back to TF
 # base_link -> tool0, sampled at this rate (Hz).
 LOG_TF_FALLBACK_RATE = 200.0

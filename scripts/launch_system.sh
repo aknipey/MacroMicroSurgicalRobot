@@ -118,6 +118,39 @@ if [ "$MODE" = "help" ] || [ "$MODE" = "-h" ] || [ "$MODE" = "--help" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Stopping: every run_bg command leads its own process group (setsid), so the
+# whole tree is stopped, not just `ros2 launch`. Killing only the top PID left
+# ros2_control_node running; those orphans kept publishing stale /joint_states
+# (poses an hour old) into every later session, which the teleop and Servo then
+# acted on.
+# ---------------------------------------------------------------------------
+proc_alive() {
+  kill -0 -- "-$1" 2>/dev/null || kill -0 "$1" 2>/dev/null
+}
+
+stop_groups() {
+  # stop_groups <pid>... : SIGINT, then SIGTERM after 15 s, then SIGKILL after 5 s
+  # more. A PID that is not a group leader (older PID files, tail) gets a plain kill.
+  local step sig wait_s pid alive
+  for step in "INT 15" "TERM 5" "KILL 2"; do
+    sig=${step% *}; wait_s=${step#* }
+    alive=()
+    for pid in "$@"; do proc_alive "$pid" && alive+=("$pid"); done
+    [ "${#alive[@]}" -eq 0 ] && return 0
+    [ "$sig" != "INT" ] && echo "   still running: ${alive[*]} - sending SIG${sig}"
+    for pid in "${alive[@]}"; do
+      kill -"$sig" -- "-$pid" 2>/dev/null || kill -"$sig" "$pid" 2>/dev/null || true
+    done
+    for _ in $(seq $((wait_s * 10))); do
+      alive=()
+      for pid in "$@"; do proc_alive "$pid" && alive+=("$pid"); done
+      [ "${#alive[@]}" -eq 0 ] && return 0
+      sleep 0.1
+    done
+  done
+}
+
+# ---------------------------------------------------------------------------
 # stop mode - doesn't need the ROS environment
 # ---------------------------------------------------------------------------
 if [ "$MODE" = "stop" ]; then
@@ -126,12 +159,8 @@ if [ "$MODE" = "stop" ]; then
     exit 0
   fi
   echo "Stopping processes from the last launch_system.sh run..."
-  while read -r pid; do
-    if kill -0 "$pid" 2>/dev/null; then
-      echo "  killing PID $pid"
-      kill "$pid" 2>/dev/null || true
-    fi
-  done < "$PID_FILE"
+  mapfile -t STOP_PIDS < "$PID_FILE"
+  stop_groups "${STOP_PIDS[@]}"
   rm -f "$PID_FILE"
   echo "Done."
   exit 0
@@ -186,7 +215,9 @@ run_bg() {
   if [ "$DRY_RUN" = "true" ]; then
     return 0
   fi
-  ( "$@" > "${LOG_DIR}/${name}.log" 2>&1 ) &
+  # Own process group (and session), so cleanup can stop the whole tree and a Ctrl+C
+  # here reaches only this script, which then shuts everything down in order
+  setsid "$@" > "${LOG_DIR}/${name}.log" 2>&1 < /dev/null &
   local pid=$!
   PIDS+=("$pid")
   echo "$pid" >> "$PID_FILE"
@@ -249,17 +280,54 @@ cleanup() {
   fi
   echo
   echo ">> Shutting down..."
-  for pid in "${PIDS[@]}"; do
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
+  stop_groups "${PIDS[@]}"
   wait 2>/dev/null || true
   rm -f "$PID_FILE"
   echo ">> Stopped."
 }
 
+
+check_no_running_driver() {
+  # A second ros2_control_node on the same ROS domain publishes its own (stale)
+  # /joint_states next to the live one. Orphans (their `ros2 launch` is gone, so the
+  # parent is systemd / init) are left over from an earlier run: stop them. One that
+  # still belongs to a running launch is someone's live session: refuse instead.
+  [ "$DRY_RUN" = "true" ] && return 0
+  local mine="${ROS_DOMAIN_ID:-0}" pid domain parent orphans=() live=()
+  for pid in $(pgrep -f "lib/controller_manager/ros2_control_node" || true); do
+    domain=$(tr '\0' '\n' < "/proc/${pid}/environ" 2>/dev/null | sed -n 's/^ROS_DOMAIN_ID=//p')
+    [ "${domain:-0}" = "$mine" ] || continue
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    if [ "$parent" = "1" ] || [ "$(ps -o comm= -p "$parent" 2>/dev/null)" = "systemd" ]; then
+      orphans+=("$pid")
+    else
+      live+=("$pid")
+    fi
+  done
+  if [ "${#live[@]}" -gt 0 ]; then
+    echo "ERROR: a robot driver from a running session is already up on ROS_DOMAIN_ID ${mine}" >&2
+    echo "       (ros2_control_node PID ${live[*]}). Two drivers publish two /joint_states streams." >&2
+    echo "       Stop that session first (Ctrl+C in its terminal, or ./scripts/launch_system.sh stop)." >&2
+    exit 1
+  fi
+  if [ "${#orphans[@]}" -gt 0 ]; then
+    echo ">> Stopping robot driver(s) left over from an earlier run: PID ${orphans[*]}"
+    stop_groups "${orphans[@]}"
+    for pid in "${orphans[@]}"; do
+      if proc_alive "$pid"; then
+        echo "ERROR: could not stop leftover ros2_control_node PID ${pid} - kill it by hand." >&2
+        exit 1
+      fi
+    done
+  fi
+}
+
 if [ "$DRY_RUN" = "false" ]; then
+  # Before the PID file is replaced, so `launch_system.sh stop` can still stop the
+  # previous run if that is what is holding the driver
+  case "$MODE" in
+    ur5e|ur5e-keyboard|ur5e-touch|full) check_no_running_driver ;;
+  esac
   mkdir -p "$(dirname "$PID_FILE")"
   rm -f "$PID_FILE"
   mkdir -p "$LOG_DIR"

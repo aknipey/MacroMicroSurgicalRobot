@@ -1,0 +1,73 @@
+{
+  "label": "TOOL0 -> WAND hand-eye (wand is the robot tool), 2026-10-30_172558",
+  "method": "handeye_wrist_jog",
+  "note": "No divot. Tip = the wand's calibrated tip through the hand-eye fit (refitted from the raw recording without mis-tracked frames); robot-tcp's robot-pivot tip is invalid without a divot.",
+  "raw": "/home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/raw/robot_tcp_20261030_172558.npz",
+  "wand_calibration": "8700340",
+  "date": "2026-10-30T17:25:58",
+  "robot_poses": 1176,
+  "ndi_frames_dropped": 47,
+  "handeye": {
+    "tool0_to_wand": [
+      [
+        -0.01890838121553018,
+        -0.9998143222382767,
+        0.003714049949008147,
+        -0.4740362462384445
+      ],
+      [
+        -0.999068452929051,
+        0.018749893472572665,
+        -0.03886731090157773,
+        -7.388712893456983
+      ],
+      [
+        0.03879045606538962,
+        -0.004445508068006254,
+        -0.9992374782684326,
+        206.01504732499433
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "pairs": 600,
+    "angle_mismatch_deg_rms": 0.3800621855382207,
+    "camera_pose_spread_mm_rms": 7.5623770188949235,
+    "camera_pose_spread_deg_rms": 0.34574139684471983,
+    "ndi_delay_s": 0.010000000000000092,
+    "samples": 1302
+  },
+  "halves_tip_tool0_mm": [
+    [
+      1.4729824857761395,
+      16.75360857183474,
+      364.05788353152
+    ],
+    [
+      -3.3870633175782747,
+      15.22681687602632,
+      363.2498646067651
+    ]
+  ],
+  "halves_apart_mm": 5.15790971963009,
+  "tip_tool0_mm": [
+    -2.296772916189853,
+    15.37710589173425,
+    363.81960145623225
+  ],
+  "direction_tool0": [
+    -0.009391978996227224,
+    0.04176750591002537,
+    0.9990832128409477
+  ],
+  "direction_angle_from_tool0_z_deg": 2.454,
+  "shaft_length_mm": 158.6,
+  "previous": "/home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json",
+  "quality_warnings": [
+    "the two halves disagree by 5.2 mm (> 2): jog every wrist in both halves (the sequence twice) and keep all wand markers in view"
+  ]
+}

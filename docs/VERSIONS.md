@@ -24,6 +24,10 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 | V6 | `v6` | 2026-10-19 | `SingularityGuard` on the Touch twist (damped least squares + block motion into the singularity + back-off), Servo's own singularity check moved out of the way while it runs; RCM mode: hold WHITE + click GREY latches the tool tip as a pivot point, the stylus then drives the tip with the shaft held through the point (`RcmTool`, `TOUCH_RCM_*`) | Strokes hit singularities: Servo's check scales the whole twist to zero and, past its hard stop, halts every command (even one leading out), so the arm got stuck. RCM: laparoscopic-style work, the shaft has to pivot about a port | Mock arm: shaft ≤ 1.35 mm off the point (mean 0.39) over 21° pivots. Real arm RCM runs in `logs/V6/` (BasicInRCM, ScalingInRCM, ExitingRCM): near the point the arm has to accelerate hard for small tip moves |
 | V7 | `v7` | 2026-10-19 – 10-26 | RCM sideways scaling: a sideways stylus move moves tool0 by the same amount at every depth (pivot slope k / r(d), `TOUCH_RCM_TOOL0_GAIN` = 0.5, to 130 mm), replacing V6's (depth / 10 mm)² fade; pivot continuous through 0 mm; tip can retract 5 mm past the point; RCM tool = NDI wand (hand-eye calibration). **Part 2:** haptic cues on the Touch (`TOUCH_HAPTIC_*`) through a new driver (`touch_server` + `touch_bridge`) replacing `omni_state`. **Tooling:** NDI Vega tracking of every run, recording refused without the tracker, replays with RCM chords / `--rcm`, UR16e hard-coded. Overview: section *V7 — summary of what changed from V6* | V6 real arm runs: near the RCM point the arm moved r(d) / d times the tip, so it accelerated hugely for small moves; fades tried first swung the arm when moving in and out. Part 2: feel limits and mode changes instead of watching for them. NDI: measure the RCM error independently of the robot's kinematics | Offline: tool0 0.50 mm per mm of stylus at 0-130 mm. Real arm, 14 NDI replays (2026-10-26): NDI RCM error 0.4-2.9 mm rms, teleop's own 0.05-0.23 mm (gap = UR16e factory kinematics, `logs/V7/REPLAYS_2026-10-26.md`). Haptics: OpenHaptics renders no force in a ROS process (fixed by the new driver); this Touch's force output is faulty |
 | V8 | `v8` | 2026-10-27 – 10-30 | GREY-hold macro/micro switch; numbered tool library switched from the launch terminal; smoother `speedj` on the robot (`SERVO_SMOOTH_SPEEDJ`); micro module made to work (startup deadlock, lost handshake, rad/deg motor maths, stylus position control, responsive damping); tool tip from one NDI ball, micro module = tool 2. Overview: section *V8 — summary of what changed from V7* | One stylus for arm and micro; tools change with the quick-change coupling; the arm buzzed / ground on accelerations; the Touch never moved the micro module | Sim / fakes: micro tip step settles in 69 ms (was 1.1 s), tracks within ~0.1 mm; speedj script loads (real-arm effect not yet measured). Real: tool switching; micro tip at (−8.7, 17.0, 436.0) mm ±1.5 mm |
+| (after V8) | not committed | 2026-10-30 | Rotation scaled the same as translation at every motion scale (`TOUCH_SCALE_ROTATION_EXPONENT` 0.5 → 1: 1:5 / 1:20 for both) instead of the square root (1:2.24 / 1:4.47) | User's choice: one scale for the whole motion | Test node: double-clicks cycle 1:1 / 1:5 / 1:20 with rotation 1:1 / 1:5 / 1:20 |
+| (after V8) | not committed | 2026-10-30 | NDI tracker no longer required to record: `LOG_REQUIRE_NDI` True → False (GREY click / replay record without it, with a warning and `ndi.tracker_at_start: false`) | User's choice: record runs without the Vega | - |
+| (after V8) | not committed | 2026-10-30 | `launch_system.sh`: each command in its own process group, shutdown stops the whole group (SIGINT → SIGTERM 15 s → SIGKILL 5 s); stops orphaned `ros2_control_node`s on the same ROS domain at start-up and refuses while a live session's driver runs | Orphaned `ros2_control_node`s from earlier sessions published stale `/joint_states` (poses 1-1.5 h old) into the live one | Dummy tree ignoring SIGINT: removed at 15 s; fake driver on the same domain refused, other domain allowed |
+| (after V8) | not committed | 2026-10-30 | `SERVO_OUTPUT = "position"` (new, now the default): Servo's joint velocities go through `joint_velocity_limiter`, which integrates them into its own joint positions and sends them `SERVO_POSITION_LEAD` (30 ms) ahead to `forward_position_controller`, so the UR runs `servoj` instead of `speedj` | The buzz / grind is `speedj`-only and pose-dependent (`LargeVibrations` 1.81 A vs `NEW_RUN` 0.22 A, same session, settings and command roughness); `servoj` never buzzed. Trajectory mode's ~140 ms lag came from Servo's re-basing, not `servoj` | Sim (emulator, `V3/CyclingScaling`): 58 / 62 ms, 4.9 mm (velocity 62 / 66 ms, 5.3 mm). Real arm: not yet run |
 
 **V7 SimpleHolder replays (2026-10-26, with NDI):** see `logs/V7/REPLAYS_2026-10-26.md`:
 results, original → replay map, and why the NDI error is mostly factory-kinematics error.
@@ -1974,3 +1978,174 @@ tool0 origin → ball). Re-analysis of the raw `.npz`:
 Most likely cause: the UR16e **factory kinematics**. The same 0.1-0.25° TF error seen
 in the 10-26 replays comes to ~0.8-1.9 mm at a 436 mm lever. Loading the arm's own
 kinematic calibration (`ur_calibration`, still not working) should tighten it.
+
+## Rotation scaled the same as translation (2026-10-30, after V8)
+
+**What:** `TOUCH_SCALE_ROTATION_EXPONENT` 0.5 → 1: tilt and twist are scaled by the same
+step as translation.
+
+| Translation | Rotation before (step^0.5) | Rotation now (step^1) |
+|---|---|---|
+| 1:1 | 1:1 | 1:1 |
+| 1:5 | 1:2.24 | 1:5 |
+| 1:20 | 1:4.47 | 1:20 |
+
+**Why:** the user's choice, after considering half the ratio, the cube root and step^2/3:
+one scale for the whole motion. At 1:20 a 20° pen tilt now turns the tool 1° (was 4.5°).
+
+**Tests:** `ur5e_touch_teleop` on a private domain (`setup_servo:=false`): three WHITE double
+clicks logged 1:5 (rotation 1:5), 1:20 (1:20), 1:1 (1:1). Not run on the real arm.
+
+## NDI tracker no longer required to record (2026-10-30, after V8)
+
+**What:** `LOG_REQUIRE_NDI` True → False. A GREY click (or a replay) now records even when
+`ndi_tracking run` is not following the recording. The recorder still logs an error at start
+("this run has NO NDI data"), the replay no longer waits for the tracker, and `META.yaml`
+has `ndi: {tracker_at_start: false}`, so a run without NDI data is still visible afterwards.
+Setting it back to True restores the refusal.
+
+**Why:** the user's choice, to record runs without the Vega. (The guard was added on
+2026-10-26 after 2 originals + 12 replays were recorded without NDI unnoticed; see
+*Recording refused without the NDI tracker*.)
+
+## Orphaned drivers fed stale joint states into live sessions; vibration still there (2026-10-30, after V8)
+
+**Run `logs/NEW_RUN` (16:21, code `eed73bb`-dirty, `SERVO_SMOOTH_SPEEDJ` on, no NDI):** the
+user heard the vibration again.
+
+1. **The buzz is not fixed by the speedj ramp.** The live `/robot_description` loaded
+   `external_control_smooth_speedj.urscript`, yet the joint current still carries
+   0.80 A rms at 150-250 Hz and 0.95 A at 80-150 Hz on the shoulder lift (V7:
+   `WeirdVibrationSounds` 0.97 / 0.45 A, `FastCheckingRCM` 0.36 / 0.51 A, slow run 0.04 A).
+   It again follows command steps (r = 0.69) and acceleration (0.43). The command itself
+   still has ≤ 0.0003 rad/s in that band. The speedj-kick explanation is at best incomplete.
+2. **Four orphaned `ros2_control_node`s** (14:34, 15:11, 15:18, 15:25) were alive on domain 0
+   next to the live one (16:09). Each ran its own `joint_state_broadcaster`, so `/joint_states`
+   had 5 publishers. In the 8.3 s bag, 8 messages jump > 0.05 rad (up to 3.56 rad). They
+   carry stamps 722-5563 s old and frozen poses, one the default `[0, −1.309, 1.571,
+   −1.833, −1.571, 0]`. The teleop (`joint_states` pose source), Servo and MoveIt all read
+   that topic, so each one is a cycle computed for the wrong arm pose. The live node held
+   every robot port (50001-50004, 30001-30004), so the orphans never reached the robot. The
+   user killed them, and `/joint_states` is back to 1 publisher.
+   - Why they were left: `launch_system.sh` started each command as `( cmd ) &` in the
+     launcher's own process group and stopped it with one SIGTERM to the top PID. Ctrl+C
+     also SIGINTed every node directly, `ros2 launch` exited on the second signal, and the
+     UR control node, slow to stop, survived. **Fix:** `run_bg` uses `setsid`, and
+     `stop_groups` (cleanup and `stop`) signals each whole group: SIGINT, SIGTERM after
+     15 s, SIGKILL after 5 s. `check_no_running_driver` refuses to start a driver while
+     another `ros2_control_node` runs on the same `ROS_DOMAIN_ID`. It runs before the PID file is
+     replaced, so `launch_system.sh stop` still covers the previous run. (First version ran it
+     after: the first refused start deleted the PID file. Hit at 16:28 by the 16:09 session's
+     driver, orphaned by the old launcher's shutdown as predicted.)
+     Then, at the user's request, orphans are no longer just reported: a `ros2_control_node`
+     whose parent is `systemd` / init (its `ros2 launch` is gone) is stopped by the launcher
+     (same SIGINT → SIGTERM → SIGKILL steps) and start-up continues. It still refuses for a
+     driver whose launch is alive (another terminal's session). Tested with fake drivers on
+     domain 77: live parent → refused; orphan → stopped (SIGINT ignored, SIGTERM at 15 s).
+
+**Next:** record the same motion again with no orphans (or replay `NEW_RUN` with
+`stylus_replay`), with `SERVO_SMOOTH_SPEEDJ` True and False. That separates the
+stale-pose kicks, the speedj ramp and whatever else drives the 120-250 Hz current.
+
+## Buzz is speedj-only and depends on pose; back to servoj without the lag (2026-10-30, after V8)
+
+**Runs (16:36 `LargeVibrations`, 16:43 `NEW_RUN`, same launch session, code `eed73bb`-dirty,
+identical settings, `SERVO_SMOOTH_SPEEDJ` on, one `/joint_states` publisher):** the user
+moved the arm around until it buzzed (`LargeVibrations`), then moved it out of that area
+(`NEW_RUN`, no buzz).
+
+| | LargeVibrations | NEW_RUN |
+|---|---|---|
+| Big-joint current 80-249 Hz, while moving | 1.81 A | 0.22 A |
+| Big-joint acceleration (rms) | 4.6 rad/s² | 6.2 rad/s² |
+| Command step per 2 ms | 10.8 mrad/s | 15.3 mrad/s |
+| Command 20-80 / 80-249 Hz | 1.35 / 0.21 mrad/s | 1.43 / 0.51 mrad/s |
+| Mean pose (pan, lift, elbow, w1, w2, w3) | −0.25 −1.32 2.00 −1.98 −0.99 1.33 | 0.20 −1.51 1.59 −1.85 −1.05 2.41 |
+
+- **The acceleration explanation above is wrong as a cause.** `NEW_RUN` accelerates
+  harder with a rougher command and is 8× quieter; `LargeVibrations` buzzes at ~1 A even
+  in its calm first seconds (1.5 rad/s²); the V5 Tuned benchmarks had the hardest commands
+  of all and 0.10-0.18 A. Within a buzzing run the buzz does grow with acceleration /
+  command step (r = 0.94 / 0.96 here), which is what the earlier correlations measured.
+  Whether a run buzzes is set by the pose. Gravity load is not it: mean joint currents
+  are the same in buzzing and quiet windows (lift −3.4 vs −3.3 A).
+- **The tool is not it either** (user: a buzzing area can be found with any tool), and
+  **`servoj` never buzzed** (V3 trajectory mode, 0.11 A).
+- **Likely mechanism (not proven):** `speedj` takes a new joint speed every 2 ms, so the
+  reference acceleration jumps every cycle, also with the ramped script; that is a kick
+  at 500 Hz scaled by the step size. In some poses an arm / joint-loop mode sits where
+  it rings with that. The logs cannot show it: the command is only sampled once per
+  cycle, and anything above 250 Hz in `/joint_states` aliases (a ~370 Hz ring reads as
+  ~130 Hz, where the buzz peaks). A phone recording of the sound would tell.
+
+**What:** `SERVO_OUTPUT = "position"`, the new default. Servo is set up exactly as in
+velocity mode (joint velocities at 500 Hz into `joint_velocity_limiter`, same caps and
+smoothing). The limiter (`output` "position") integrates the limited velocities into
+its own joint positions and publishes `q + qd × SERVO_POSITION_LEAD` to
+`forward_position_controller`; the driver sends that as `servoj` each cycle (driver
+xacro: lookahead 0.03 s, the minimum, gain 2000).
+- Integrating its own sum is what avoids V1's crawl (Servo's position output re-bases on
+  the measured joints every step). It is integrated over the real time between steps,
+  not one period each: commands arrive in bursts (two within 0.01 ms, then a gap), and a
+  full step each put a kick into the set point again (emulator: peak joint acceleration
+  2980 → 830 rad/s², 50-240 Hz acceleration 2.4× lower).
+- `SERVO_POSITION_LEAD` = 0.03 s cancels the UR's servoj response (16 ms dead time +
+  15 ms lag, `ur_emulator`'s fit to V3) at steady speed.
+- Safety: the position starts from `/joint_states`, again whenever the arm is found
+  > 0.01 rad from the last command after being idle (moved by another controller, e.g. a
+  replay's approach), and is never more than `SERVO_POSITION_MAX_ERROR` (0.15 rad) ahead
+  of the measured joints (warning in the limiter's 5 s report). If Servo or the limiter
+  dies, `forward_position_controller` holds the last position, so the arm stops.
+- `ur_emulator` takes positions on `/ur_emulator/positions` (same dead time + lag as
+  trajectory mode). `VelocityWatchdog` stays velocity-only. `SERVO_SMOOTH_SPEEDJ` does
+  nothing in position mode (the script's servo thread is the stock one).
+
+**Tests (mock UR16e + `emulate_ur:=true`, domain 87, `stylus_replay --no-record` of
+`V3/CyclingScaling`, scored on forward kinematics of `/joint_states` vs the teleop target):**
+
+| Output | Lag pos / angle | RMS error | With lag removed | Robot behind Servo's output |
+|---|---|---|---|---|
+| velocity (`speedj`) | 62 / 66 ms | 5.3 mm | 2.06 mm | 34 ms |
+| **position, lead 0.03** | **58 / 62 ms** | **4.9 mm** | **1.36 mm** | **22 ms** |
+| position, lead 0.05 (first version, per-period integration) | 50 / 54 ms | 4.3 mm | 0.72 mm | 6 ms |
+
+The ~36 ms before Servo's output (teleop node + Servo) is the same in both modes. Lead
+0.05 is better on the emulator but tuned to a model; tune it on the real arm by lining up
+`/forward_position_controller/commands` with `/joint_states`.
+
+**Not yet run on the real arm.** Check: the buzz in the area found in `LargeVibrations`
+(80-249 Hz joint current), and the lag.
+
+## Batch replays and the wand-tool calibration as scripts (2026-10-30, after V8)
+
+**What:**
+- `scripts/replay_batch.sh [--dest=V8] [--repeats=3] [run[:--rcm] ...]`: runs
+  `stylus_replay.py --yes` for each run (default: the four V7 SimpleHolder originals,
+  RCMOnly with `--rcm`, as on 2026-10-26) and moves each `logs/NEW_RUN` to
+  `logs/<dest>/<run>_Replay<n>` before the next replay deletes it. It refuses to start
+  while `logs/NEW_RUN` exists or the `ndi_tracking` node is not on ROS, and stops at the
+  first replay that has no saved recording (`REPLAY.yaml`) or no `NDI_PATH.csv` (that one
+  is kept as `..._NO_NDI`).
+- `scripts/wand_tool_calibration.py`: refits the hand-eye from a divot-less `robot-tcp
+  --wand-is-tool` raw recording (newest `calibrations/raw/robot_tcp_*.npz`, wrist 1/2/3
+  jogged, the sequence twice), with ndi_tracking's own fit. It drops NDI frames whose implied
+  camera pose is > 30 mm off (mis-tracked wand), and fits each half on its own as a
+  repeatability check. It writes `config/calibrations/wand_handeye_<date_time>.json` with the
+  hand-eye wand tip as `tip_tool0_mm`, compares it with the library's tool 1 and prints the
+  `tool_library.py add 1 ... --force` command. NOT RECOMMENDED if the halves are > 2 mm
+  apart, the rotation mismatch or camera-pose spread is > 1°, or the recording is > 2 h old.
+
+**Why:** the replay set is being redone with position output. Each replay overwrites
+`NEW_RUN`, so renaming by hand between runs risks losing one, and `LOG_REQUIRE_NDI` is off,
+so nothing else would stop a replay set without NDI ([NDI required for recordings]). The
+calibration: `robot_tcp.json` stores the robot-pivot tip as `tip_tool0_mm`, which is
+invalid without a divot, so `tool_library.py add --from robot_tcp.json` would take the
+wrong tip. On 2026-10-26 the corrected record was written by hand.
+
+**Tests:** the converter on the 2026-10-26 raw recording reproduces tool 1 to 0.00 mm /
+0.00° (halves 1.2 mm apart). First recording today (17:25:58, wrists jogged once each): 47
+mis-tracked frames at 33-35 s; without them the fit matches 10-26's quality (mismatch
+0.38°, spread 7.6 mm / 0.35°), but the halves are 5.2 mm apart (mostly tool0 x), so it was
+not applied. Both halves put the tip ~5-7 mm from tool 1 (y +5 to +7, z −3 to −4 mm, shaft
++1.4°): the holder has probably moved since 10-26. The batch script's syntax and its
+NEW_RUN refusal were checked; it has not yet run on the arm.
