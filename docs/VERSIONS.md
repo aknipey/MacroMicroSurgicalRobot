@@ -2287,3 +2287,7 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   10-26). Fast/Slow/WholeRun are 1:1 originals and unaffected (tool0 motion matches 10-26 within a few mm).
   Now reads both names, like `rcm_offset_check.py`. The 10-26 replays ran before the rename, so they're correct.
 - RCMOnly redone at 1:5 (95f9eac): 0.47-0.50 mm rms, 100 % within 2 mm (10-26: 0.42-0.44, swing 40° → 47°).
+- **V9 = position mode (`SERVO_OUTPUT = "position"`), everything else as Session A** (calibrated kinematics,
+  tool 3, stock speedj, rotation exponent 0.5), so V9 vs V8/CalibratedKinematics differs only in the output
+  mode. Mock check with today's code: `forward_position_controller` active, RCMOnly replay at 1:5 ran with no
+  errors. **First real-arm run of position mode: supervised.**
