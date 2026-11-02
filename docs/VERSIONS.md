@@ -2286,3 +2286,4 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   is 1:5, so **the 11-03 RCMOnly replays ran at 1:1: invalid** (tool0 moved ~2× and turned 68° vs 25° on
   10-26). Fast/Slow/WholeRun are 1:1 originals and unaffected (tool0 motion matches 10-26 within a few mm).
   Now reads both names, like `rcm_offset_check.py`. The 10-26 replays ran before the rename, so they're correct.
+- RCMOnly redone at 1:5 (95f9eac): 0.47-0.50 mm rms, 100 % within 2 mm (10-26: 0.42-0.44, swing 40° → 47°).
