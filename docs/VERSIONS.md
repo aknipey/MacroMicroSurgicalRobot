@@ -2266,3 +2266,13 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   spread 6.0 mm / 0.25°, halves 0.4 mm, wand still to 0.04 mm / 0.01° (rest before/after). Tip
   (−1.01, 16.34, 324.99) mm, within ~1 mm of the 09:34 attempt. Tool 1 (10-26, nominal model) is kept for
   comparison.
+- **Calibration confirmed on the arm (`scripts/kinematics_check.py`, new):** in the first calibrated
+  replay (V8/CalibratedKinematics/FastCheckingRCMSimpleHolder_Replay1), tool0 through the calibrated file
+  matches the controller's TCP to 0.000 mm spread / 0.000°, against 0.847 mm / 0.374° for the nominal model.
+  A 10-26 replay gives 0.000 / 0.000 (calibrated) vs 0.638 / 0.371 (nominal), so the offline
+  re-analysis (E0) can use this file directly. `check_max_mm` stayed ~1.1 mm because it measures TF
+  timing, not kinematics; the earlier "should fall to ~0" prediction was wrong (docs corrected).
+- Noticed: the pendant TCP (a pure translation) was ~119 mm on 10-26 and 600.5 mm on 11-03. ROS
+  doesn't use it for motion, but the controller's TCP-speed safety limits do.
+- `code_version: unknown` in that replay: today's `colcon build` calls lacked `--symlink-install`, so the
+  recorder's git lookup ran in install/ instead of the repo. Fix: clean rebuild with `--symlink-install`.

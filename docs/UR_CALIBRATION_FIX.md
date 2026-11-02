@@ -167,9 +167,16 @@ the calibrated model can make results look *worse* (07 §1.1):
    only after the RD1 replays show it helps.
 
 What the before/after should show:
-- the driver startup line (§1);
+- the driver startup line (§1). At the default warn log level only the mismatch ERROR is visible, so
+  success = that ERROR is absent;
 - `META.yaml kinematics.model: calibrated`, with the hash matching the controller's;
-- `tcp_offset.check_max_mm` falling from 0.6–1.2 mm to ~0, now that TF and the controller share a model.
+- `scripts/kinematics_check.py <run>`: tool0 computed through the file vs the controller's TCP, sample
+  by sample from the bag (same RTDE packet). **Measured 2026-11-03:** calibrated spread 0.000 mm /
+  0.000°; nominal 0.847 mm / 0.374° (FastChecking replay) and 0.638 mm / 0.371° (a 10-26 replay, which
+  the calibrated file also matches exactly: the controller's calibration hasn't changed since).
+- **Not** `tcp_offset.check_max_mm`, which this doc first predicted would fall to ~0. It compares
+  against TF interpolated from ~20 Hz, so while moving it mostly measures timing: FastChecking gave
+  1.24–1.38 mm (10-26, nominal) and 1.08 mm (11-03, calibrated).
 
 ## 7. When this can go
 

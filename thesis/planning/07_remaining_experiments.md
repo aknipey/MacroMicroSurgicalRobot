@@ -72,9 +72,10 @@ successfully".
 1. Launch with `kinematics_params_file:=<that yaml>` (`launch_system.sh --calibration-file=`). The driver must
    print `Calibration checked successfully.`, and `META.yaml kinematics.model` must say `calibrated`. The launch
    default is still the nominal model. Make the calibrated file the default only after step 4 shows it helps.
-2. Confirm: the recorder's `tcp_offset.check_max_mm` should drop from 0.6–1.2 mm to ~0.1 mm (or less), because TF
-   and the controller now use the same model. **This is a free, quantitative before/after check** built into every
-   recording (R4.4).
+2. Confirm with `scripts/kinematics_check.py <run>` (tool0 through the file vs the controller's TCP,
+   same RTDE packet). Done 11-03: calibrated spread 0.000 mm / 0.000°, nominal 0.85 mm / 0.37°. The
+   recorder's `check_max_mm` is not a kinematics measure: it is dominated by TF timing while moving
+   (1.08 mm calibrated vs 1.24–1.38 mm nominal on FastChecking).
 3. Redo the wand hand-eye (`scripts/wand_tool_calibration.py` from a fresh wrist-jog `robot-tcp --wand-is-tool`
    recording). Then redo the micro tip ball (`scripts/tip_ball_calibration.py`) and update `tools.yaml`.
 4. Replay a subset of the 2026-10-26 NDI set (see RD1).
