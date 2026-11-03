@@ -2297,3 +2297,9 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
 - V9/PositionMode RCM set done (12 replays, no faults). **V9/TrajectoryMode: `SERVO_OUTPUT = "trajectory"`**, all
   else unchanged. LargeVibrations is replayed only in modes that stream positions (trajectory, position):
   it buzzed with speedj, and the user doesn't want it repeated in velocity mode.
+- `scripts/set_v9_mode.sh trajectory|position|velocity-unfiltered|velocity-optimised|final`: sets the five
+  settings that differ between the V9 sets and commits, so each recording's code_version names its mode.
+- **Tool-tip clearance with tool 3 (tip 325 mm from the flange), lowest tip z above the robot base plane:**
+  RCM set ≥ 101 mm, NoBuzzArea 191 mm, Scaled5_Slow 48.5 mm (measured in its trajectory replay),
+  Scaled5_Fast ~70 mm (estimate), but LongBenchmark 11 mm, ShortBenchmark 4.9 mm (measured) and
+  LargeVibrations ~1 mm. Those three were recorded with a shorter tool: not replayed with the wand mounted.
