@@ -1,5 +1,7 @@
 # 7. Testing plan: what is left, what to redo, and the kinematics fix
 
+**Next lab session: `08_next_session_V9b.md`** (exact steps). Session A was done 2026-11-03.
+
 Ordered by how much each test strengthens the thesis per hour of lab time. **Check the submission date first**
 and cut from the bottom. Each test names the threshold or claim it settles (R-IDs from `02_results_inventory.md`,
 C-IDs from `01_story_and_novelty.md`).
