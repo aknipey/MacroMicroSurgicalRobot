@@ -28,7 +28,6 @@ LOGS="${PKG}/logs"
 CALIBRATION="${PKG}/config/calibrations/ur16e_kinematics_2026-11-03.yaml"
 STACK_LOG_DIR="${LOGS}/V9b/stack_logs"
 ROBOT_IP="192.168.0.100"
-PROGRAM_TOPIC="/io_and_status_controller/robot_program_running"
 LAUNCH_EXTRA="${LAUNCH_EXTRA:-}"    # extra launch arguments, for testing on mock hardware
 # Bridge run: 11-03 values and how far off counts as "something moved"
 BRIDGE_SLOW=1.29
@@ -50,6 +49,7 @@ done
 
 STACK_PID=""
 PLAYER_PID=""
+STACK_LOG=""
 POSE_FILE=""
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -91,6 +91,7 @@ start_stack() {
   mkdir -p "$STACK_LOG_DIR"
   local log
   log="${STACK_LOG_DIR}/$(date +%H%M%S)_step${STEP}.log"
+  STACK_LOG="$log"
   echo ">> Starting the stack (log: ${log})"
   # set -m: its own process group, so a Ctrl+C here reaches the replay and not the stack
   # shellcheck disable=SC2086
@@ -111,9 +112,9 @@ start_stack() {
   done
   $up || die "Servo did not come up in 90 s. See ${log}"
   say ">> Press Play on the pendant (External Control)"
-  until timeout 4 ros2 topic echo --once --field data --qos-durability transient_local \
-          --qos-reliability reliable "$PROGRAM_TOPIC" std_msgs/msg/Bool 2>/dev/null | grep -qi "^true"; do
+  until program_state | grep -q "running"; do
     stack_alive || die "The stack exited. See ${log}"
+    sleep 1
   done
   echo ">> External Control is running"
   grep -q "calibration parameters of the connected robot don't match" "$log" \
@@ -196,12 +197,12 @@ keep_recording() {
   summarise "V9b/${name}"
 }
 
-program_stopped() {
-  local state
-  state="$(timeout 4 ros2 topic echo --once --field data --qos-durability transient_local \
-           --qos-reliability reliable "$PROGRAM_TOPIC" std_msgs/msg/Bool 2>/dev/null | head -1)"
-  [ "${state,,}" = "false" ]
+# From the stack log, never by subscribing: a new subscriber to the program-running topic lined
+# up with the 220-330 ms controller stalls that stopped External Control (2026-11-06)
+program_state() {
+  grep -E "Robot program (running|stopped)" "$STACK_LOG" 2>/dev/null | tail -1
 }
+program_stopped() { program_state | grep -q "stopped"; }
 
 # The recorder start can stall the control loop long enough to stop External Control, and a
 # trajectory left waiting then jumps to catch up when Play is pressed (2026-11-06: 170 mm in
@@ -241,11 +242,12 @@ pose_run() {
   set +m
   while kill -0 "$PLAYER_PID" 2>/dev/null; do
     program_stopped && pose_failed "$name" "External Control stopped during the motion."
-    sleep 1
+    sleep 0.5
   done
   wait "$PLAYER_PID"
   PLAYER_PID=""
   tail -2 "$out"
+  program_stopped && pose_failed "$name" "External Control stopped during the motion."
   # trajectory_player.py exits 0 even when the trajectory fails
   grep -q "Trajectory complete" "$out" || pose_failed "$name" "The motion did not finish."
   sleep 2
