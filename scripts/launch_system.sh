@@ -23,10 +23,10 @@
 #               --with-micro also the micro module: hold GREY 1 s to switch.
 #               Type a tool number + Enter in this terminal to switch tools
 #               (config/tools.yaml; not in RCM mode, robot stationary).
-#   ur16e       UR16e driver + legacy ur16e_control (ROS 1 port - needs a
-#               Cartesian controller the ROS 2 UR driver doesn't have).
-#   full        Full system: UR16e driver + Touch driver + serial bridge +
-#               micro_module_control + ur16e_control.
+#   ur16e       Same as ur16e-touch. (Used to run the ROS 1 ur16e_control port,
+#               which needs a Cartesian controller the ROS 2 UR driver lacks.)
+#   full        Same as ur16e-touch --with-micro: arm, Touch and micro module.
+#               Needs the Arduino, see --arduino-port.
 #   stop        Stop every process started by a previous run of this script.
 #   help        Show this message.
 #
@@ -45,7 +45,7 @@
 #                            micro_module_control. Hold GREY 1 s (no WHITE)
 #                            to switch the stylus between arm and micro module.
 #   --with-rviz              Also start RViz + robot_state_publisher for
-#                            'touch' / 'keyboard' / 'ur16e' / 'full' modes.
+#                            every mode except 'display'.
 #   --no-gui                 Use joint_state_publisher instead of the GUI
 #                            version in 'display' mode.
 #   --distro=NAME            ROS 2 distro to source (default: $ROS_DISTRO or
@@ -177,6 +177,11 @@ case "$MODE" in
     ;;
 esac
 
+case "$MODE" in
+  ur16e) MODE="ur16e-touch" ;;
+  full) MODE="ur16e-touch"; WITH_MICRO="true" ;;
+esac
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
@@ -288,13 +293,6 @@ start_serial_bridge() {
   wait_for_topic /micro_module_motor_states 15
 }
 
-start_ur_driver() {
-  run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
-    ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
-    launch_rviz:=false
-  wait_for_service /controller_manager/list_controllers 60
-}
-
 start_rviz_if_requested() {
   if [ "$WITH_RVIZ" = "true" ]; then
     run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
@@ -352,7 +350,7 @@ if [ "$DRY_RUN" = "false" ]; then
   # Before the PID file is replaced, so `launch_system.sh stop` can still stop the
   # previous run if that is what is holding the driver
   case "$MODE" in
-    ur16e|ur16e-keyboard|ur16e-touch|full) check_no_running_driver ;;
+    ur16e-keyboard|ur16e-touch) check_no_running_driver ;;
   esac
   mkdir -p "$(dirname "$PID_FILE")"
   rm -f "$PID_FILE"
@@ -398,14 +396,6 @@ case "$MODE" in
       --ros-args -p port:="$ARDUINO_PORT"
     ;;
 
-  ur16e)
-    start_ur_driver
-
-    run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
-
-    start_rviz_if_requested
-    ;;
-
   ur16e-keyboard|ur16e-touch)
     INPUT="keyboard"
     [ "$MODE" = "ur16e-touch" ] && INPUT="touch"
@@ -438,23 +428,6 @@ case "$MODE" in
     fi
     ;;
 
-  full)
-    start_touch_driver
-
-    start_serial_bridge
-
-    start_ur_driver
-
-    echo ">> Start the LS_ROS_CONTROL program on the UR16e Teach Pendant now, then press Enter."
-    if [ "$DRY_RUN" = "false" ]; then
-      read -r
-    fi
-
-    run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
-    run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
-
-    start_rviz_if_requested
-    ;;
 esac
 
 if [ "$DRY_RUN" = "true" ]; then
