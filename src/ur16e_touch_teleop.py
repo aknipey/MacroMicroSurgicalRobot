@@ -112,7 +112,7 @@ from macro_micro_robot.ur16e_common import (
 )
 from macro_micro_robot import teleop_settings as cfg
 from macro_micro_robot import tools as tool_library
-from macro_micro_robot.haptics import PulsePlayer, limit_force, singularity_force
+from macro_micro_robot.haptics import PulsePlayer, clamp_norm, limit_force, singularity_force
 
 # omni_state publishes orientation = R_device * Rz(-90) (hduMatrix is row-vector /
 # transposed, so its "offset * rotation" is a right multiply), so the offset cancels
@@ -126,6 +126,8 @@ PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 # back of the pen); tool0 z points out of the flange towards the tool tip, so the
 # same visual twist is a rotation of opposite sign.
 PEN_AXIS_TO_TOOL_Z_SIGN = -1.0
+
+ROTATING_JOINT_TYPES = ("revolute", "continuous")
 
 
 class UrdfChain:
@@ -151,7 +153,7 @@ class UrdfChain:
                 raise ValueError(f"No joint chain from {base_frame} to {ee_frame} in the URDF")
             self.chain.insert(0, joints[link])
             link = joints[link][2]
-        self.joint_names = [j[0] for j in self.chain if j[1] in ("revolute", "continuous")]
+        self.joint_names = [j[0] for j in self.chain if j[1] in ROTATING_JOINT_TYPES]
         self.matrices = [(xyz, rpy.as_matrix()) for _, _, _, (xyz, rpy), _ in self.chain]
 
     def jacobian(self, positions):
@@ -162,7 +164,7 @@ class UrdfChain:
         for (name, kind, _, _, axis), (xyz, rpy) in zip(self.chain, self.matrices):
             position = position + rotation @ xyz
             rotation = rotation @ rpy
-            if kind in ("revolute", "continuous"):
+            if kind in ROTATING_JOINT_TYPES:
                 columns.append((position, rotation @ axis))
                 # Rodrigues: rotation about the (unit) joint axis
                 k = np.array([[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]])
@@ -176,7 +178,7 @@ class UrdfChain:
         for name, kind, _, (xyz, rpy), axis in self.chain:
             position = position + rotation.apply(xyz)
             rotation = rotation * rpy
-            if kind in ("revolute", "continuous"):
+            if kind in ROTATING_JOINT_TYPES:
                 rotation = rotation * Rotation.from_rotvec(axis * positions[name])
         return position, rotation
 
@@ -215,14 +217,9 @@ def wrap_angle(angle):
 
 def split_twist(rotation):
     """Split a body-frame rotation into (swing, twist angle about body z): rotation = swing * Rz(twist)."""
-    x, y, z, w = rotation.as_quat()
+    _, _, z, w = rotation.as_quat()
     twist = 2.0 * np.arctan2(z, w)
     return rotation * Rotation.from_rotvec([0.0, 0.0, -twist]), wrap_angle(twist)
-
-
-def clamp_norm(vector, limit):
-    norm = np.linalg.norm(vector)
-    return vector * (limit / norm) if norm > limit else vector
 
 
 class ConstantVelocityKalman:
@@ -290,9 +287,226 @@ class ConstantVelocityKalman:
 
 
 class TouchTeleop(Node):
+    # touch_server's TouchScenePacket (include/macro_micro_robot/touch_packets.hpp)
+    SCENE_FORMAT = "<II3d3d7d"
+    SCENE_MAGIC = 0x54534331
+    # Stylus step (m) for the numerical RCM-mode stylus Jacobian
+    STYLUS_STEP = 1e-4
+
     def __init__(self):
         super().__init__("ur16e_touch_teleop")
 
+        self.declare_parameters_with_defaults()
+
+        param = lambda name: self.get_parameter(name).value
+        self.base_frame = param("base_frame")
+        self.ee_frame = param("ee_frame")
+        self.mapping = param("mapping")
+        if self.mapping not in ("toward_base", "fixed"):
+            raise ValueError(f"mapping must be 'toward_base' or 'fixed', not {self.mapping!r}")
+        self.fixed_axis_matrix = axis_map_to_matrix(param("axis_map"))
+        self.units = param("touch_units_to_m")
+        self.base_translation_scale = param("translation_scale")
+        self.scale_steps = [float(v) for v in param("scale_steps")]
+        if not self.scale_steps or min(self.scale_steps) <= 0.0:
+            raise ValueError(f"scale_steps must be positive, not {self.scale_steps}")
+        self.double_click_time = param("double_click_time")
+        self.mode_switch_hold_time = param("mode_switch_hold_time")
+        self.scale_rotation_exponent = param("scale_rotation_exponent")
+        self.enable_rotation = param("enable_rotation")
+        self.base_rotation_scale = param("rotation_scale")
+        self.enable_twist = param("enable_twist")
+        self.base_twist_scale = param("twist_scale")
+        self.position_gain = param("position_gain")
+        self.rotation_gain = param("rotation_gain")
+        # Caps on the gain terms alone (0 = none), so catching up after the robot fell
+        # behind (a speed cap or the joint limiter held it back) is gradual, not a surge
+        self.max_correction = param("max_correction_speed") or np.inf
+        self.max_angular_correction = param("max_correction_angular_speed") or np.inf
+        self.feedforward = param("feedforward")
+        self.feedforward_filter = param("feedforward_filter")
+        # Kalman filters on the raw stylus pose (metres / Rotation), or None when off
+        self.position_kalman = self.orientation_kalman = None
+        if param("kalman"):
+            self.position_kalman = ConstantVelocityKalman(
+                param("kalman_accel_noise"), param("kalman_position_noise"))
+            self.orientation_kalman = ConstantVelocityKalman(
+                param("kalman_angular_accel_noise"), param("kalman_rotation_noise"), rotation=True)
+        self.loop_delay = param("loop_delay")
+        # Low-pass on the outgoing twist (linear + angular), or None when off
+        command_filter, publish_rate = param("command_filter"), param("publish_rate")
+        if command_filter >= publish_rate / 2.0:
+            raise ValueError(f"command_filter ({command_filter} Hz) must be below half "
+                             f"publish_rate ({publish_rate} Hz)")
+        self.command_filter = LowPass(command_filter, publish_rate, 6) if command_filter > 0.0 else None
+        self.max_linear = param("max_linear_speed")
+        self.max_angular = param("max_angular_speed")
+        self.base_deadband = param("deadband")
+        self.touch_timeout = param("touch_timeout")
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.pose_source = param("pose_source")
+        if self.pose_source not in ("tf", "joint_states"):
+            raise ValueError(f"pose_source must be 'tf' or 'joint_states', not {self.pose_source!r}")
+        self.urdf_chain = None
+        self.joint_positions = None     # {name: angle} from the newest /joint_states
+        if self.pose_source == "joint_states":
+            latched_description = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.create_subscription(String, "/robot_description", self.on_robot_description, latched_description)
+        # Joint speeds too, for the tool switch's standstill check
+        self.joint_states_time = None   # node clock (s) of the newest /joint_states
+        self.last_motion_time = None    # newest /joint_states with a joint over the switch speed
+        self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
+        # Needs the joint angles, so only with pose_source "joint_states"
+        self.singularity_guard = None
+        if param("singularity_guard"):
+            if self.pose_source == "joint_states":
+                self.singularity_guard = SingularityGuard(
+                    self.jacobian_at, param("singularity_slow"), param("singularity_stop"), param("singularity_damping"),
+                    param("singularity_escape_gain"), param("singularity_escape_speed"))
+            else:
+                self.get_logger().warn("singularity_guard needs pose_source 'joint_states' - "
+                                       "only MoveIt Servo's own singularity check is active")
+        self.singularity_state = 0      # 0 clear, 1 limiting, 2 backing out (for the log messages)
+
+        # The RCM tool (rcm_tool, rcm_max_depth) is set by select_tool once the publishers exist
+        self.rcm_depth_margin = param("rcm_depth_margin")
+        self.tool_library = param("tool_library")
+        self.tool_switch_speed = param("tool_switch_max_joint_speed")
+        self.tool_switch_still_time = param("tool_switch_still_time")
+        self.tool_number = None
+        self.rcm_pivot_fade_depth = param("rcm_pivot_fade_depth")
+        self.rcm_pivot_fade_strength = param("rcm_pivot_fade_strength")
+        if not self.rcm_pivot_fade_strength >= 1.0:
+            raise ValueError(f"rcm_pivot_fade_strength must be >= 1, not {self.rcm_pivot_fade_strength}")
+        self.rcm_tool0_gain = param("rcm_tool0_gain")
+        self.rcm_tool0_gain_depth = param("rcm_tool0_gain_depth")
+        self.rcm_min_depth = -param("rcm_retract_depth")
+        if self.rcm_min_depth > 0.0:
+            raise ValueError(f"rcm_retract_depth must be >= 0, not {-self.rcm_min_depth}")
+        self.rcm_exit_depth = param("rcm_exit_depth")
+        self.rcm_gain = param("rcm_gain")
+        self.rcm_max_error = param("rcm_max_error")
+
+        # Haptic cues; all forces in the stylus position axes (N)
+        self.force_pub = None
+        if param("haptics"):
+            if param("haptic_pulse_frequency") >= publish_rate / 2.0:
+                raise ValueError(f"haptic_pulse_frequency ({param('haptic_pulse_frequency')} Hz) must be "
+                                 f"below half publish_rate ({publish_rate} Hz)")
+            self.force_pub = self.create_publisher(OmniFeedback, param("force_topic"), 10)
+        self.haptic_max_force = param("haptic_max_force")
+        self.publish_period = 1.0 / publish_rate
+        self.haptic_max_step = param("haptic_slew_rate") * self.publish_period
+        self.wall_stiffness = param("haptic_wall_stiffness")
+        self.scene_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.scene_address = ("127.0.0.1", param("haptic_scene_port"))
+        self.scene_active = False
+        self.crossing_force = param("haptic_crossing_force")
+        self.crossing_hysteresis = param("haptic_crossing_hysteresis")
+        self.crossing_side = None                   # +1 / -1: tip target past / short of the RCM point
+        self.crossing_holdoff = param("haptic_crossing_holdoff")
+        self.last_crossing_click = -1e9
+        self.limit_force = param("haptic_limit_force")
+        self.limit_side = None                      # +1 past deepest / -1 past retract / 0 between
+        self.last_limit_click = -1e9
+        self.pulses = PulsePlayer(param("haptic_pulse_force"), param("haptic_pulse_frequency"))
+        self.singularity_push = param("haptic_singularity_force")
+        self.singularity_push_damping = param("haptic_singularity_damping")
+        self.singularity_push_filter = param("haptic_singularity_filter")
+        self.haptic_force = np.zeros(3)             # last force sent
+        self.singularity_force = np.zeros(3)        # low-passed singularity push
+        self.singularity_cue = None                 # (limiting, twist_gradient) this cycle
+        self.touch_velocity = np.zeros(3)           # m/s, stylus frame (driver's estimate)
+
+        self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
+        self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.scale_pub = self.create_publisher(Float64, "~/motion_scale", latched)
+        self.condition_pub = self.create_publisher(Float64, "~/condition_number", 10)
+        self.rcm_active_pub = self.create_publisher(Bool, "~/rcm_active", latched)
+        self.mode_pub = self.create_publisher(String, param("mode_topic"), latched)
+        self.rcm_point_pub = self.create_publisher(PointStamped, "~/rcm_point", latched)
+        self.rcm_error_pub = self.create_publisher(Float64, "~/rcm_error", 10)
+        self.insertion_depth_pub = self.create_publisher(Float64, "~/insertion_depth", 10)
+        self.tool_tip_pub = self.create_publisher(PoseStamped, "~/tool_tip", 10)
+        self.active_tool_pub = self.create_publisher(String, "~/active_tool", latched)
+        self.select_tool(param("tool"))
+        self.add_on_set_parameters_callback(self.on_set_parameters)
+        self.recorder = RecorderClient(self)
+
+        self.touch_position = None      # metres, stylus frame
+        self.touch_orientation = None   # scipy Rotation, as published
+        self.touch_stamp = None
+        self.white_pressed = False
+        self.grey_pressed = False
+        # Double-click detection on WHITE (node clock, s)
+        self.white_press_time = None    # current press; None once it was used by a double click
+        self.white_click_time = None    # start of the last short press-and-release
+        # GREY: a click records, a long hold without WHITE switches module
+        self.grey_press_time = None     # current press; None once WHITE spoiled it or it switched
+        self.mode = "macro"             # which module the stylus drives: "macro" or "micro"
+
+        self.scale_index = 0
+        self.set_scale(0)
+
+        # Captured when the white button goes down
+        self.clutched = False
+        self.touch_origin = None
+        self.robot_origin = None
+        self.axis_matrix = None         # robot_vector = axis_matrix @ touch_vector
+        self.axis_rotation = None
+        self.pen_twist = 0.0            # rad since engage, unwrapped so it can pass +-180 deg
+        self.target = None              # (position, Rotation or None): tool0 pose to pull towards
+        # Feedforward: target as seen by the previous update, and its filtered velocity
+        self.previous_target = None
+        self.previous_update = None
+        self.target_history = deque()   # (time, target) for the loop-delay comparison
+        self.target_linear_velocity = np.zeros(3)
+        self.target_angular_velocity = np.zeros(3)
+        self.target_depth_velocity = 0.0
+
+        # RCM mode: the latched point (base frame) or None when off; tip and shaft axis
+        # captured when WHITE goes down
+        self.rcm_point = None
+        self.rcm_fault = False          # shaft beyond rcm_max_error: holding still
+        self.tip_origin = None
+        self.shaft_axis_origin = None
+        self.rcm_active_pub.publish(Bool(data=False))
+        self.mode_pub.publish(String(data=self.mode))
+        self.send_zero_force()      # clear a force left on by a node that died
+
+        self.create_subscription(OmniState, param("state_topic"), self.on_state, 1)
+        self.create_subscription(OmniButtonEvent, param("button_topic"), self.on_button, 10)
+        # Stands in for the driver's INFO messages, which the launch file hides
+        self.program_running = None
+        self.create_subscription(Bool, PROGRAM_RUNNING_TOPIC, self.on_program_running, latched)
+
+        if param("setup_servo"):
+            activate_controller(self, servo_controller(self))
+            self.velocity_watchdog = VelocityWatchdog(self)
+            if not start_servo_twist_mode(self):
+                self.get_logger().error(
+                    "Could not configure MoveIt Servo - is ur16e_teleop.launch.py running?")
+            set_servo_speed_limits(self, self.max_linear, self.max_angular)
+            # With the guard on, Servo's own check would only halt the arm where the guard
+            # is trying to back it out; without it, Servo's check is all there is
+            if self.singularity_guard is not None:
+                set_servo_singularity_thresholds(
+                    self, cfg.SERVO_SINGULARITY_SLOWDOWN_GUARDED, cfg.SERVO_SINGULARITY_STOP_GUARDED)
+            else:
+                set_servo_singularity_thresholds(self, cfg.SERVO_SINGULARITY_SLOWDOWN, cfg.SERVO_SINGULARITY_STOP)
+
+        self.create_timer(1.0 / param("publish_rate"), self.update)
+        self.get_logger().info(
+            "Touch teleop ready: hold WHITE to move, double-click WHITE to change scale, "
+            "click GREY to start/stop recording, hold WHITE + click GREY for RCM mode, "
+            f"hold GREY {self.mode_switch_hold_time:.1f} s to switch macro/micro "
+            f"(tilt {'on' if self.enable_rotation else 'off'}, twist {'on' if self.enable_twist else 'off'}, "
+            f"max {self.max_linear:.2f} m/s)")
+
+    def declare_parameters_with_defaults(self):
         self.declare_parameter("state_topic", "/phantom/state")
         self.declare_parameter("button_topic", "/phantom/button")
         self.declare_parameter("base_frame", "base_link")
@@ -369,214 +583,6 @@ class TouchTeleop(Node):
         self.declare_parameter("haptic_singularity_filter", cfg.TOUCH_HAPTIC_SINGULARITY_FILTER)
         self.declare_parameter("setup_servo", True)
 
-        p = lambda name: self.get_parameter(name).value
-        self.base_frame = p("base_frame")
-        self.ee_frame = p("ee_frame")
-        self.mapping = p("mapping")
-        if self.mapping not in ("toward_base", "fixed"):
-            raise ValueError(f"mapping must be 'toward_base' or 'fixed', not {self.mapping!r}")
-        self.fixed_axis_matrix = axis_map_to_matrix(p("axis_map"))
-        self.units = p("touch_units_to_m")
-        self.base_translation_scale = p("translation_scale")
-        self.scale_steps = [float(v) for v in p("scale_steps")]
-        if not self.scale_steps or min(self.scale_steps) <= 0.0:
-            raise ValueError(f"scale_steps must be positive, not {self.scale_steps}")
-        self.double_click_time = p("double_click_time")
-        self.mode_switch_hold_time = p("mode_switch_hold_time")
-        self.scale_rotation_exponent = p("scale_rotation_exponent")
-        self.enable_rotation = p("enable_rotation")
-        self.base_rotation_scale = p("rotation_scale")
-        self.enable_twist = p("enable_twist")
-        self.base_twist_scale = p("twist_scale")
-        self.position_gain = p("position_gain")
-        self.rotation_gain = p("rotation_gain")
-        # Caps on the gain terms alone (0 = none), so catching up after the robot fell
-        # behind (a speed cap or the joint limiter held it back) is gradual, not a surge
-        self.max_correction = p("max_correction_speed") or np.inf
-        self.max_angular_correction = p("max_correction_angular_speed") or np.inf
-        self.feedforward = p("feedforward")
-        self.feedforward_filter = p("feedforward_filter")
-        # Kalman filters on the raw stylus pose (metres / Rotation), or None when off
-        self.position_kalman = self.orientation_kalman = None
-        if p("kalman"):
-            self.position_kalman = ConstantVelocityKalman(
-                p("kalman_accel_noise"), p("kalman_position_noise"))
-            self.orientation_kalman = ConstantVelocityKalman(
-                p("kalman_angular_accel_noise"), p("kalman_rotation_noise"), rotation=True)
-        self.loop_delay = p("loop_delay")
-        # Low-pass on the outgoing twist (linear + angular), or None when off
-        command_filter, publish_rate = p("command_filter"), p("publish_rate")
-        if command_filter >= publish_rate / 2.0:
-            raise ValueError(f"command_filter ({command_filter} Hz) must be below half "
-                             f"publish_rate ({publish_rate} Hz)")
-        self.command_filter = LowPass(command_filter, publish_rate, 6) if command_filter > 0.0 else None
-        self.max_linear = p("max_linear_speed")
-        self.max_angular = p("max_angular_speed")
-        self.base_deadband = p("deadband")
-        self.touch_timeout = p("touch_timeout")
-
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.pose_source = p("pose_source")
-        if self.pose_source not in ("tf", "joint_states"):
-            raise ValueError(f"pose_source must be 'tf' or 'joint_states', not {self.pose_source!r}")
-        self.urdf_chain = None
-        self.joint_positions = None     # {name: angle} from the newest /joint_states
-        if self.pose_source == "joint_states":
-            latched_description = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-            self.create_subscription(String, "/robot_description", self.on_robot_description, latched_description)
-        # Joint speeds too, for the tool switch's standstill check
-        self.joint_states_time = None   # node clock (s) of the newest /joint_states
-        self.last_motion_time = None    # newest /joint_states with a joint over the switch speed
-        self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
-        # Needs the joint angles, so only with pose_source "joint_states"
-        self.singularity_guard = None
-        if p("singularity_guard"):
-            if self.pose_source == "joint_states":
-                self.singularity_guard = SingularityGuard(
-                    self.jacobian_at, p("singularity_slow"), p("singularity_stop"), p("singularity_damping"),
-                    p("singularity_escape_gain"), p("singularity_escape_speed"))
-            else:
-                self.get_logger().warn("singularity_guard needs pose_source 'joint_states' - "
-                                       "only MoveIt Servo's own singularity check is active")
-        self.singularity_state = 0      # 0 clear, 1 limiting, 2 backing out (for the log messages)
-
-        # The RCM tool (rcm_tool, rcm_max_depth) is set by select_tool once the publishers exist
-        self.rcm_depth_margin = p("rcm_depth_margin")
-        self.tool_library = p("tool_library")
-        self.tool_switch_speed = p("tool_switch_max_joint_speed")
-        self.tool_switch_still_time = p("tool_switch_still_time")
-        self.tool_number = None
-        self.rcm_pivot_fade_depth = p("rcm_pivot_fade_depth")
-        self.rcm_pivot_fade_strength = p("rcm_pivot_fade_strength")
-        if not self.rcm_pivot_fade_strength >= 1.0:
-            raise ValueError(f"rcm_pivot_fade_strength must be >= 1, not {self.rcm_pivot_fade_strength}")
-        self.rcm_tool0_gain = p("rcm_tool0_gain")
-        self.rcm_tool0_gain_depth = p("rcm_tool0_gain_depth")
-        self.rcm_min_depth = -p("rcm_retract_depth")
-        if self.rcm_min_depth > 0.0:
-            raise ValueError(f"rcm_retract_depth must be >= 0, not {-self.rcm_min_depth}")
-        self.rcm_exit_depth = p("rcm_exit_depth")
-        self.rcm_gain = p("rcm_gain")
-        self.rcm_max_error = p("rcm_max_error")
-
-        # Haptic cues; all forces in the stylus position axes (N)
-        self.force_pub = None
-        if p("haptics"):
-            if p("haptic_pulse_frequency") >= publish_rate / 2.0:
-                raise ValueError(f"haptic_pulse_frequency ({p('haptic_pulse_frequency')} Hz) must be "
-                                 f"below half publish_rate ({publish_rate} Hz)")
-            self.force_pub = self.create_publisher(OmniFeedback, p("force_topic"), 10)
-        self.haptic_max_force = p("haptic_max_force")
-        self.publish_period = 1.0 / publish_rate
-        self.haptic_max_step = p("haptic_slew_rate") * self.publish_period
-        self.wall_stiffness = p("haptic_wall_stiffness")
-        self.scene_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.scene_address = ("127.0.0.1", p("haptic_scene_port"))
-        self.scene_active = False
-        self.crossing_force = p("haptic_crossing_force")
-        self.crossing_hysteresis = p("haptic_crossing_hysteresis")
-        self.crossing_side = None                   # +1 / -1: tip target past / short of the RCM point
-        self.crossing_holdoff = p("haptic_crossing_holdoff")
-        self.last_crossing_click = -1e9
-        self.limit_force = p("haptic_limit_force")
-        self.limit_side = None                      # +1 past deepest / -1 past retract / 0 between
-        self.last_limit_click = -1e9
-        self.pulses = PulsePlayer(p("haptic_pulse_force"), p("haptic_pulse_frequency"))
-        self.singularity_push = p("haptic_singularity_force")
-        self.singularity_push_damping = p("haptic_singularity_damping")
-        self.singularity_push_filter = p("haptic_singularity_filter")
-        self.haptic_force = np.zeros(3)             # last force sent
-        self.singularity_force = np.zeros(3)        # low-passed singularity push
-        self.singularity_cue = None                 # (limiting, twist_gradient) this cycle
-        self.touch_velocity = np.zeros(3)           # m/s, stylus frame (driver's estimate)
-
-        self.twist_pub = self.create_publisher(TwistStamped, SERVO_TWIST_TOPIC, 10)
-        self.target_pub = self.create_publisher(PoseStamped, "~/target_pose", 100)
-        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.scale_pub = self.create_publisher(Float64, "~/motion_scale", latched)
-        self.condition_pub = self.create_publisher(Float64, "~/condition_number", 10)
-        self.rcm_active_pub = self.create_publisher(Bool, "~/rcm_active", latched)
-        self.mode_pub = self.create_publisher(String, p("mode_topic"), latched)
-        self.rcm_point_pub = self.create_publisher(PointStamped, "~/rcm_point", latched)
-        self.rcm_error_pub = self.create_publisher(Float64, "~/rcm_error", 10)
-        self.insertion_depth_pub = self.create_publisher(Float64, "~/insertion_depth", 10)
-        self.tool_tip_pub = self.create_publisher(PoseStamped, "~/tool_tip", 10)
-        self.active_tool_pub = self.create_publisher(String, "~/active_tool", latched)
-        self.select_tool(p("tool"))
-        self.add_on_set_parameters_callback(self.on_set_parameters)
-        self.recorder = RecorderClient(self)
-
-        self.touch_position = None      # metres, stylus frame
-        self.touch_orientation = None   # scipy Rotation, as published
-        self.touch_stamp = None
-        self.white_pressed = False
-        self.grey_pressed = False
-        # Double-click detection on WHITE (node clock, s)
-        self.white_press_time = None    # current press; None once it was used by a double click
-        self.white_click_time = None    # start of the last short press-and-release
-        # GREY: a click records, a long hold without WHITE switches module
-        self.grey_press_time = None     # current press; None once WHITE spoiled it or it switched
-        self.mode = "macro"             # which module the stylus drives: "macro" or "micro"
-
-        self.scale_index = 0
-        self.set_scale(0)
-
-        # Captured when the white button goes down
-        self.clutched = False
-        self.touch_origin = None
-        self.robot_origin = None
-        self.axis_matrix = None         # robot_vector = axis_matrix @ touch_vector
-        self.axis_rotation = None
-        self.pen_twist = 0.0            # rad since engage, unwrapped so it can pass +-180 deg
-        self.target = None              # (position, Rotation or None): tool0 pose to pull towards
-        # Feedforward: target as seen by the previous update, and its filtered velocity
-        self.previous_target = None
-        self.previous_update = None
-        self.target_history = deque()   # (time, target) for the loop-delay comparison
-        self.target_linear_velocity = np.zeros(3)
-        self.target_angular_velocity = np.zeros(3)
-        self.target_depth_velocity = 0.0
-
-        # RCM mode: the latched point (base frame) or None when off; tip and shaft axis
-        # captured when WHITE goes down
-        self.rcm_point = None
-        self.rcm_fault = False          # shaft beyond rcm_max_error: holding still
-        self.tip_origin = None
-        self.shaft_axis_origin = None
-        self.rcm_active_pub.publish(Bool(data=False))
-        self.mode_pub.publish(String(data=self.mode))
-        self.send_zero_force()      # clear a force left on by a node that died
-
-        self.create_subscription(OmniState, p("state_topic"), self.on_state, 1)
-        self.create_subscription(OmniButtonEvent, p("button_topic"), self.on_button, 10)
-        # Stands in for the driver's INFO messages, which the launch file hides
-        self.program_running = None
-        self.create_subscription(Bool, PROGRAM_RUNNING_TOPIC, self.on_program_running, latched)
-
-        if p("setup_servo"):
-            activate_controller(self, servo_controller(self))
-            self.velocity_watchdog = VelocityWatchdog(self)
-            if not start_servo_twist_mode(self):
-                self.get_logger().error(
-                    "Could not configure MoveIt Servo - is ur16e_teleop.launch.py running?")
-            set_servo_speed_limits(self, self.max_linear, self.max_angular)
-            # With the guard on, Servo's own check would only halt the arm where the guard
-            # is trying to back it out; without it, Servo's check is all there is
-            if self.singularity_guard is not None:
-                set_servo_singularity_thresholds(
-                    self, cfg.SERVO_SINGULARITY_SLOWDOWN_GUARDED, cfg.SERVO_SINGULARITY_STOP_GUARDED)
-            else:
-                set_servo_singularity_thresholds(self, cfg.SERVO_SINGULARITY_SLOWDOWN, cfg.SERVO_SINGULARITY_STOP)
-
-        self.create_timer(1.0 / p("publish_rate"), self.update)
-        self.get_logger().info(
-            "Touch teleop ready: hold WHITE to move, double-click WHITE to change scale, "
-            "click GREY to start/stop recording, hold WHITE + click GREY for RCM mode, "
-            f"hold GREY {self.mode_switch_hold_time:.1f} s to switch macro/micro "
-            f"(tilt {'on' if self.enable_rotation else 'off'}, twist {'on' if self.enable_twist else 'off'}, "
-            f"max {self.max_linear:.2f} m/s)")
-
     def on_program_running(self, msg):
         if msg.data == self.program_running:
             return
@@ -619,7 +625,7 @@ class TouchTeleop(Node):
 
     def on_button(self, msg):
         white, grey = bool(msg.white_button), bool(msg.grey_button)
-        now = self.get_clock().now().nanoseconds * 1e-9
+        now = self.now()
         if grey and not self.grey_pressed:
             # With WHITE held GREY is the RCM chord, so a chord never records or switches
             self.grey_press_time = None if white else now
@@ -913,7 +919,6 @@ class TouchTeleop(Node):
         if self.rcm_point is not None and self.rcm_fault:
             self.publish_twist(np.zeros(3), np.zeros(3))
             return
-        robot_position, robot_orientation = robot
         self.update_target_velocity()
         # The robot pose reflects commands from loop_delay ago, so correct towards
         # where the target was then; the feedforward term carries the motion since
@@ -923,17 +928,7 @@ class TouchTeleop(Node):
             # [insertion speed, 0, 0] + angular velocity here; the filter below works on these
             linear, angular = self.rcm_pivot_twist(robot, (target_position, target_orientation))
         else:
-            error = target_position - robot_position
-            linear = self.feedforward * self.target_linear_velocity
-            if np.linalg.norm(error) >= self.deadband:
-                linear = linear + clamp_norm(self.position_gain * error, self.max_correction)
-            linear = clamp_norm(linear, self.max_linear)
-
-            angular = np.zeros(3)
-            if target_orientation is not None:
-                rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
-                correction = clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction)
-                angular = clamp_norm(self.feedforward * self.target_angular_velocity + correction, self.max_angular)
+            linear, angular = self.free_twist(robot, (target_position, target_orientation))
 
         if self.command_filter is not None:
             # Release still sends an unfiltered zero, so the robot stops at once.
@@ -952,6 +947,23 @@ class TouchTeleop(Node):
             linear, angular = self.guard_singularity(linear, angular)
 
         self.publish_twist(linear, angular)
+
+    def free_twist(self, robot, target):
+        """(linear, angular) outside RCM mode: feedforward plus the capped pull towards the target."""
+        robot_position, robot_orientation = robot
+        target_position, target_orientation = target
+        error = target_position - robot_position
+        linear = self.feedforward * self.target_linear_velocity
+        if np.linalg.norm(error) >= self.deadband:
+            linear = linear + clamp_norm(self.position_gain * error, self.max_correction)
+        linear = clamp_norm(linear, self.max_linear)
+
+        angular = np.zeros(3)
+        if target_orientation is not None:
+            rotation_error = (target_orientation * robot_orientation.inv()).as_rotvec()
+            correction = clamp_norm(self.rotation_gain * rotation_error, self.max_angular_correction)
+            angular = clamp_norm(self.feedforward * self.target_angular_velocity + correction, self.max_angular)
+        return linear, angular
 
     def rcm_pivot_twist(self, robot, target):
         """(insertion speed, angular velocity) as a 6-vector for the command filter: turn
@@ -988,14 +1000,8 @@ class TouchTeleop(Node):
         error = self.rcm_tool.line_error(*robot, self.rcm_point)
         self.rcm_error_pub.publish(Float64(data=error))
         self.insertion_depth_pub.publish(Float64(data=self.rcm_tool.depth(*robot, self.rcm_point)))
-        msg = PoseStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = self.base_frame
-        msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = \
-            (float(v) for v in self.rcm_tool.shaft(*robot)[2])
-        msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w = \
-            (float(v) for v in (robot[1] * self.rcm_tool.tip_rotation).as_quat())
-        self.tool_tip_pub.publish(msg)
+        tip, tip_orientation = self.rcm_tool.shaft(*robot)[2], robot[1] * self.rcm_tool.tip_rotation
+        self.tool_tip_pub.publish(self.pose_message(self.get_clock().now().to_msg(), tip, tip_orientation))
         if error > self.rcm_max_error and not self.rcm_fault:
             self.rcm_fault = True
             self.get_logger().error(
@@ -1025,6 +1031,12 @@ class TouchTeleop(Node):
             factor = float(np.clip(command @ twist / size, 0.0, 1.0)) if size > 0.0 else 0.0
             twist = factor * command
 
+        self.report_singularity_state(guard, positions)
+        # Servo's own speed caps still apply, so keep within them
+        return clamp_norm(twist[:3], self.max_linear), clamp_norm(twist[3:], self.max_angular)
+
+    def report_singularity_state(self, guard, positions):
+        """Log when the arm gets nearer to or clear of a singularity."""
         # 2 = backing out, 1 = limiting, 0 = clear; with 10% hysteresis, as the guard
         # holds the arm right at `stop`, where it would flip every cycle
         condition, previous = guard.condition, self.singularity_state
@@ -1048,8 +1060,6 @@ class TouchTeleop(Node):
         elif state == 0 and previous > 0:
             self.get_logger().info("Clear of the singularity")
         self.singularity_state = state
-        # Servo's own speed caps still apply, so keep within them
-        return clamp_norm(twist[:3], self.max_linear), clamp_norm(twist[3:], self.max_angular)
 
     def update_haptics(self):
         """Add up this cycle's haptic cues and send them (capped and slew-limited)."""
@@ -1072,9 +1082,16 @@ class TouchTeleop(Node):
         return self.rcm_tool.pivot_slope(axial, self.rcm_tool0_gain, self.rcm_tool0_gain_depth,
                                          self.rcm_pivot_fade_depth, self.rcm_pivot_fade_strength)
 
-    # touch_server's TouchScenePacket (include/macro_micro_robot/touch_packets.hpp)
-    SCENE_FORMAT = "<II3d3d7d"
-    SCENE_MAGIC = 0x54534331
+    def stylus_insertion(self):
+        """(stylus direction going deeper, the tip's axial depth at engage)."""
+        axis = self.axis_matrix.T @ self.shaft_axis_origin
+        return axis, float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
+
+    def stylus_target_depth(self):
+        """(stylus direction going deeper, target depth in stylus metres): the target's
+        depth is the engage depth + scale * the stylus travel along that direction."""
+        axis, axial0 = self.stylus_insertion()
+        return axis, axial0 / self.translation_scale + float((self.touch_position - self.touch_origin[0]) @ axis)
 
     def send_scene(self, active):
         """RCM mode: walls at the deepest insertion and at the retract limit, along the
@@ -1091,8 +1108,7 @@ class TouchTeleop(Node):
             return
         mm = 1.0 / self.units                                       # stylus metres -> mm
         scale = self.translation_scale
-        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
-        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
+        axis, axial0 = self.stylus_insertion()
         # The target's depth is axial0 + scale * u for u stylus metres along axis
         self.send_scene_packet(
             axis=axis, origin=self.touch_origin[0] * mm,
@@ -1108,10 +1124,7 @@ class TouchTeleop(Node):
         if not active:
             self.crossing_side = None
             return
-        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
-        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
-        # Target depth in stylus metres (the target's depth is axial0 + scale * this travel)
-        depth = axial0 / self.translation_scale + float((self.touch_position - self.touch_origin[0]) @ axis)
+        axis, depth = self.stylus_target_depth()
         side = 1 if depth > self.crossing_hysteresis else -1 if depth < -self.crossing_hysteresis else None
         if side is None:
             return
@@ -1129,16 +1142,13 @@ class TouchTeleop(Node):
         if not active or self.limit_force <= 0.0:
             self.limit_side = None
             return
-        axis = self.axis_matrix.T @ self.shaft_axis_origin          # stylus direction going deeper
-        axial0 = float((self.tip_origin - self.rcm_point) @ self.shaft_axis_origin)
-        # Target depth past each limit, in stylus metres (as check_crossing)
-        depth = axial0 / self.translation_scale + float((self.touch_position - self.touch_origin[0]) @ axis)
+        axis, depth = self.stylus_target_depth()
         deep = depth - self.rcm_max_depth / self.translation_scale
         shallow = self.rcm_min_depth / self.translation_scale - depth
-        h = self.crossing_hysteresis
+        hysteresis = self.crossing_hysteresis
         if deep > 0.0 or shallow > 0.0:
             side = 1 if deep > 0.0 else -1
-        elif deep < -h and shallow < -h:
+        elif deep < -hysteresis and shallow < -hysteresis:
             side = 0
         else:
             return                                                  # within the hysteresis band
@@ -1165,9 +1175,6 @@ class TouchTeleop(Node):
         relieve = self.stylus_twist_jacobian().T @ twist_gradient
         return singularity_force(relieve, limiting, self.touch_velocity,
                                  self.singularity_push, self.singularity_push_damping)
-
-    # Stylus step (m) for the numerical RCM-mode stylus Jacobian
-    STYLUS_STEP = 1e-4
 
     def stylus_twist_jacobian(self):
         """6 x 3: tool0 target twist (linear, angular; base frame) per metre of stylus
@@ -1206,7 +1213,7 @@ class TouchTeleop(Node):
 
     def delayed_target(self):
         """The stylus target as it was loop_delay ago (the oldest one kept, early in a stroke)."""
-        now = self.get_clock().now().nanoseconds * 1e-9
+        now = self.now()
         self.target_history.append((now, self.target))
         while len(self.target_history) > 1 and self.target_history[1][0] <= now - self.loop_delay:
             self.target_history.popleft()
@@ -1236,14 +1243,16 @@ class TouchTeleop(Node):
         position, orientation = self.target
         if orientation is None:
             orientation = self.robot_origin[1]
+        self.target_pub.publish(self.pose_message(stamp, position, orientation))
+
+    def pose_message(self, stamp, position, orientation):
         msg = PoseStamped()
         msg.header.stamp = stamp
         msg.header.frame_id = self.base_frame
         msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = (float(v) for v in position)
-        q = orientation.as_quat()
         msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w = \
-            (float(v) for v in q)
-        self.target_pub.publish(msg)
+            (float(v) for v in orientation.as_quat())
+        return msg
 
     def publish_twist(self, linear, angular):
         msg = TwistStamped()
