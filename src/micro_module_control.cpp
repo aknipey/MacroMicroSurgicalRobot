@@ -681,8 +681,8 @@ int main(int argc, char **argv)
         distal.GetPanCentralSeparation(),
         distal.GetTiltCentralSeparation(),
         distal.GetJointSeparationDistance(),
-        proximal.GetIsolatedPanLengthDelta(),
-        proximal.GetIsolatedTiltLengthDelta()
+        distal.GetIsolatedPanLengthDelta(),
+        distal.GetIsolatedTiltLengthDelta()
     );
 
     // Fixed transformation quaternion between touch and manipulator frames
