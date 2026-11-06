@@ -28,7 +28,7 @@ TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
 # 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to 1.0 for Session B.
-TOUCH_SCALE_ROTATION_EXPONENT = 0.5
+TOUCH_SCALE_ROTATION_EXPONENT = 1.0
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
@@ -291,7 +291,7 @@ SERVO_LOOKAHEAD = 0.05
 # V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
 # only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
 # V9/TrajectoryMode = this. Final choice after the comparison.
-SERVO_OUTPUT = "velocity"
+SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
