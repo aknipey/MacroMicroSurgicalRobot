@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(macro_micro_robot)
 
-# Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +10,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Find ament and dependency packages
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -31,10 +29,6 @@ find_package(Eigen3 REQUIRED)
 find_package(ur_client_library REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)
 
-###########
-## Build ##
-###########
-
 include_directories(include)
 
 ## Helper libraries (pure C++ / Eigen / tf2, no ROS API)
@@ -50,9 +44,7 @@ target_link_libraries(ur16e_control pose)
 ament_target_dependencies(ur16e_control
   rclcpp
   rclcpp_action
-  std_msgs
   geometry_msgs
-  sensor_msgs
   controller_manager_msgs
   omni_msgs
   cartesian_control_msgs
@@ -71,7 +63,6 @@ ament_target_dependencies(micro_module_control
   omni_msgs
   motor_angles_msg
   tf2
-  tf2_ros
   tf2_geometry_msgs
 )
 
@@ -79,13 +70,10 @@ ament_target_dependencies(micro_module_control
 add_executable(android_pose_subscriber src/android_pose_subscriber.cpp)
 ament_target_dependencies(android_pose_subscriber
   rclcpp
-  std_msgs
   geometry_msgs
-  sensor_msgs
   visualization_msgs
   omni_msgs
   tf2
-  tf2_ros
   tf2_geometry_msgs
 )
 
@@ -100,11 +88,6 @@ target_include_directories(ur_calibration_extract PRIVATE vendor/ur_calibration/
 target_link_libraries(ur_calibration_extract ur_client_library::urcl yaml-cpp Eigen3::Eigen)
 ament_target_dependencies(ur_calibration_extract rclcpp)
 
-#############
-## Install ##
-#############
-
-## C++ executables
 ## Touch driver, split in two: OpenHaptics renders no force in a process that has ROS 2's
 ## libraries (lttng-ust / libnuma) loaded, so touch_server (device, OpenHaptics only -
 ## never link ROS into it) and touch_bridge (ROS only) talk over UDP on localhost

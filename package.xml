@@ -3,13 +3,10 @@
 <package format="3">
   <name>macro_micro_robot</name>
   <version>0.1.0</version>
-  <description>Provides all required hardware interfacing for my thesis project.</description>
+  <description>Teleoperation of a UR16e arm and a continuum micro-manipulator with a Touch haptic stylus.</description>
 
-  <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <maintainer email="z5207471@student.unsw.edu.au">z5207471@student.unsw.edu.au</maintainer>
 
-  <!-- One license tag required, multiple allowed, one license per tag -->
-  <!--   Commonly used license strings: BSD, MIT, Apache-2.0, GPL-3.0-only, ... -->
   <license>TODO</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
