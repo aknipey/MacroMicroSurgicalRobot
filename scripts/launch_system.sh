@@ -276,6 +276,31 @@ check_serial_port() {
   sudo chmod 666 "$port"
 }
 
+start_touch_driver() {
+  run_bg touch_driver ros2 launch macro_micro_robot touch_driver.launch.py
+  wait_for_topic /phantom/state 15
+}
+
+start_serial_bridge() {
+  check_serial_port "$ARDUINO_PORT"
+  run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
+    --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
+  wait_for_topic /micro_module_motor_states 15
+}
+
+start_ur_driver() {
+  run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
+    ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
+    launch_rviz:=false
+  wait_for_service /controller_manager/list_controllers 60
+}
+
+start_rviz_if_requested() {
+  if [ "$WITH_RVIZ" = "true" ]; then
+    run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
+  fi
+}
+
 cleanup() {
   if [ "${#PIDS[@]}" -eq 0 ]; then
     return
@@ -287,7 +312,6 @@ cleanup() {
   rm -f "$PID_FILE"
   echo ">> Stopped."
 }
-
 
 check_no_running_driver() {
   # A second ros2_control_node on the same ROS domain publishes its own (stale)
@@ -351,30 +375,19 @@ case "$MODE" in
     ;;
 
   touch)
-    run_bg touch_driver ros2 launch macro_micro_robot touch_driver.launch.py
-    wait_for_topic /phantom/state 15
+    start_touch_driver
 
-    check_serial_port "$ARDUINO_PORT"
-    run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
-      --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
-    wait_for_topic /micro_module_motor_states 15
+    start_serial_bridge
 
     run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
 
-    if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
-    fi
+    start_rviz_if_requested
     ;;
 
   keyboard)
-    check_serial_port "$ARDUINO_PORT"
-    run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
-      --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
-    wait_for_topic /micro_module_motor_states 15
+    start_serial_bridge
 
-    if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
-    fi
+    start_rviz_if_requested
 
     echo ">> [keyboard_control] running in foreground - this terminal now reads your keypresses."
     echo "   q/a proximal pan, w/s proximal tilt, e/d distal pan, r/f distal tilt. Ctrl+C to quit."
@@ -386,16 +399,11 @@ case "$MODE" in
     ;;
 
   ur16e)
-    run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
-      ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
-      launch_rviz:=false
-    wait_for_service /controller_manager/list_controllers 60
+    start_ur_driver
 
     run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
 
-    if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
-    fi
+    start_rviz_if_requested
     ;;
 
   ur16e-keyboard|ur16e-touch)
@@ -410,10 +418,7 @@ case "$MODE" in
     wait_for_service /servo_node/switch_command_type 90
 
     if [ "$WITH_MICRO" = "true" ] && [ "$MODE" = "ur16e-touch" ]; then
-      check_serial_port "$ARDUINO_PORT"
-      run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
-        --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
-      wait_for_topic /micro_module_motor_states 15
+      start_serial_bridge
       run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
       echo ">> Stylus starts on the arm (MACRO). Hold GREY 1 s without WHITE to switch to MICRO and back."
     fi
@@ -434,18 +439,11 @@ case "$MODE" in
     ;;
 
   full)
-    run_bg touch_driver ros2 launch macro_micro_robot touch_driver.launch.py
-    wait_for_topic /phantom/state 15
+    start_touch_driver
 
-    check_serial_port "$ARDUINO_PORT"
-    run_bg serial_bridge python3 "${WS_DIR}/src/Serial_Control/ros2_bridge/serial_bridge.py" \
-      --ros-args -p port:="$ARDUINO_PORT" -p baud:="$BAUD"
-    wait_for_topic /micro_module_motor_states 15
+    start_serial_bridge
 
-    run_bg ur_driver ros2 launch ur_robot_driver ur_control.launch.py \
-      ur_type:="$UR_TYPE" robot_ip:="$ROBOT_IP" "${KIN_ARG[@]}" \
-      launch_rviz:=false
-    wait_for_service /controller_manager/list_controllers 60
+    start_ur_driver
 
     echo ">> Start the LS_ROS_CONTROL program on the UR16e Teach Pendant now, then press Enter."
     if [ "$DRY_RUN" = "false" ]; then
@@ -455,9 +453,7 @@ case "$MODE" in
     run_bg micro_module_control ros2 run macro_micro_robot micro_module_control
     run_bg ur16e_control ros2 run macro_micro_robot ur16e_control
 
-    if [ "$WITH_RVIZ" = "true" ]; then
-      run_bg rviz ros2 launch macro_micro_robot display.launch.py gui:=false
-    fi
+    start_rviz_if_requested
     ;;
 esac
 
