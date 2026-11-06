@@ -5,5 +5,6 @@ The report itself (LaTeX skeleton, writing plans 01–06) moved on 2026-11-03 to
 
 - `plotting/`: comparison figures built from `logs/` (paths are relative to this package). Start with
   `plotting/README.md`. Figures land in `plotting/out/` (PDF for LaTeX).
-- `planning/07_remaining_experiments.md`, `planning/08_next_session_V9b.md`: lab test plans.
-- `planning/analysis/`: offline analyses (E0 calibrated kinematics, quick-change repeatability).
+- `planning/analysis/`: offline analyses (E0 calibrated kinematics, E6 singularity guard, quick-change repeatability).
+
+Lab test plans and the E0 write-up are in `../claude-notes/`.

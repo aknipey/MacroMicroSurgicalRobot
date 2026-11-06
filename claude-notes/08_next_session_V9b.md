@@ -7,7 +7,7 @@ Written 2026-11-03 at the end of Session A + V9 part 1. Results so far: `logs/V8
 > The tracked `Scaled5_*` and `NoBuzzArea` runs in the table below are dropped: wrist 3 ~135 deg turns the markers
 > ~110 deg away from a camera that sees the RCM runs (0 % NDI on the 11-03 `Scaled5_Slow` replay; `replay_batch.sh`
 > passed it because it only checked the file was not empty, and now needs 95 % visible). So E2 (NDI tip vibration)
-> and the tracked half of RD2 are not measured. The runner adds the pose-offset test from the E0 `RESULTS.md`. After
+> and the tracked half of RD2 are not measured. The runner adds the pose-offset test from the `E0_RESULTS.md`. After
 > the wand is off, use `replay_batch.sh --no-ndi`.
 >
 > **Status 2026-11-06:** steps 0-5 done (`logs/V9b/REPLAYS_2026-11-06.md`). Wand off. Next: `./scripts/run_v9b.sh --from=7` (no tool,

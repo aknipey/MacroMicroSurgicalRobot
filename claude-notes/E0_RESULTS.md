@@ -1,6 +1,6 @@
 # E0: calibrated-kinematics prediction from existing bags (2026-11-03)
 
-Offline analysis, no lab time. Plan: `thesis/planning/07_remaining_experiments.md` §1.4. Everything here
+Offline analysis, no lab time. Plan: `claude-notes/07_remaining_experiments.md` §1.4. Everything here
 reads `logs/` and writes only into this folder (kept apart from the experiment records).
 
 ```

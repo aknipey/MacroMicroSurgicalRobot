@@ -2231,7 +2231,7 @@ the output parses in xacro; an unreachable robot gives exit 1 after 3 tries. See
 **Real robot not yet run.**
 
 **Next:** extract on the arm (driver must then print `Calibration checked successfully.`), redo the wand
-hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remaining_experiments.md` §1.3).
+hand-eye and the micro tip ball, then the RD1 replays (`claude-notes/07_remaining_experiments.md` §1.3).
 
 **Same day, after the tests above:**
 - **Real arm, first extraction (2026-11-03):** `config/calibrations/ur16e_kinematics_2026-11-03.yaml`, hash
@@ -2304,10 +2304,10 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   Scaled5_Fast ~70 mm (estimate), but LongBenchmark 11 mm, ShortBenchmark 4.9 mm (measured) and
   LargeVibrations ~1 mm. Those three were recorded with a shorter tool: not replayed with the wand mounted.
 | (after V8) | `f9af572` | 2026-11-03 | Arm's own kinematic calibration loaded (`ur_calibration_extract`, `kinematics_params_file`); tool 3 `V2_holder_only` hand-eye through it (`wrist_jog.py`); META `kinematics` block; `kinematics_check.py` | ROS used the nominal UR16e model (driver ERROR in 125 logs); the driver's ur_calibration 3.8.0 never connects and writes wrong rpy. Docs: `docs/UR_CALIBRATION_FIX.md` | ROS tool0 = controller TCP to 0.000 mm (nominal 0.85 mm). Replays `logs/V8/CalibratedKinematics/REPLAYS_2026-11-03.md`: SlowChecking 2.87 → 1.30 mm rms, others ~1.2-1.3, RCMOnly 0.47-0.50 |
-| V9 (part 1) | `0156789`, `977f652` | 2026-11-03 | Same RCM replay set in position and trajectory output (velocity = V8/CalibratedKinematics); `set_v9_mode.sh` | 3-mode comparison, same day / code / kinematics / tool; first real-arm position mode | Position: 12 replays, no faults, same RCM accuracy as velocity. `logs/V9/REPLAYS_2026-11-03.md`. Part 2: `thesis/planning/08_next_session_V9b.md` |
+| V9 (part 1) | `0156789`, `977f652` | 2026-11-03 | Same RCM replay set in position and trajectory output (velocity = V8/CalibratedKinematics); `set_v9_mode.sh` | 3-mode comparison, same day / code / kinematics / tool; first real-arm position mode | Position: 12 replays, no faults, same RCM accuracy as velocity. `logs/V9/REPLAYS_2026-11-03.md`. Part 2: `claude-notes/08_next_session_V9b.md` |
 - **End of the 11-03 session:** V9 part 1 = RCM set in position (V9/PositionMode) and trajectory
   (V9/TrajectoryMode); results in `logs/V9/REPLAYS_2026-11-03.md`. Remaining NDI runs and the order:
-  `thesis/planning/08_next_session_V9b.md`. Settings set back to `final` (position, smooth speedj, exponent
+  `claude-notes/08_next_session_V9b.md`. Settings set back to `final` (position, smooth speedj, exponent
   1.0) until then. The failed 09:26 and cut-off 09:34 hand-eye fits are kept in `config/calibrations/` for
   the method chapter.
 - **2026-11-06, `scripts/run_v9b.sh` + `scripts/pose_offset_motion.py`:** runs the remaining wand + NDI runs (RCM only):

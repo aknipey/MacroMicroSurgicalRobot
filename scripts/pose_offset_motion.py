@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the pose-offset test motion (RESULTS.md, E0) as a trajectory_player file.
+"""Write the pose-offset test motion (claude-notes/E0_RESULTS.md) as a trajectory_player file.
 
 Does the NDI-vs-calibrated-FK offset follow the pose, and does it change with the camera?
 This moves in joint space between two poses of the 11-03 SlowChecking replay, with a still

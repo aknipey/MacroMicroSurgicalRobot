@@ -1,7 +1,7 @@
 # Loading the UR16e's own kinematic calibration (`ur_calibration_extract`)
 
 Added 2026-11-03. Code: `src/ur_calibration_extract.cpp`, `vendor/ur_calibration/`,
-`launch/ur_calibration_extract.launch.py`. Plan context: `thesis/planning/07_remaining_experiments.md` §1.
+`launch/ur_calibration_extract.launch.py`. Plan context: `claude-notes/07_remaining_experiments.md` §1.
 
 ## TL;DR: how to use it
 
@@ -34,7 +34,7 @@ The driver warned about this on every connection. **125 ROS logs (2026-10-01 to 
 
 and none contain `Calibration checked successfully`. (`grep -rl "don't match" ~/.ros/log | wc -l`)
 
-The other evidence is in `07_remaining_experiments.md` §1.1: TF vs controller tool0 drifting 0.6–1.2 mm
+The other evidence is in `claude-notes/07_remaining_experiments.md` §1.1: TF vs controller tool0 drifting 0.6–1.2 mm
 within a run (`META.yaml tcp_offset.check_max_mm`), the 0.17–3.7 mm NDI pivot offset (R7.9), and the
 pose-dependent 1.5–1.9 mm micro tip residual (R8.4).
 

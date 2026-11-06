@@ -197,7 +197,7 @@ TOUCH_RCM_MAX_ERROR = 0.005
 # Each cue's force / stiffness = 0 turns just that one off. False = no forces at all.
 TOUCH_HAPTICS = True
 # Hard cap on the total force (N). The Touch gives 3.3 N peak, 0.88 N continuous.
-# Strengths are set from bare-OpenHaptics tests on SN 22129000559 (2026-10-19, VERSIONS.md
+# Strengths are set from bare-OpenHaptics tests on SN 22129000559 (2026-10-19, claude-notes/VERSIONS.md
 # V7 part 2): nothing is felt below ~0.0008 N, 0.001 N is soft but felt, 0.01 N is about as
 # much as is comfortable (0.1 N felt huge). Its force output does not follow the command
 # well (the same kick for 0.001-0.01 N steps), so cues stay just past the threshold.
@@ -259,7 +259,7 @@ TOUCH_PUBLISH_RATE = 500.0
 # (500 Hz) with the URDF on /robot_description. Use "joint_states" in velocity mode:
 # the 20 Hz TF staircase puts a 20 Hz sawtooth (+ 40/60 Hz) into the correction term,
 # which velocity mode passes straight to the arm. (In trajectory mode "tf" lagged a
-# little less, see VERSIONS.md V4.)
+# little less, see claude-notes/VERSIONS.md V4.)
 TOUCH_POSE_SOURCE = "joint_states"
 # omni_state publishes millimetres.
 TOUCH_UNITS_TO_M = 1e-3

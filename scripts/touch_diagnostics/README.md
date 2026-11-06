@@ -1,6 +1,6 @@
 # Touch force diagnostics
 
-Used on 2026-10-19 to find why no haptic force reached the Touch (see docs/VERSIONS.md,
+Used on 2026-10-19 to find why no haptic force reached the Touch (see claude-notes/VERSIONS.md,
 V7 part 2, "No force on the real Touch"). Both measure how far a **free-resting pen** (out of the
 inkwell, nobody touching it) rises under a ramped upward force, from the encoders, so the
 result does not depend on what anyone feels.

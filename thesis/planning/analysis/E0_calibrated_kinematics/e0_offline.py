@@ -6,7 +6,7 @@
     python3 thesis/planning/analysis/E0_calibrated_kinematics/e0_offline.py            # 10-26 + 11-03 sets
     python3 thesis/planning/analysis/E0_calibrated_kinematics/e0_offline.py logs/V7/SlowCheckingRCMSimpleHolder_Replay1
 
-Read-only on logs/. Plan: thesis/planning/07_remaining_experiments.md §1.4.
+Read-only on logs/. Plan: claude-notes/07_remaining_experiments.md §1.4.
 
 Per run, the same joint angles (/joint_states, 500 Hz RTDE) go through two forward-kinematics models:
 nominal (ur_description UR16e default) and calibrated (this arm's controller calibration, 11-03 file).

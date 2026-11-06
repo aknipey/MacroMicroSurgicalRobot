@@ -8,7 +8,7 @@
 In velocity mode the UR runs `speedj(qd, 40 rad/s^2, 2 ms)` on whatever arrives, and
 nothing between Servo and the arm smooths or limits it. On the real UR16e that gave
 wrist torque chatter at the command update rate, and joint faults (C306A0) with the
-chatter at its worst and a wrist at 28-43 rad/s^2 (see docs/VERSIONS.md, V5).
+chatter at its worst and a wrist at 28-43 rad/s^2 (see claude-notes/VERSIONS.md, V5).
 
 Each command from Servo is, in this order:
 1. scaled down, all joints together, so no joint exceeds `speed_fraction` of its
