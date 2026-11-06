@@ -60,7 +60,7 @@ NDI_META's to 0.01 mm.
 
 ## Results (median of replays; mm rms)
 
-![budget](results/e0_budget.png)
+![budget](../thesis/planning/analysis/E0_calibrated_kinematics/results/e0_budget.png)
 
 | Set (swing 10-26) | 10-26 measured | 10-26 predicted: nominal → **calibrated** | latch shift (cal.) | best (cal.) | 11-03 measured | 11-03 predicted: nominal → calibrated |
 |---|---|---|---|---|---|---|
@@ -93,7 +93,7 @@ NDI_META's to 0.01 mm.
    would have been worse in 3 of 4 sets: RCMOnly 1.20 vs 0.79, FastChecking 1.49 vs 0.86, SlowChecking 1.95 vs
    1.51. The kinematic part depends on where the tool and RCM point sit, so it isn't a fixed number per arm.
 
-![latch](results/e0_latch_offset.png)
+![latch](../thesis/planning/analysis/E0_calibrated_kinematics/results/e0_latch_offset.png)
 
 ## Data hygiene found on the way
 
@@ -106,7 +106,7 @@ NDI_META's to 0.01 mm.
   during the RCM segment. Later runs fit the jog tool with a camera ~12 mm away, which points at the camera.
   **Exclude it from the 11-03 statistics** with this reason.
 
-  ![camera](results/e0_camera_move.png)
+  ![camera](../thesis/planning/analysis/E0_calibrated_kinematics/results/e0_camera_move.png)
 - The fitted NDI delay is +5 to +20 ms (10-15 ms typical), consistent with the 10 ms of the hand-eye files.
 
 ## What this changes in the plan
