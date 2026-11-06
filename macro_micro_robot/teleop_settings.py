@@ -26,8 +26,7 @@ TOUCH_TRANSLATION_SCALE = 1.0
 TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # Tilt and twist are scaled by step ** this, on top of TOUCH_ROTATION_SCALE /
 # TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
-# 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
-# SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to 1.0 for Session B.
+# 0.5 = square root (1:2.24 / 1:4.47), 0 = rotation never scaled.
 TOUCH_SCALE_ROTATION_EXPONENT = 1.0
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
@@ -135,14 +134,9 @@ TOUCH_SINGULARITY_ESCAPE_SPEED = 0.2
 # SHAFT_START (the end at the holder), runs along SHAFT_DIRECTION (normalised) and
 # ends at the tip SHAFT_LENGTH further on. Only points on that segment can be the RCM.
 # Measure your tool.
-# Tool = NDI wand 8700340, calibrated 2026-10-26 (wand re-seated in the holder):
-# tool0 -> wand hand-eye fit (wrist joints jogged, no divot) + the wand's own markers ->
-# tip calibration (2026-10-20). Tip at (-0.41, 9.84, 366.87) mm in tool0, shaft 1.05 deg
-# off tool0 z, tip checked against the camera to 0.82 mm rms. LENGTH = tip back to the
-# wand's first marker along the shaft.
-# src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json. 2026-10-22 (old seat):
-# [-0.0006, 0.00662, 0.20624] / [-0.00607, 0.01481, 0.99987], tip 2.5 mm from today's.
-# Only used when TOOL_LIBRARY has no tools: the library (below) is where tools live now.
+# Only used when TOOL_LIBRARY has no tools: the library (below) is where tools live.
+# These values: NDI wand 8700340, src/ndi_tracking/calibrations/robot_tcp_handeye_2026-10-26.json.
+# LENGTH = tip back to the wand's first marker along the shaft.
 TOUCH_RCM_SHAFT_START = [0.00008, 0.00699, 0.20827]     # m
 TOUCH_RCM_SHAFT_DIRECTION = [-0.00309, 0.01798, 0.99983]
 TOUCH_RCM_SHAFT_LENGTH = 0.1586               # m
@@ -288,9 +282,6 @@ SERVO_LOOKAHEAD = 0.05
 # forward_position_controller (the UR runs servoj, its lag cancelled by
 # SERVO_POSITION_LEAD). speedj buzzed / ground in some poses on the UR16e (a kick
 # every 2 ms set point); servoj never did. Read when Servo starts: needs a relaunch.
-# V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
-# only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
-# V9/TrajectoryMode = this. Final choice after the comparison.
 SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
@@ -319,7 +310,6 @@ SERVO_VELOCITY_RATE = 500.0
 # command itself. The copy spreads each change over the whole step (as the driver's own
 # spline mode does), so the joint speed ramps between set points. Real arm only (mock
 # hardware runs no URScript). Read at launch: needs a relaunch.
-# SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to True for Session B.
 SERVO_SMOOTH_SPEEDJ = True
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.

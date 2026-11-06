@@ -164,10 +164,8 @@ void touchButtonCallback(
 
 bool LoadController(rclcpp::Node::SharedPtr node, const std::string controllerName)
 {
-    // Create a client for the load_controller service
     auto loadControllerClient = node->create_client<controller_manager_msgs::srv::LoadController>("/controller_manager/load_controller");
 
-    // Create a service request
     auto loadController = std::make_shared<controller_manager_msgs::srv::LoadController::Request>();
     loadController->name = controllerName;
 
@@ -177,7 +175,6 @@ bool LoadController(rclcpp::Node::SharedPtr node, const std::string controllerNa
         return false;
     }
 
-    // Call the service to load the controller
     auto future = loadControllerClient->async_send_request(loadController);
 
     if (rclcpp::spin_until_future_complete(node, future) == rclcpp::FutureReturnCode::SUCCESS)

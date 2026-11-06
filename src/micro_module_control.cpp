@@ -25,8 +25,7 @@ const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
 const double MANIPULATOR_ROTATION_SCALE_FACTOR = 0.2;
 
 // Tip motion per unit of stylus motion. The module is a few millimetres long, so the
-// stylus is scaled down: 40 mm of hand motion moves the tip 2 mm. (It was 10x up: a
-// 40 mm stroke asked for a tip target 0.4 m away.)
+// stylus is scaled down: 40 mm of hand motion moves the tip 2 mm.
 const double MICRO_POSITION_SCALE = 0.05;
 
 // Position errors (m) are divided by this length before the inverse kinematics, so they
@@ -68,7 +67,7 @@ const double PROXIMAL_JOINT_SEPARATION = 0.001;
 // Length of a proximal sub-module, in metres
 const double PROXIMAL_LENGTH = 0.0014;
 
-// Half angle of curvature of a proximal sub-module, in radians
+// Half angle of curvature of a distal sub-module, in radians
 const double DISTAL_HALF_CURVATURE_ANGLE = 0.88;
 
 // Number of joints in the distal module
@@ -82,7 +81,7 @@ const double DISTAL_LENGTH = 0.00288;
 
 // lambda in the damped least squares inverse, against the weighted Jacobian (O(1)). D
 // grows from 1 mid-range to 2 at a joint limit, so the damping still rises near limits.
-// Lower = more responsive; was 1 (with a stray extra D^2: effective 2).
+// Lower = more responsive.
 const double LEAST_SQUARES_DAMPING_FACTOR = 0.3;
 
 typedef std::vector<Eigen::Matrix4d,Eigen::aligned_allocator<Eigen::Matrix4d> > TransformVector;
@@ -134,7 +133,6 @@ Eigen::Matrix4d TransformFromPosition(const Eigen::Vector3d& position)
     return transform;
 }
 
-// Extract the position vector from a homogeneous transform
 Eigen::Vector3d GetTransformPosition(const Eigen::Matrix4d& transform)
 {
     Eigen::Vector3d position;
@@ -294,14 +292,9 @@ Eigen::MatrixXd GetInverseJacobianDamped(
         jointLimitWeights(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
     }
 
-    // (Joint positions, limits, lambda and D were printed here every cycle at 60 Hz,
-    // flooding the launch terminal; the limits are logged once at startup instead)
-
     Eigen::MatrixXd inverseJacobian(jacobian.cols(), jacobian.rows());
 
-    // Damped least squares (J^T J + lambda^2 D^2)^-1 J^T. There was an extra unscaled D^2
-    // term, so with lambda = 1 the damping was 2 D^2 and each cycle covered only a small
-    // part of the error (a 1.5 mm tip step took 1.1 s to settle)
+    // Damped least squares (J^T J + lambda^2 D^2)^-1 J^T
     inverseJacobian = (jacobian.transpose() * jacobian +
     leastSquaresDampingFactor * leastSquaresDampingFactor * jointLimitWeights * jointLimitWeights).colPivHouseholderQr().solve(jacobian.transpose());
 
@@ -709,9 +702,7 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d movementRotation;
 
-    // Joint limits for the damped inverse: where a motor would reach its limit. These were
-    // fixed at +-0.05 / +-0.025 rad, which the tendon model puts at only ~1 deg of motor
-    // travel (of 11-22 deg), so the damping held the motors within about a degree of rest.
+    // Joint limits for the damped inverse: where a motor would reach its limit
     Eigen::Vector4d minJointAngles;
     Eigen::Vector4d maxJointAngles;
     GetJointRangeFromMotorLimits(proximal, distal, motorReference, motorMinAngles, motorMaxAngles,
@@ -825,9 +816,7 @@ int main(int argc, char **argv)
                 );
 
                 // Apply each joint delta only if every motor stays inside its limits. The
-                // motors follow from the joint angles through the tendon model (a joint
-                // delta in rad was being added to the motor angles in degrees, so the
-                // motors moved ~1/1000 of what they should)
+                // motors follow from the joint angles through the tendon model.
                 for (int i = 0; i < 4; i++)
                 {
                     ManipulatorModule candidateProximal = proximal, candidateDistal = distal;
@@ -849,8 +838,7 @@ int main(int argc, char **argv)
 
                 RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 100, "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
 
-                // Whole degrees on the wire: round (assigning the double truncated, so
-                // 89.95 went out as 89)
+                // Whole degrees on the wire: round, as assigning the double would truncate
                 motor_angles_msg::msg::MotorAngles motorCommandsMsg;
                 motorCommandsMsg.proximal_pan_angle = std::lround(motorCommands(0));
                 motorCommandsMsg.proximal_tilt_angle = std::lround(motorCommands(1));
@@ -861,7 +849,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Update previous engaged state for next iteration
         wasEngaged = isEngaged;
 
         rate.sleep();

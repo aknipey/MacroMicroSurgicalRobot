@@ -49,5 +49,4 @@ memory. Its own CLI writes METRICS.yaml into the run folders; this area doesn't.
   between days, so u/v directions are comparable within a day, not across days. Distances are comparable
   across days.
 - rms² = bias² + spread² holds exactly for the crossing points. Crossing distance ≈ rcm_error / cos(tilt).
-- Colours are slots 1-4 of the validated reference palette of the dataviz guidance. The validator itself
-  wasn't run (no node here); the markers carry identity for colour-blind and print readers.
+- Colours are slots 1-4 of a validated palette; the markers carry identity for colour-blind and print readers.

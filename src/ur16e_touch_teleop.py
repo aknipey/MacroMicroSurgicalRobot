@@ -11,8 +11,8 @@ Double-click WHITE to cycle the motion scale (1:1 -> 1:5 -> 1:20 by default,
 `scale_steps`). Nothing waits to see whether a press becomes a double click:
 both presses engage straight away, and the new scale applies from the second
 press (which re-captures the origin, so the robot does not jump). Tilt and
-twist are scaled by step ** `scale_rotation_exponent` (1 by default: the same as translation). The current
-scale is published latched on ~/motion_scale for the logs.
+twist are scaled by step ** `scale_rotation_exponent` (1 by default: the same as
+translation). The current scale is published latched on ~/motion_scale for the logs.
 
 Click the GREY button to start / stop recording a trajectory and the
 Touch / UR path logs (needs trajectory_recorder running). It acts on release, as a
@@ -71,8 +71,7 @@ held: in RCM mode a soft wall at the deepest insertion and at the retract limit 
 a click as the tip target crosses the RCM point; a small tap when RCM mode turns on
 or off (two when it refuses to turn off); near a singularity a
 push on the stylus in the direction that leads out of it, growing from the guard's
-slow to its stop threshold. The driver keeps the last force it was sent, so the
-node sends zero when it starts and when it exits.
+slow to its stop threshold. The node sends zero when it starts and when it exits.
 """
 
 import signal
