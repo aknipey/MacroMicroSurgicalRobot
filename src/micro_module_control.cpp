@@ -5,22 +5,14 @@
 #include <math.h>
 #include <memory>
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/header.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "std_msgs/msg/int32.hpp"
-#include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/vector3.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "omni_msgs/msg/omni_state.hpp"
 #include "omni_msgs/msg/omni_button_event.hpp"
-#include "tf2_ros/transform_listener.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "../include/ManipulatorModule.hpp"
 #include "../include/Pose.hpp"
 #include <Eigen/Dense>
-#include <Eigen/SVD>
 #include <Eigen/StdVector>
 #include <Eigen/Geometry>
 #include "motor_angles_msg/msg/motor_angles.hpp"
@@ -121,28 +113,6 @@ void PrintMatrix(const Eigen::MatrixXd& matrix, const char* title)
     RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "%s:\n%s", title, output.str().c_str());
 }
 
-Eigen::Matrix3d xRotationMatrix(double theta)
-{
-    Eigen::Matrix3d rotation;
-
-    rotation << 1, 0, 0,
-                0, cos(theta), -sin(theta),
-                0, sin(theta), cos(theta);
-
-    return rotation;
-}
-
-Eigen::Matrix3d yRotationMatrix(double theta)
-{
-    Eigen::Matrix3d rotation;
-
-    rotation << cos(theta), 0, sin(theta),
-                0, 1, 0,
-                -sin(theta), 0, cos(theta);
-
-    return rotation;
-}
-
 Eigen::Matrix4d zRotationTransform(double theta)
 {
     Eigen::Matrix4d transform;
@@ -159,25 +129,6 @@ Eigen::Matrix4d TransformFromPosition(const Eigen::Vector3d& position)
 {
     Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
 
-    transform.block(0, 3, 3, 1) = position;
-
-    return transform;
-}
-
-Eigen::Matrix4d TransformFromRotation(const Eigen::Matrix3d& rotation)
-{
-    Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-
-    transform.block(0, 0, 3, 3) = rotation;
-
-    return transform;
-}
-
-Eigen::Matrix4d TransformFromPose(const Eigen::Vector3d& position, const Eigen::Matrix3d& rotation)
-{
-    Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-
-    transform.block(0, 0, 3, 3) = rotation;
     transform.block(0, 3, 3, 1) = position;
 
     return transform;
@@ -218,9 +169,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
         panJointTransform = modules[i].GetPanJointTransform();
         tiltJointTransform = modules[i].GetTiltJointTransform();
 
-        // PrintMatrix(panJointTransform, "Pan Joint Transform");
-        // PrintMatrix(tiltJointTransform, "Tilt Joint Transform");
-
         for (int j = 0; j < modules[i].GetNumJoints(); j++)
         {
             // Current joint is a pan-type if the first joint in the module is pan and the joint index is even, or if the inverse is true
@@ -233,8 +181,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
                 endTransform *= tiltJointTransform;
             }
 
-            // PrintMatrix(endTransform, "Pushing back matrix: ");
-
             Eigen::Matrix4d jointTransform = endTransform;
 
             jointTransforms.push_back(jointTransform);
@@ -244,15 +190,12 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
         if (i != modules.size() - 1)
         {
             endTransform *= moduleInterfaceAngularOffset;
-            // PrintMatrix(endTransform, "Rotated end transform");
         }
     }
 
     endTransform *= toolTransform;
 
     jointTransforms.push_back(endTransform);
-
-    // PrintMatrix(endTransform, "End Transform");
 
     return jointTransforms;
 }
@@ -289,14 +232,11 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
         for (int j = 0; j < modules[i].GetNumJoints(); j++)
         {
             Eigen::Matrix4d jointTransform = jointTransforms[numJointTransformsProcessed + j];
-            // PrintMatrix(jointTransform, "Joint Transform");
             // Current joint is a pan-type if the first joint in the module is pan and the joint index is even, or if the inverse is true
             if (modules[i].IsFirstJointPan() ^ (j % 2 != 0))
             {
                 Eigen::Vector3d actuationAxis = GetTransformRotation(jointTransform) * xAxis;
                 jointCrossProduct = actuationAxis.cross(endPosition - GetTransformPosition(jointTransform));
-
-                // PrintMatrix(jointCrossProduct, "Joint cross product");
 
                 jointJacobianColumn << jointCrossProduct, actuationAxis;
 
@@ -307,8 +247,6 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
                 Eigen::Vector3d actuationAxis = GetTransformRotation(jointTransform) * yAxis;
                 jointCrossProduct = actuationAxis.cross(endPosition - GetTransformPosition(jointTransform));
 
-                // PrintMatrix(jointCrossProduct, "Joint cross product");
-
                 jointJacobianColumn << jointCrossProduct, actuationAxis;
 
                 moduleTiltJacobianColumn += jointJacobianColumn;
@@ -317,9 +255,6 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
 
         modulePanJacobianColumn /= modules[i].GetNumPanJoints();
         moduleTiltJacobianColumn /= modules[i].GetNumTiltJoints();
-
-        // PrintMatrix(modulePanJacobianColumn, "Pan Jacobian column post-division");
-        // PrintMatrix(moduleTiltJacobianColumn, "Tilt Jacobian column post-division");
 
         if (modules[i].IsFirstJointPan())
         {
@@ -336,36 +271,6 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
     }
 
     return jacobian;
-}
-
-// Obtain an approximation of the inverse Jacobian using the damped least squares method
-Eigen::MatrixXd DampedLeastSquares(Eigen::MatrixXd jacobian, double leastSquaresDampingFactor)
-{
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeFullU | Eigen::ComputeFullV);
-
-    Eigen::MatrixXd U = svd.matrixU();
-    Eigen::MatrixXd V = svd.matrixV();
-
-    Eigen::VectorXd singularValues = svd.singularValues();
-
-    Eigen::MatrixXd inverseJacobian = Eigen::MatrixXd::Zero(jacobian.cols(), jacobian.rows());
-
-    for (int i = 0; i < svd.nonzeroSingularValues(); i++)
-    {
-        inverseJacobian += singularValues(i) / (pow(singularValues(i), 2) + pow(leastSquaresDampingFactor, 2)) * V.col(i) * U.col(i).transpose();
-    }
-
-    return inverseJacobian;
-}
-
-// Obtain an approximation of the inverse Jacobian using the damped least squares method
-Eigen::MatrixXd GetInverseJacobian(Eigen::MatrixXd& jacobian, double leastSquaresDampingFactor)
-{
-    Eigen::MatrixXd inverseJacobian(jacobian.cols(), jacobian.rows());
-
-    inverseJacobian = (jacobian.transpose() * jacobian + Eigen::Matrix4d::Identity()).colPivHouseholderQr().solve(jacobian.transpose());
-
-    return inverseJacobian;
 }
 
 // Obtain an approximation of the inverse Jacobian using the damped least squares method
@@ -473,12 +378,8 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
 {
     Eigen::Vector4d motorPositions = Eigen::Vector4d::Zero();
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "test: %.6f", test);
-
     double proximalPanLengthDelta = proximal.GetIsolatedPanLengthDelta();
     double proximalTiltLengthDelta = proximal.GetIsolatedTiltLengthDelta();
-
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "prox. pan: %.6f, prox. tilt: %.6f", proximalPanLengthDelta, proximalTiltLengthDelta);
 
     motorPositions(0) = proximalPanLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(1) = proximalTiltLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
@@ -492,62 +393,10 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
     // The contribution of the proximal joint positions to the length delta of the distal tendons
     double distalLengthDeltaDueToProximalJoints = proximalPanLengthDelta + proximalTiltLengthDelta + distalTendonProximalJointOffset;
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dLengthDelta: %.6f", distalLengthDeltaDueToProximalJoints);
-
     motorPositions(2) = (distal.GetIsolatedPanLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(3) = (distal.GetIsolatedTiltLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dist. pan: %.6f, dist. tilt: %.6f", motorPositions(0), motorPositions(1));
-
     return motorPositions;
-}
-
-Eigen::Vector4d GetJointPositionsFromMotorPositions(const Eigen::Vector4d& motorStates, const ManipulatorModule& proximal, const ManipulatorModule& distal)
-{
-    Eigen::Vector4d jointPositions = Eigen::Vector4d::Zero();
-
-    // Ratio of proximal curvature radius to pulley radius
-    double proximalRadiusRatio = proximal.GetCurvatureRadius() / PULLEY_WHEEL_RADIUS;
-    double proximalHalfPanJointAngle = proximal.GetPanJointAngle() / 2;
-    double proximalHalfTiltJointAngle = proximal.GetTiltJointAngle() / 2;
-
-    // Construct proximal actuator Jacobian
-    Eigen::Matrix2d proximalJacobian;
-    proximalJacobian << -proximalRadiusRatio * sin(proximal.GetHalfCurvatureAngle() - proximalHalfPanJointAngle), proximalRadiusRatio * sin(proximalHalfTiltJointAngle),
-                         proximalRadiusRatio * sin(proximalHalfPanJointAngle), -proximalRadiusRatio * sin(proximal.GetHalfCurvatureAngle() - proximalHalfTiltJointAngle);
-
-    // PrintMatrix(proximalJacobian, "Proximal Actuator Jacobian");
-
-    double distalRadiusRatio = distal.GetCurvatureRadius() / PULLEY_WHEEL_RADIUS;
-    double distalHalfPanJointAngle = distal.GetPanJointAngle() / 2;
-    double distalHalfTiltJointAngle = distal.GetTiltJointAngle() / 2;
-
-    // Constant coefficient of partial derivatives of distal tendon lengths w.r.t. proximal joint angles
-    double derivativeCoefficient = 1 - 1 / sqrt(2);
-
-    // Construct distal actuator Jacobian
-    Eigen::MatrixXd distalJacobian(2, 4);
-    distalJacobian <<  proximalRadiusRatio * derivativeCoefficient * sin(proximal.GetHalfCurvatureAngle()) * cos(proximalHalfPanJointAngle),
-                       proximalRadiusRatio * derivativeCoefficient * sin(proximal.GetHalfCurvatureAngle()) * cos(proximalHalfTiltJointAngle),
-                       -distalRadiusRatio * sin(distal.GetHalfCurvatureAngle() - distalHalfPanJointAngle),
-                       distalRadiusRatio * sin(distalHalfTiltJointAngle),
-                       proximalRadiusRatio * derivativeCoefficient * sin(proximal.GetHalfCurvatureAngle()) * cos(proximalHalfPanJointAngle),
-                       proximalRadiusRatio * derivativeCoefficient * sin(proximal.GetHalfCurvatureAngle()) * cos(proximalHalfTiltJointAngle),
-                       distalRadiusRatio * sin(distalHalfPanJointAngle),
-                       -distalRadiusRatio * sin(distal.GetHalfCurvatureAngle() - distalHalfTiltJointAngle);
-
-    // PrintMatrix(distalJacobian, "Distal Actuator Jacobian");
-
-    // Combine proximal and distal Jacobians. Note that the distal motor angles have no effect on the proximal joint positions
-    Eigen::Matrix4d combinedJacobian = Eigen::Matrix4d::Zero();
-    combinedJacobian.block(0, 0, 2, 2) = proximalJacobian;
-    combinedJacobian.block(2, 0, 2, 4) = distalJacobian;
-
-    // PrintMatrix(combinedJacobian, "Combined Jacobian");
-
-    jointPositions = combinedJacobian * motorStates;
-
-    return jointPositions;
 }
 
 Eigen::Vector3d SkewSymmetricMatrixToVector(const Eigen::Matrix3d& matrix)
@@ -658,7 +507,6 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d endRotation;
     Pose currentTouchPose;
-    geometry_msgs::msg::PoseStamped currentUR16EPoseStamped;
 
     Pose touchPoseDelta;
 
@@ -848,7 +696,6 @@ int main(int argc, char **argv)
 
     // Fixed transformation quaternion between touch and manipulator frames
     tf2::Quaternion touchToManipulatorRotation;
-    // touchToManipulatorRotation.setRPY(0, M_PI, M_PI_4);
     touchToManipulatorRotation.setRPY(0, 0, M_PI_4);
 
     Eigen::Vector3d endPosition = Eigen::Vector3d::Zero();

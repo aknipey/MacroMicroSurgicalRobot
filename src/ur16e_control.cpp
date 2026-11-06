@@ -1,17 +1,11 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include <array>
 #include <math.h>
 #include <memory>
 #include <chrono>
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-#include "std_msgs/msg/header.hpp"
-#include "std_msgs/msg/string.hpp"
-#include "std_msgs/msg/int32.hpp"
-#include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/vector3.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
@@ -19,7 +13,6 @@
 #include "controller_manager_msgs/srv/switch_controller.hpp"
 #include "omni_msgs/msg/omni_state.hpp"
 #include "omni_msgs/msg/omni_button_event.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
 #include "cartesian_control_msgs/action/follow_cartesian_trajectory.hpp"
 #include "cartesian_control_msgs/msg/cartesian_trajectory_point.hpp"
 #include "tf2_ros/transform_listener.hpp"
@@ -105,29 +98,6 @@ std::string PoseToString(Pose pose, const double position_unit_scale_factor)
     return output.str();
 }
 
-std::string PoseToString(geometry_msgs::msg::Pose pose, const double position_unit_scale_factor)
-{
-    std::stringstream output;
-
-    output << "Position: (x: "
-        << pose.position.x * position_unit_scale_factor
-        << "m, y: "
-        << pose.position.y * position_unit_scale_factor
-        << "m, z: "
-        << pose.position.z * position_unit_scale_factor
-        << "m), Orientation: (x: "
-        << pose.orientation.x
-        << ", y: "
-        << pose.orientation.y
-        << ", z: "
-        << pose.orientation.z
-        << ", w: "
-        << pose.orientation.w
-        << ")";
-
-    return output.str();
-}
-
 std::string QuaternionToString(tf2::Quaternion quaternion)
 {
     std::stringstream output;
@@ -140,21 +110,6 @@ std::string QuaternionToString(tf2::Quaternion quaternion)
         << quaternion.getZ()
         << ", w: "
         << quaternion.getW()
-        << ")";
-
-    return output.str();
-}
-
-std::string Vector3ToString(geometry_msgs::msg::Vector3 vector3)
-{
-    std::stringstream output;
-
-    output << "(x: "
-        << vector3.x
-        << ", y: "
-        << vector3.y
-        << ", z: "
-        << vector3.z
         << ")";
 
     return output.str();
@@ -181,8 +136,6 @@ void touchStateCallback(
     currentPose.position *= TOUCH_POSITION_UNIT_SCALE_FACTOR;
 
     tf2::fromMsg(omniState->pose.orientation, currentPose.orientation);
-
-    geometry_msgs::msg::Vector3 current = omniState->current;
 }
 
 void touchButtonCallback(
@@ -281,45 +234,6 @@ bool SwitchController(rclcpp::Node::SharedPtr node, const std::string controller
 
     RCLCPP_ERROR(node->get_logger(), "Failed to start controller");
     return false;
-}
-
-void UpdateMovementGoal(
-    FollowCartesianTrajectory::Goal& goal,
-    cartesian_control_msgs::msg::CartesianTrajectoryPoint& targetPoint,
-    Pose& currentUR16EPose,
-    Pose& movementPoseDelta
-)
-{
-    for (int i = 1; i <= UR16E_CONTROL_NUM_SUBDIVISIONS; i++)
-    {
-        targetPoint.pose.position = Vector3ToPoint(currentUR16EPose.position + movementPoseDelta.position / UR16E_CONTROL_NUM_SUBDIVISIONS);
-
-        // Only attempt to apply the orientation delta if it is real and non-zero
-        if (IsValidQuaternion(movementPoseDelta.orientation))
-        {
-            targetPoint.pose.orientation = tf2::toMsg(
-                currentUR16EPose.orientation.slerp(
-                    movementPoseDelta.orientation * currentUR16EPose.orientation,
-                    UR16E_ROTATION_SCALE_FACTOR * i / UR16E_CONTROL_NUM_SUBDIVISIONS
-                )
-            );
-        }
-        // If there is no valid orientation delta, the UR16e should remain at its current orientation
-        else
-        {
-            targetPoint.pose.orientation = tf2::toMsg(currentUR16EPose.orientation);
-        }
-
-        targetPoint.time_from_start = rclcpp::Duration::from_seconds(i * UR16E_CONTROL_TIME_INCREMENT);
-
-        goal.trajectory.points.push_back(targetPoint);
-    }
-}
-
-bool areSimilar(tf2::Quaternion a, tf2::Quaternion b)
-{
-    double maxDiff = 0.3;
-    return (abs(a.getX() - b.getX()) < maxDiff) && (abs(a.getY() - b.getY()) < maxDiff) && (abs(a.getZ() - b.getZ()) < maxDiff);
 }
 
 int main(int argc, char **argv)
@@ -465,14 +379,6 @@ int main(int argc, char **argv)
             {
                 targetPoint.pose.position = Vector3ToPoint(currentUR16EPose.position + movementPoseDelta.position / UR16E_CONTROL_NUM_SUBDIVISIONS);
 
-                // tf2::Quaternion velocityIncrement, ur16eOrientation, currentTouchOrientation, touchOriginOrientation;
-                // tf2::fromMsg(currentUR16EPoseStamped.pose.orientation, ur16eOrientation);
-                // tf2::fromMsg(currentTouchPoseStamped.pose.orientation, currentTouchOrientation);
-                // tf2::fromMsg(TouchOriginPose.orientation, touchOriginOrientation);
-                // velocityIncrement = currentTouchOrientation * touchOriginOrientation.inverse();
-                // targetPoint.pose.orientation = tf2::toMsg((stylusToRobotRotation * velocityIncrement) * ur16eOrientation);
-                // targetPoint.pose.orientation = StylusRotationToRobotFrame(stylusToRobotRotation, currentTouchPoseStamped.pose.orientation);
-
                 // Only attempt to apply the orientation delta if it is real and non-zero
                 if (IsValidQuaternion(movementPoseDelta.orientation))
                 {
@@ -488,8 +394,6 @@ int main(int argc, char **argv)
                 {
                     targetPoint.pose.orientation = currentUR16EPoseStamped.pose.orientation;
                 }
-                // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Sending UR16e to Pose: %s", PoseToString(targetPoint.pose, 1).c_str());
-                // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Current UR16e Pose: %s", PoseToString(currentUR16EPose.pose, 1).c_str());
 
                 targetPoint.time_from_start = rclcpp::Duration::from_seconds(i * UR16E_CONTROL_TIME_INCREMENT);
 
