@@ -14,9 +14,13 @@
 # Scaled5 / NoBuzzArea, LargeVibrations (position and trajectory only, never velocity), the
 # unfiltered baseline. Tool 3 stays configured, so paths match the 11-03 trajectory leg.
 #
+# Steps 12-14 are the singularity guard test (E6): the scripted stroke of singularity_input.py,
+# guard on x3 then guard off x3, in `final` settings. Works with any tool fitted.
+#
 # Usage:
 #   ./scripts/run_v9b.sh                 # from step 0
 #   ./scripts/run_v9b.sh --from=7        # the no-tool runs
+#   ./scripts/run_v9b.sh --from=12       # the singularity guard test
 #   ./scripts/run_v9b.sh --from=3        # resume at step 3
 #   ./scripts/run_v9b.sh --only=9
 #   ./scripts/run_v9b.sh --dry-run       # print the plan, change nothing
@@ -47,7 +51,7 @@ for arg in "$@"; do
     --from=*) FROM="${arg#*=}" ;;
     --only=*) ONLY="${arg#*=}" ;;
     --dry-run) DRY_RUN=true ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
@@ -363,6 +367,43 @@ step_11() {
   step_6
 }
 
+# Committed, so code_version says which way each run went
+guard_setting() {
+  sed -i "s/^TOUCH_SINGULARITY_GUARD = .*/TOUCH_SINGULARITY_GUARD = $1/" "$PKG/macro_micro_robot/teleop_settings.py"
+  git -C "$PKG" commit -q -m "E6: TOUCH_SINGULARITY_GUARD = $1" -- macro_micro_robot/teleop_settings.py
+  echo ">> $(grep '^TOUCH_SINGULARITY_GUARD' "$PKG/macro_micro_robot/teleop_settings.py")"
+}
+
+# Never leave the guard off
+restore_guard() {
+  if grep -q "^TOUCH_SINGULARITY_GUARD = False" "$PKG/macro_micro_robot/teleop_settings.py"; then
+    guard_setting True
+  fi
+}
+
+singularity_runs() {
+  NDI_OPT=--no-ndi
+  python3 "${SCRIPT_DIR}/singularity_input.py" >/dev/null || die "singularity_input.py failed"
+  say "Guard $1: the arm goes to a high pose (flange ~750 mm up), then swings ~180 mm sideways and back, x3."
+  say "Check the swing is clear. Ctrl+C or the pendant stop if the arm leaves that line or speeds up."
+  $DRY_RUN || start_stack
+  batch "V9b/Singularity/$2" 3 V9b/SingularityInput
+}
+
+step_12() {
+  $DRY_RUN || { "${SCRIPT_DIR}/set_v9_mode.sh" final || die "set_v9_mode.sh failed"; restore_guard; }
+  singularity_runs on GuardOn
+}
+
+step_13() {
+  if $DRY_RUN; then echo "   guard off, restart stack"; else stop_stack; guard_setting False; fi
+  singularity_runs off GuardOff
+}
+
+step_14() {
+  if $DRY_RUN; then echo "   guard back on"; else stop_stack; restore_guard; fi
+}
+
 # --- main --------------------------------------------------------------------------------
 set +u
 source "/opt/ros/${ROS_DISTRO:-jazzy}/setup.bash"
@@ -370,7 +411,7 @@ source "${WS}/install/setup.bash"
 set -u
 
 steps=()
-for n in 0 1 2 3 4 5 6 7 8 9 10 11; do
+for n in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
   if [ -n "$ONLY" ]; then
     [ "$n" = "$ONLY" ] && steps+=("$n")
   elif [ "$n" -ge "$FROM" ]; then
@@ -387,7 +428,7 @@ if $DRY_RUN; then
   exit 0
 fi
 
-trap 'stop_player; stop_stack' EXIT
+trap 'stop_player; stop_stack; restore_guard' EXIT
 trap 'echo; echo ">> Interrupted"; exit 130' INT TERM
 
 STEP="${steps[0]}"

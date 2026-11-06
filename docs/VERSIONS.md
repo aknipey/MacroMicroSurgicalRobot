@@ -2324,3 +2324,9 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
 - **`run_v9b.sh` steps 7-11, no tool and no NDI:** benchmarks, Scaled5, NoBuzzArea in trajectory, position and velocity-optimised,
   LargeVibrations in trajectory and position only, unfiltered Scaled5 at 1:5. Tool 3 stays configured so the paths match the 11-03
   trajectory leg; the flange stays >= 262 mm above the base plane. Results go to `logs/V9b/NoTool/`.
+- **2026-11-06, singularity guard run-off fixed (`SingularityGuard.__call__`):** a scripted stroke into the wrist singularity
+  (`scripts/singularity_input.py`, repeatable with no Touch) showed the guard holding c = 60 but the tool leaving its target with the
+  stylus held past the limit: 609 mm height drop, 155 mm/s, 89 deg/s on the mock. R6.3 only covered the short case. The guard cut q' and mapped
+  it back, so its output could oppose the command. It now cuts the twist, so the output is a part of the command: 0.7 mm, 36 mm/s, 4.8 deg/s,
+  same input, same c limit. Simulation, 15 elbow strokes: 15 failed before, none after. Evidence: `logs/V9b/REPLAYS_2026-11-06.md`,
+  `thesis/planning/analysis/E6_singularity/`. Real arm: `run_v9b.sh --from=12` (guard on x3, off x3; the guard is always restored).

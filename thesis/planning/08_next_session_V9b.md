@@ -11,7 +11,8 @@ Written 2026-11-03 at the end of Session A + V9 part 1. Results so far: `logs/V8
 > the wand is off, use `replay_batch.sh --no-ndi`.
 >
 > **Status 2026-11-06:** steps 0-5 done (`logs/V9b/REPLAYS_2026-11-06.md`). Wand off. Next: `./scripts/run_v9b.sh --from=7` (no tool,
-> no NDI), then micro tip calibration, singularity guard, micro-module demo.
+> no NDI), then micro tip calibration, singularity guard, micro-module demo. No-tool runs done 11-06. Guard run-off fixed on the mock:
+> next real-arm check is `./scripts/run_v9b.sh --from=12` (any tool fitted).
 
 ## Before you start
 - [ ] **Wand and SimpleHolder untouched since 2026-11-03** (tool 3 `V2_holder_only` is only valid then). If

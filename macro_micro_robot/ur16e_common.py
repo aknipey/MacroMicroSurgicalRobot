@@ -301,9 +301,12 @@ class SingularityGuard:
     condition number c = s_max / s_min of the same 6x6 Jacobian Servo uses:
       * c < slow: the twist passes unchanged.
       * above slow: damped least squares (damping grows from 0 to `damping` as s_min
-        falls), so joint speeds stay bounded, and the part of q' that heads into the singularity is
-        scaled down, from none at `slow` to all of it at `stop`. Motion along or away
-        from the singularity is kept, so the tool slides along the boundary.
+        falls), so joint speeds stay bounded, and the part of the twist that heads into the
+        singularity is scaled down, from none at `slow` to all of it at `stop`. Motion along
+        or away from the singularity is kept, so the tool slides along the boundary.
+        The cut is made on the twist, not on q': what is left is then a part of the command,
+        so it can't move the tool against it. Cutting q' could: with the stylus held past
+        the limit, the arm left its target and kept going (2026-11-06, 600 mm down on the mock).
       * above stop: also an escape joint velocity straight away from it (0 at `stop`,
         `escape_gain` rad/s per unit of c/stop - 1, capped at `escape_speed`), so the
         arm settles at c = stop and backs out if it was ever pushed (or started) past it.
@@ -348,7 +351,9 @@ class SingularityGuard:
         # Damped least squares: damping from 0 at c = slow to `damping` at s_min = 0
         threshold = s[0] / self.slow
         damping_sq = self.damping ** 2 * (1.0 - (s[-1] / threshold) ** 2)
-        joint_velocity = vt.T @ ((s / (s ** 2 + damping_sq)) * (u.T @ twist))
+
+        def damped_inverse(tool_twist):
+            return vt.T @ ((s / (s ** 2 + damping_sq)) * (u.T @ tool_twist))
 
         # Joint-space direction away from the singularity: the gradient of
         # m = (sum s_i^-2)^-1/2 (ds_i = u_i^T dJ v_i). m ~ s_min, but stays smooth where
@@ -375,13 +380,16 @@ class SingularityGuard:
             # (J_dls^+)^T g: q' = J_dls^+ v, so dm/dt = g . q' = this . v
             self.twist_gradient = u @ ((s / (s ** 2 + damping_sq)) * (vt @ gradient))
             self.limiting = min(1.0, (self.condition - self.slow) / (self.stop - self.slow))
-            towards = gradient @ joint_velocity
+            towards = self.twist_gradient @ twist
             if towards < 0.0:
-                joint_velocity -= self.limiting * towards / norm_sq * gradient
+                twist = twist - self.limiting * towards / (self.twist_gradient @ self.twist_gradient) * self.twist_gradient
+            joint_velocity = damped_inverse(twist)
             if self.condition > self.stop:
                 speed = min(self.escape_speed, self.escape_gain * (self.condition / self.stop - 1.0))
                 joint_velocity += speed * gradient / np.sqrt(norm_sq)
                 self.escaping = speed > 0.0
+        else:
+            joint_velocity = damped_inverse(twist)
         return jacobian @ joint_velocity
 
 
