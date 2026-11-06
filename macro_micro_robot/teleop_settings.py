@@ -113,7 +113,7 @@ TOUCH_LOOP_DELAY = 0.05
 # is pushed back out (at most ESCAPE_SPEED rad/s), as long as WHITE is held. While it is
 # on, Servo's own all-or-nothing check is moved out of the way (SERVO_SINGULARITY_*_GUARDED).
 # Needs TOUCH_POSE_SOURCE "joint_states". False = off (Servo's check only).
-TOUCH_SINGULARITY_GUARD = True
+TOUCH_SINGULARITY_GUARD = False
 TOUCH_SINGULARITY_SLOW = 30.0
 TOUCH_SINGULARITY_STOP = 60.0
 # Largest damped-least-squares damping (in Jacobian singular value units, ~m). Caps the
