@@ -15,7 +15,6 @@
 
   <!-- Client libraries -->
   <depend>rclcpp</depend>
-  <depend>rclcpp_action</depend>
   <depend>rclpy</depend>
 
   <!-- Message / interface packages -->
@@ -24,7 +23,6 @@
   <depend>sensor_msgs</depend>
   <depend>controller_manager_msgs</depend>
   <depend>omni_msgs</depend>
-  <depend>cartesian_control_msgs</depend>
   <depend>motor_angles_msg</depend>
 
   <!-- Transforms -->

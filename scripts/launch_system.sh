@@ -23,8 +23,7 @@
 #               --with-micro also the micro module: hold GREY 1 s to switch.
 #               Type a tool number + Enter in this terminal to switch tools
 #               (config/tools.yaml; not in RCM mode, robot stationary).
-#   ur16e       Same as ur16e-touch. (Used to run the ROS 1 ur16e_control port,
-#               which needs a Cartesian controller the ROS 2 UR driver lacks.)
+#   ur16e       Same as ur16e-touch.
 #   full        Same as ur16e-touch --with-micro: arm, Touch and micro module.
 #               Needs the Arduino, see --arduino-port.
 #   stop        Stop every process started by a previous run of this script.
@@ -111,7 +110,7 @@ KIN_ARG=()
 [ -n "$CALIBRATION_FILE" ] && KIN_ARG=(kinematics_params_file:="$CALIBRATION_FILE")
 
 usage() {
-  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,53p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 if [ "$MODE" = "help" ] || [ "$MODE" = "-h" ] || [ "$MODE" = "--help" ]; then

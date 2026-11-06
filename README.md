@@ -19,7 +19,6 @@ These go in the same workspace and are not part of this repo:
 |---|---|
 | [Universal_Robots_ROS2_Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) | Arm driver, `ur_moveit_config` |
 | `omni_msgs` | Touch messages, from a ROS 2 Geomagic Touch driver |
-| `cartesian_control_msgs` | Needed by `ur16e_control`; build from source if apt doesn't have it |
 | `motor_angles_msg` | Micro-module messages: a ROS 2 port of [the original](https://github.com/LMBScott/motor_angles_msg/) |
 | [Serial_Control](https://github.com/LMBScott/Serial_Control/) | Micro-module Arduino bridge (`ros2_bridge/`) |
 | [OpenHaptics SDK](https://support.3dsystems.com/s/article/OpenHaptics-for-Linux-Developer-Edition-v34?language=en_US) | `touch_server`; skipped at build time if absent |
@@ -76,7 +75,7 @@ Tuning values live in `macro_micro_robot/teleop_settings.py`. Tools live in `con
 | Path | Contents |
 |---|---|
 | `macro_micro_robot/` | Shared Python: settings, Servo helpers, singularity guard, RCM geometry, haptics |
-| `src/` | Nodes: Touch teleop, keyboard teleop, recorder, player, velocity limiter, UR emulator, Touch driver, micro-module control, legacy `ur16e_control` |
+| `src/` | Nodes: Touch teleop, keyboard teleop, recorder, player, velocity limiter, UR emulator, Touch driver, micro-module control |
 | `include/` | C++ headers |
 | `launch/`, `urdf/`, `meshes/`, `rviz/` | Launch files and the micro-module model |
 | `config/` | Tool library, calibrations, custom URScript |

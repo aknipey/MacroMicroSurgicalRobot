@@ -13,13 +13,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(controller_manager_msgs REQUIRED)
 find_package(omni_msgs REQUIRED)
-find_package(cartesian_control_msgs REQUIRED)
 find_package(motor_angles_msg REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -36,21 +33,6 @@ ament_target_dependencies(pose tf2)
 
 add_library(manipulator_module src/manipulator_module.cpp)
 target_link_libraries(manipulator_module Eigen3::Eigen)
-
-## ur16e_control node
-add_executable(ur16e_control src/ur16e_control.cpp)
-target_link_libraries(ur16e_control pose)
-ament_target_dependencies(ur16e_control
-  rclcpp
-  rclcpp_action
-  geometry_msgs
-  controller_manager_msgs
-  omni_msgs
-  cartesian_control_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
 
 ## micro_module_control node
 add_executable(micro_module_control src/micro_module_control.cpp)
@@ -93,7 +75,6 @@ add_executable(touch_bridge src/touch_bridge.cpp)
 ament_target_dependencies(touch_bridge rclcpp geometry_msgs sensor_msgs omni_msgs)
 
 install(TARGETS
-  ur16e_control
   micro_module_control
   touch_bridge
   ur_calibration_extract
