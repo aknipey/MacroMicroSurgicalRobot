@@ -235,7 +235,7 @@ wait_for_topic() {
     waited=$((waited + 1))
     if [ "$waited" -ge "$timeout" ]; then
       echo "   WARNING: timed out waiting for ${topic} - continuing anyway." >&2
-      return 1
+      return 0
     fi
   done
   echo "   ${topic} is up."
@@ -250,7 +250,7 @@ wait_for_service() {
     waited=$((waited + 1))
     if [ "$waited" -ge "$timeout" ]; then
       echo "   WARNING: timed out waiting for ${service} - continuing anyway." >&2
-      return 1
+      return 0
     fi
   done
   echo "   ${service} is up."
