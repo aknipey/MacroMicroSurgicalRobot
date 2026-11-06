@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>Teleoperation of a UR16e arm and a continuum micro-manipulator with a Touch haptic stylus.</description>
 
-  <maintainer email="z5207471@student.unsw.edu.au">z5207471@student.unsw.edu.au</maintainer>
+  <maintainer email="z5418749@student.unsw.edu.au">Aidan Knipe</maintainer>
 
   <license>MIT</license>
   <license>BSD-3-Clause</license>
