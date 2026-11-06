@@ -39,17 +39,14 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory
 
-from macro_micro_robot.ur16e_common import EMULATOR_POSITION_TOPIC, EMULATOR_TRAJECTORY_TOPIC, EMULATOR_VELOCITY_TOPIC
+from macro_micro_robot.ur16e_common import (
+    EMULATOR_POSITION_TOPIC,
+    EMULATOR_TRAJECTORY_TOPIC,
+    EMULATOR_VELOCITY_TOPIC,
+    SERVO_POSITION_TOPIC,
+    UR_JOINTS,
+)
 
-UR_JOINTS = [
-    "shoulder_pan_joint",
-    "shoulder_lift_joint",
-    "elbow_joint",
-    "wrist_1_joint",
-    "wrist_2_joint",
-    "wrist_3_joint",
-]
-OUTPUT_TOPIC = "/forward_position_controller/commands"
 
 
 class UrEmulator(Node):
@@ -60,11 +57,11 @@ class UrEmulator(Node):
         self.declare_parameter("tau", 0.015)                # s, position mode
         self.declare_parameter("accel_limit", 40.0)         # rad/s^2, velocity mode
         self.declare_parameter("velocity_tau", 0.0)         # s, velocity mode
-        p = lambda name: self.get_parameter(name).value
-        self.dead_time = p("dead_time")
-        self.tau = p("tau")
-        self.accel_limit = p("accel_limit")
-        self.velocity_tau = p("velocity_tau")
+        param = lambda name: self.get_parameter(name).value
+        self.dead_time = param("dead_time")
+        self.tau = param("tau")
+        self.accel_limit = param("accel_limit")
+        self.velocity_tau = param("velocity_tau")
 
         self.q = None                   # emulated joint positions
         self.qd = np.zeros(6)           # emulated joint velocities (velocity mode)
@@ -77,12 +74,12 @@ class UrEmulator(Node):
         self.sent = deque()             # (time s, positions) recently sent to the mock joints
         self.overridden = False         # another controller is moving the mock joints
 
-        self.output = self.create_publisher(Float64MultiArray, OUTPUT_TOPIC, 10)
+        self.output = self.create_publisher(Float64MultiArray, SERVO_POSITION_TOPIC, 10)
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
         self.create_subscription(JointTrajectory, EMULATOR_TRAJECTORY_TOPIC, self.on_trajectory, 10)
         self.create_subscription(Float64MultiArray, EMULATOR_VELOCITY_TOPIC, self.on_velocity, 10)
         self.create_subscription(Float64MultiArray, EMULATOR_POSITION_TOPIC, self.on_position, 10)
-        self.create_timer(1.0 / p("rate"), self.step)
+        self.create_timer(1.0 / param("rate"), self.step)
         self.get_logger().info(
             f"Emulating the UR: dead time {self.dead_time * 1000:.0f} ms, position lag {self.tau * 1000:.0f} ms, "
             f"velocity mode {self.accel_limit:g} rad/s^2, velocity lag {self.velocity_tau * 1000:.0f} ms")
