@@ -17,7 +17,6 @@ find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(visualization_msgs REQUIRED)
 find_package(controller_manager_msgs REQUIRED)
 find_package(omni_msgs REQUIRED)
 find_package(cartesian_control_msgs REQUIRED)
@@ -66,17 +65,6 @@ ament_target_dependencies(micro_module_control
   tf2_geometry_msgs
 )
 
-## android_pose_subscriber node
-add_executable(android_pose_subscriber src/android_pose_subscriber.cpp)
-ament_target_dependencies(android_pose_subscriber
-  rclcpp
-  geometry_msgs
-  visualization_msgs
-  omni_msgs
-  tf2
-  tf2_geometry_msgs
-)
-
 ## ur_calibration_extract: reads the arm's factory calibration into a kinematics_params_file.
 ## Replaces the driver's ur_calibration, which in our 3.8.0 checkout never connects and writes wrong
 ## link rotations (docs/UR_CALIBRATION_FIX.md). vendor/ur_calibration = byte-identical upstream sources.
@@ -107,7 +95,6 @@ ament_target_dependencies(touch_bridge rclcpp geometry_msgs sensor_msgs omni_msg
 install(TARGETS
   ur16e_control
   micro_module_control
-  android_pose_subscriber
   touch_bridge
   ur_calibration_extract
   DESTINATION lib/${PROJECT_NAME}
@@ -115,7 +102,6 @@ install(TARGETS
 
 ## Python nodes
 install(PROGRAMS
-  src/android_pose_publisher.py
   src/ur16e_keyboard_teleop.py
   src/ur16e_touch_teleop.py
   src/trajectory_recorder.py

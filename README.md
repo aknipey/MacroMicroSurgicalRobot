@@ -76,7 +76,7 @@ Tuning values live in `macro_micro_robot/teleop_settings.py`. Tools live in `con
 | Path | Contents |
 |---|---|
 | `macro_micro_robot/` | Shared Python: settings, Servo helpers, singularity guard, RCM geometry, haptics |
-| `src/` | Nodes: Touch teleop, keyboard teleop, recorder, player, velocity limiter, UR emulator, Touch driver, micro-module control, legacy ROS 1 ports |
+| `src/` | Nodes: Touch teleop, keyboard teleop, recorder, player, velocity limiter, UR emulator, Touch driver, micro-module control, legacy `ur16e_control` |
 | `include/` | C++ headers |
 | `launch/`, `urdf/`, `meshes/`, `rviz/` | Launch files and the micro-module model |
 | `config/` | Tool library, calibrations, custom URScript |
