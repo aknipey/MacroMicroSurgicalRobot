@@ -49,6 +49,7 @@ for arg in "$@"; do
 done
 
 STACK_PID=""
+PLAYER_PID=""
 POSE_FILE=""
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -195,6 +196,31 @@ keep_recording() {
   summarise "V9b/${name}"
 }
 
+program_stopped() {
+  local state
+  state="$(timeout 4 ros2 topic echo --once --field data --qos-durability transient_local \
+           --qos-reliability reliable "$PROGRAM_TOPIC" std_msgs/msg/Bool 2>/dev/null | head -1)"
+  [ "${state,,}" = "false" ]
+}
+
+# The recorder start can stall the control loop long enough to stop External Control, and a
+# trajectory left waiting then jumps to catch up when Play is pressed (2026-11-06: 170 mm in
+# 2.5 s). So check after the stall, and stop everything if the program drops while it plays.
+stop_player() {
+  [ -n "$PLAYER_PID" ] || return 0
+  kill -INT -- "-${PLAYER_PID}" 2>/dev/null
+  sleep 2
+  kill -KILL -- "-${PLAYER_PID}" 2>/dev/null
+  PLAYER_PID=""
+}
+
+pose_failed() {
+  stop_player
+  recorder stop
+  mv "${LOGS}/NEW_RUN" "${LOGS}/V9b/$1_INCOMPLETE_$(date +%H%M%S)" 2>/dev/null
+  die "$2 Kept as logs/V9b/$1_INCOMPLETE_*. The stack stops now: don't press Play, run with --from=${STEP}."
+}
+
 pose_run() {
   local name="$1"
   if $DRY_RUN; then echo "   record logs/V9b/${name}: 112 s between the latch and working poses"; return 0; fi
@@ -202,9 +228,26 @@ pose_run() {
   [ -n "$POSE_FILE" ] || POSE_FILE="$(python3 "${SCRIPT_DIR}/pose_offset_motion.py")" || die "pose_offset_motion.py failed"
   stack_alive || start_stack
   recorder start
-  sleep 2
-  ros2 run macro_micro_robot trajectory_player.py "$POSE_FILE" --approach-time 15 \
-    || { recorder stop; mv "${LOGS}/NEW_RUN" "${LOGS}/V9b/${name}_INCOMPLETE" 2>/dev/null; die "The pose motion stopped early (kept as logs/V9b/${name}_INCOMPLETE)."; }
+  sleep 8
+  program_stopped && pose_failed "$name" "External Control stopped when the recording started."
+  ask_continue "The arm moves now: 15 s approach, then 112 s."
+  program_stopped && pose_failed "$name" "External Control stopped before the motion."
+
+  local out="${STACK_LOG_DIR}/${name}_player_$(date +%H%M%S).log"
+  mkdir -p "$STACK_LOG_DIR"
+  set -m
+  ros2 run macro_micro_robot trajectory_player.py "$POSE_FILE" --approach-time 15 --yes >"$out" 2>&1 </dev/null &
+  PLAYER_PID=$!
+  set +m
+  while kill -0 "$PLAYER_PID" 2>/dev/null; do
+    program_stopped && pose_failed "$name" "External Control stopped during the motion."
+    sleep 1
+  done
+  wait "$PLAYER_PID"
+  PLAYER_PID=""
+  tail -2 "$out"
+  # trajectory_player.py exits 0 even when the trajectory fails
+  grep -q "Trajectory complete" "$out" || pose_failed "$name" "The motion did not finish."
   sleep 2
   recorder stop
   keep_recording "$name"
@@ -216,7 +259,7 @@ step_0() {
   batch V9b/PositionBridge 2 V7/SlowCheckingRCMSimpleHolder V7/RCMOnlySimpleHolder:--rcm
   $DRY_RUN && return 0
   python3 - "${LOGS}/V9b/PositionBridge" "$BRIDGE_SLOW" "$BRIDGE_RCM" "$BRIDGE_TOLERANCE" <<'EOF' \
-    || ask_continue "Bridge run does NOT match 11-03: something moved, the hand-eye needs redoing (see 08_next_session_V9b.md). Carry on anyway?"
+    || ask_continue "Bridge run differs from 11-03. Check RCMOnly first: if it still matches, this is the camera (SlowChecking changes with it) and the hand-eye is fine. Carry on?"
 import glob, os, sys, yaml
 folder, slow, rcm, tolerance = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4])
 ok = True
@@ -299,7 +342,7 @@ if $DRY_RUN; then
   exit 0
 fi
 
-trap 'stop_stack' EXIT
+trap 'stop_player; stop_stack' EXIT
 trap 'echo; echo ">> Interrupted"; exit 130' INT TERM
 
 STEP="${steps[0]}"
