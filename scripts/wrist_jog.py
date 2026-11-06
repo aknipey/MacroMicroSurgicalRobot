@@ -39,6 +39,7 @@ WRISTS = [3, 4, 5]  # indices into JOINTS
 SAMPLE_RATE = 50.0  # Hz; the player keeps points >= PLAYER_MIN_POINT_SPACING (0.04 s) apart
 PAUSE = 1.0         # s at rest after each wrist
 MAX_AMPLITUDE_DEG = 45.0
+MAX_WRIST3_AMPLITUDE_DEG = 120.0
 MAX_PEAK_SPEED_DEG = 30.0
 OUT_DIR = os.path.expanduser("~/ros2_ws/trajectories")
 
@@ -61,7 +62,7 @@ def current_joints(timeout=5.0):
     return [latest[j] for j in JOINTS]
 
 
-def build_samples(start, amplitude, period, passes):
+def build_samples(start, amplitude, period, passes, amplitudes=None):
     samples = []
     t = 0.0
     dt = 1.0 / SAMPLE_RATE
@@ -73,10 +74,12 @@ def build_samples(start, amplitude, period, passes):
     add(start)
     for _ in range(passes):
         for w in WRISTS:
-            for k in range(1, int(round(period * SAMPLE_RATE)) + 1):
+            a = (amplitudes or {}).get(w, amplitude)
+            span = period * a / amplitude       # same peak speed for a wider joint
+            for k in range(1, int(round(span * SAMPLE_RATE)) + 1):
                 t += dt
                 q = list(start)
-                q[w] += amplitude * math.sin(2 * math.pi * k * dt / period)
+                q[w] += a * math.sin(2 * math.pi * k * dt / span)
                 add(q)
             t += PAUSE
             add(start)
@@ -88,6 +91,8 @@ def main():
     ap.add_argument("--amplitude", type=float, default=30.0, help="deg each way (default 30)")
     ap.add_argument("--period", type=float, default=14.0, help="s per wrist, out and back both ways (default 14)")
     ap.add_argument("--passes", type=int, default=2, help="times through wrists 1-2-3 (default 2)")
+    ap.add_argument("--wrist3-amplitude", type=float, help="deg each way for wrist 3, at the same peak speed "
+                    "(to turn a tool about its shaft; default: --amplitude). Check the cables first")
     args = ap.parse_args()
 
     peak = args.amplitude * 2 * math.pi / args.period
@@ -98,8 +103,14 @@ def main():
     if args.passes < 2:
         print("Warning: with one pass wand_tool_calibration.py can't check the two halves agree")
 
+    wide = {}
+    if args.wrist3_amplitude is not None:
+        if not 0 < args.wrist3_amplitude <= MAX_WRIST3_AMPLITUDE_DEG:
+            sys.exit(f"--wrist3-amplitude must be in (0, {MAX_WRIST3_AMPLITUDE_DEG:g}] deg")
+        wide = {5: math.radians(args.wrist3_amplitude)}
+
     start = current_joints()
-    samples, duration = build_samples(start, math.radians(args.amplitude), args.period, args.passes)
+    samples, duration = build_samples(start, math.radians(args.amplitude), args.period, args.passes, wide)
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, time.strftime("wrist_jog_%Y%m%d_%H%M%S.yaml"))
     with open(path, "w") as f:

@@ -4,7 +4,7 @@
 # that segment can be the RCM point). Edit by hand or with
 #   ros2 run macro_micro_robot tool_library.py add|remove|default ...
 # The teleop re-reads this file on every tool switch.
-default: 3
+default: 2
 tools:
   1:
     name: NDI wand 8700340
@@ -17,16 +17,16 @@ tools:
       marker (wand geometry), not measured
   2:
     name: Micro module
-    tip_tool0_mm: [-8.69, 17.015, 435.955]
-    direction_tool0: [-0.019914, 0.038992, 0.999041]
-    shaft_length_mm: 200.0
-    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/micro_tip_2026-10-30_144004.json
-    date: '2026-10-30'
-    notes: Single NDI ball on the micro tip, module at rest, no wand (scripts/tip_ball_calibration.py,
-      raw config/calibrations/raw/micro_tip_2026-10-30_144002.npz). Tip = mean of
-      the two half-run fits (-8.83, 16.98, 436.76) and (-8.55, 17.05, 435.15) mm;
-      +-1.5 mm (UR16e factory kinematics). Direction tool0 origin -> tip. RCM shaft
-      200 mm.
+    tip_tool0_mm: [-6.4118, 15.5564, 436.2815]
+    direction_tool0: [0.001312, 0.029301, 0.99957]
+    shaft_length_mm: 267.3
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/micro_tool_2026-11-06_134732.json
+    date: '2026-11-06'
+    notes: Four NDI dots, two opposite pairs at the shaft base and metal end, hand-moved
+      120 s, calibrated kinematics (scripts/micro_tool_calibration.py, raw config/calibrations/raw/micro_tool_2026-11-06_134120.npz).
+      Tip = metal end + 21.8 mm (measured) along the shaft, continuum section assumed
+      straight. Length = shaft base to tip. Dot pair gaps checked by the user with
+      calipers.
   3:
     name: V2_holder_only
     tip_tool0_mm: [-1.006, 16.3366, 324.9883]

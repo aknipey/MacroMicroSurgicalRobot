@@ -2333,3 +2333,10 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
 - **2026-11-06, E6 on the real arm (3 replays each, same scripted input):** guard on: c 60.4, returned to 0.6 mm, 4.5 deg/s. Guard off: c 204,
   Servo emergency stop, and the arm could not leave (172 mm from the start, 3 of 3). The mock returned with the guard off, so this needed the arm.
   `logs/V9b/REPLAYS_2026-11-06.md`, `logs/V9b/Singularity/METRICS.csv`.
+- **2026-11-06, exchange protocol confirmed by the user:** 30 s still, 20 swaps (wand moved out of view, lever closed fully, 5 s seated),
+  30 s still. Matches the 21 still segments in each `logs/Exchange` set, so R8.2 no longer rests on an inferred protocol and RD4 needs
+  no redo for coupling repeatability. Written up in `logs/Exchange/PROTOCOL.md`.
+- **2026-11-06, micro module recalibrated (`scripts/micro_tool_calibration.py`, tool 2):** four dots, two opposite pairs, so the shaft axis comes from the
+  midpoints and no frame needs every dot. Each dot is fitted as a point fixed in tool0 with base -> camera. Tip (-6.41, 15.56, 436.28) mm, 1.68 deg off tool0 z,
+  through the calibrated kinematics; the 10-30 entry used the nominal model. Tip = metal end + 21.8 mm measured, continuum section assumed straight.
+  `wrist_jog.py --wrist3-amplitude` added to turn a tool about its shaft. Details: `logs/V9b/REPLAYS_2026-11-06.md`.
