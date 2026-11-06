@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import rclpy
-from rclpy.node import Node
 import websocket
 import json
 from geometry_msgs.msg import PoseStamped

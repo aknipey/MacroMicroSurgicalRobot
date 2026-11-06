@@ -71,7 +71,7 @@ class JointSpaceGuard(SingularityGuard):
 
 def run(cls,q0,target,T,dt=0.004,delay=3,qcap=2.0,guardon=True):
     G=cls(Jf,30,60,0.05,1.0,0.2); q=np.array(q0,float); p0,R0=pose(q)
-    log=[];buf=[np.zeros(6)]*delay; pprev=target(0)
+    log=[];buf=[np.zeros(6)]*delay
     for k in range(int(T/dt)):
         t=k*dt; tp=target(t); v_ff=(target(t+dt)-tp)/dt
         p,R=pose(q); e=tp-p; lin=v_ff+(lambda x:x*min(1,.05/max(np.linalg.norm(x),1e-12)))(8*e)

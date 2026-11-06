@@ -1,7 +1,7 @@
 # Lift test for the Touch: see README.md in this folder.
 """Lift test through the real omni_state driver: ramps force.z (up in /phantom/state axes)
 to the given N, holds 1.2 s, and reports how far the pen rose."""
-import sys, time, numpy as np, rclpy
+import sys, time, rclpy
 from omni_msgs.msg import OmniFeedback, OmniState
 peak = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
 rclpy.init(); n = rclpy.create_node("ros_lift")

@@ -420,7 +420,6 @@ def analyse(r, extension, measured_span=None):
     side -= np.sum(side * shaft, axis=1, keepdims=True) * shaft
     side /= np.linalg.norm(side, axis=1, keepdims=True)
     ref = side[0]
-    reference_up = shaft[0]
     roll = np.degrees(np.arctan2(np.sum(np.cross(ref, side) * shaft, axis=1), side @ ref))
     roll_range = float(np.ptp(np.unwrap(np.radians(roll))) * 180 / np.pi)
 

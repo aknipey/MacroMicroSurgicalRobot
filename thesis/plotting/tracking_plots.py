@@ -17,7 +17,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
-from common import CONDITIONS, GRID, INK, INK2, MUTED, OUT, PKG, SETS, all_runs, legend_handles, save, style
+from common import CONDITIONS, GRID, INK2, MUTED, OUT, PKG, SETS, all_runs, legend_handles, save, style
 
 sys.path.insert(0, os.path.join(PKG, 'scripts'))
 import plot_paths  # noqa: E402

@@ -19,7 +19,6 @@ from scipy.spatial.transform import Rotation as Rot
 from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions, StorageFilter
 from rclpy.serialization import deserialize_message
 from geometry_msgs.msg import PointStamped
-from std_msgs.msg import Bool
 sys.path.insert(0, '/home/aidan-knipe/ros2_ws/src/ndi_tracking')
 from ndi_tracking.calib import ToolCalibration
 
