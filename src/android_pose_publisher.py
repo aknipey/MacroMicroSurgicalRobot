@@ -5,6 +5,7 @@ import json
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 
+
 class SensorDataClient():
     def __init__(self, node, url):
         self.node = node
@@ -20,7 +21,9 @@ class SensorDataClient():
         pose_stamped.pose.orientation.x = message_dict['values'][0]
         pose_stamped.pose.orientation.y = message_dict['values'][1]
         pose_stamped.pose.orientation.z = message_dict['values'][2]
-        self.node.get_logger().info(f"Publishing pose: w: {pose_stamped.pose.orientation.w}, x: {pose_stamped.pose.orientation.x}, y: {pose_stamped.pose.orientation.y}, z: {pose_stamped.pose.orientation.z}")
+        orientation = pose_stamped.pose.orientation
+        self.node.get_logger().info(
+            f"Publishing pose: w: {orientation.w}, x: {orientation.x}, y: {orientation.y}, z: {orientation.z}")
         self.publisher.publish(pose_stamped)
         test_msg = String()
         test_msg.data = "test"
@@ -39,8 +42,10 @@ class SensorDataClient():
 
     def connect(self):
         self.node.get_logger().info("Connecting...")
-        ws = websocket.WebSocketApp(self.url, on_open=self.on_open, on_message=self.on_message, on_error=self.on_error, on_close=self.on_close)
+        ws = websocket.WebSocketApp(self.url, on_open=self.on_open, on_message=self.on_message,
+                                    on_error=self.on_error, on_close=self.on_close)
         ws.run_forever()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -49,6 +54,7 @@ def main(args=None):
     data_client.connect()
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

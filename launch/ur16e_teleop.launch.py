@@ -279,7 +279,8 @@ def generate_launch_description():
 
     servo = OpaqueFunction(function=start_servo)
 
-    ur_emulator = package_node("ur_emulator.py", "ur_emulator", condition=IfCondition(LaunchConfiguration("emulate_ur")))
+    ur_emulator = package_node("ur_emulator.py", "ur_emulator",
+                               condition=IfCondition(LaunchConfiguration("emulate_ur")))
 
     recorder = Node(
         package="macro_micro_robot",
@@ -330,4 +331,7 @@ def generate_launch_description():
         )],
     )
 
-    return LaunchDescription(args + [OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, ur_emulator, recorder, rviz, touch_driver, touch_teleop, stylus_replay])
+    return LaunchDescription(args + [
+        OpaqueFunction(function=_set_quiet), ur_driver, moveit, wait_robot_description, servo, ur_emulator, recorder,
+        rviz, touch_driver, touch_teleop, stylus_replay,
+    ])

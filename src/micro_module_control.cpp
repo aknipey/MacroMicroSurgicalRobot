@@ -282,12 +282,10 @@ Eigen::MatrixXd GetInverseJacobianDamped(
 {
     Eigen::Matrix4d jointLimitWeights = Eigen::Matrix4d::Identity();
 
-    double minAngle, maxAngle;
-
     for (int i = 0; i < jointPositions.size(); i++)
     {
-        minAngle = minJointAngles(i);
-        maxAngle = maxJointAngles(i);
+        const double minAngle = minJointAngles(i);
+        const double maxAngle = maxJointAngles(i);
 
         jointLimitWeights(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
     }

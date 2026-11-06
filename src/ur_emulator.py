@@ -48,7 +48,6 @@ from macro_micro_robot.ur16e_common import (
 )
 
 
-
 class UrEmulator(Node):
     def __init__(self):
         super().__init__("ur_emulator")
@@ -57,7 +56,10 @@ class UrEmulator(Node):
         self.declare_parameter("tau", 0.015)                # s, position mode
         self.declare_parameter("accel_limit", 40.0)         # rad/s^2, velocity mode
         self.declare_parameter("velocity_tau", 0.0)         # s, velocity mode
-        param = lambda name: self.get_parameter(name).value
+
+        def param(name):
+            return self.get_parameter(name).value
+
         self.dead_time = param("dead_time")
         self.tau = param("tau")
         self.accel_limit = param("accel_limit")

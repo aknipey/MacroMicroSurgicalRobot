@@ -431,7 +431,6 @@ class TrajectoryRecorder(Node):
             return "killed - may be incomplete (see rosbag.log)"
         return "ok"
 
-
     def on_stylus(self, msg):
         if self.logs:
             pose = msg.pose

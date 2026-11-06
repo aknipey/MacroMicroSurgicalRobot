@@ -381,7 +381,8 @@ class SingularityGuard:
             self.limiting = min(1.0, (self.condition - self.slow) / (self.stop - self.slow))
             towards = self.twist_gradient @ twist
             if towards < 0.0:
-                twist = twist - self.limiting * towards / (self.twist_gradient @ self.twist_gradient) * self.twist_gradient
+                gradient_sq = self.twist_gradient @ self.twist_gradient
+                twist = twist - self.limiting * towards / gradient_sq * self.twist_gradient
             joint_velocity = damped_inverse(twist)
             if self.condition > self.stop:
                 speed = min(self.escape_speed, self.escape_gain * (self.condition / self.stop - 1.0))

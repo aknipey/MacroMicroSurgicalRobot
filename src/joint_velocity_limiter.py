@@ -84,7 +84,10 @@ class JointVelocityLimiter(Node):
         self.declare_parameter("output", "velocity")        # or "position"
         self.declare_parameter("lead", cfg.SERVO_POSITION_LEAD)                 # s, position output
         self.declare_parameter("max_position_error", cfg.SERVO_POSITION_MAX_ERROR)     # rad, position output
-        param = lambda name: self.get_parameter(name).value
+
+        def param(name):
+            return self.get_parameter(name).value
+
         self.position_output = param("output") == "position"
         if param("output") not in ("velocity", "position"):
             raise ValueError(f"output must be 'velocity' or 'position', not {param('output')!r}")
@@ -94,7 +97,8 @@ class JointVelocityLimiter(Node):
         self.speed_fraction = param("speed_fraction")
         self.max_acceleration = np.array(param("max_acceleration"), dtype=float)
         if self.max_acceleration.shape != (len(UR_JOINTS),) or np.any(self.max_acceleration <= 0.0):
-            raise ValueError(f"max_acceleration needs {len(UR_JOINTS)} positive values, not {param('max_acceleration')}")
+            raise ValueError(f"max_acceleration needs {len(UR_JOINTS)} positive values, "
+                             f"not {param('max_acceleration')}")
         smoothing = param("smoothing")
         if smoothing < 0.0:
             raise ValueError(f"smoothing must be >= 0, not {smoothing}")

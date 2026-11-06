@@ -297,7 +297,9 @@ class TouchTeleop(Node):
 
         self.declare_parameters_with_defaults()
 
-        param = lambda name: self.get_parameter(name).value
+        def param(name):
+            return self.get_parameter(name).value
+
         self.base_frame = param("base_frame")
         self.ee_frame = param("ee_frame")
         self.mapping = param("mapping")
@@ -362,7 +364,8 @@ class TouchTeleop(Node):
         if param("singularity_guard"):
             if self.pose_source == "joint_states":
                 self.singularity_guard = SingularityGuard(
-                    self.jacobian_at, param("singularity_slow"), param("singularity_stop"), param("singularity_damping"),
+                    self.jacobian_at, param("singularity_slow"), param("singularity_stop"),
+                    param("singularity_damping"),
                     param("singularity_escape_gain"), param("singularity_escape_speed"))
             else:
                 self.get_logger().warn("singularity_guard needs pose_source 'joint_states' - "
