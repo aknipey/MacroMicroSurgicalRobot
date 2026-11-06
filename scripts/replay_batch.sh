@@ -8,8 +8,9 @@
 # stops at the first one without it (LOG_REQUIRE_NDI is off, so nothing else would).
 #
 # Usage:
-#   ./scripts/replay_batch.sh [--dest=V8] [--repeats=3] [run[:--rcm] ...]
+#   ./scripts/replay_batch.sh [--dest=V8] [--repeats=3] [--no-ndi] [run[:--rcm] ...]
 #
+#   --no-ndi for runs with no markers on the tool: skips the tracker checks
 #   run      folder relative to logs/, e.g. V7/FastCheckingRCMSimpleHolder;
 #            append :--rcm for runs recorded with RCM mode already on
 #   default  the four V7 SimpleHolder originals (as replayed on 2026-10-26)
@@ -23,13 +24,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS="$(cd "${SCRIPT_DIR}/../logs" && pwd)"
 DEST="V8"
 REPEATS=3
+REQUIRE_NDI=true
 RUNS=()
 
 for arg in "$@"; do
   case "$arg" in
     --dest=*) DEST="${arg#*=}" ;;
     --repeats=*) REPEATS="${arg#*=}" ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --no-ndi) REQUIRE_NDI=false ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "Unknown option: $arg" >&2; exit 1 ;;
     *) RUNS+=("$arg") ;;
   esac
@@ -56,7 +59,7 @@ for spec in "${RUNS[@]}"; do
   run="${spec%%:*}"
   [ -f "${LOGS}/${run}/STYLUS_RAW.csv" ] || { echo "No STYLUS_RAW.csv in logs/${run}" >&2; exit 1; }
 done
-if ! ros2 node list 2>/dev/null | grep -q "/ndi_tracking"; then
+if $REQUIRE_NDI && ! ros2 node list 2>/dev/null | grep -q "/ndi_tracking"; then
   echo "NDI tracker not seen on ROS (domain ${ROS_DOMAIN_ID:-0}). Start it first:" >&2
   echo "  cd ~/ros2_ws/src/ndi_tracking && python3 -m ndi_tracking run" >&2
   exit 1
@@ -85,9 +88,15 @@ for spec in "${RUNS[@]}"; do
       echo "!!! The replay did not finish with a saved recording - stopping the batch." >&2
       break 2
     fi
-    if [ ! -s "${LOGS}/NEW_RUN/NDI_PATH.csv" ]; then
+    # NDI_PATH.csv has a row per frame even when nothing is tracked (the 11-03 Scaled5_Slow
+    # replay had 0 % visible): check the visible column, not just that the file has data
+    visible_pct=0
+    if [ -s "${LOGS}/NEW_RUN/NDI_PATH.csv" ]; then
+      visible_pct=$(awk -F, 'NR > 1 { n++; v += $4 } END { print (n ? int(100 * v / n) : 0) }' "${LOGS}/NEW_RUN/NDI_PATH.csv")
+    fi
+    if $REQUIRE_NDI && [ "$visible_pct" -lt 95 ]; then
       mv "${LOGS}/NEW_RUN" "${target}_NO_NDI"
-      echo "!!! No NDI data in this replay (kept as ${DEST}/${name}_Replay${n}_NO_NDI) - stopping the batch." >&2
+      echo "!!! Wand tracked for only ${visible_pct} % of this replay (kept as ${DEST}/${name}_Replay${n}_NO_NDI) - stopping the batch." >&2
       echo "    Check the tracker sees the wand, then run the batch again." >&2
       break 2
     fi

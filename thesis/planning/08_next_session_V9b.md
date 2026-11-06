@@ -3,6 +3,13 @@
 Written 2026-11-03 at the end of Session A + V9 part 1. Results so far: `logs/V8/CalibratedKinematics/REPLAYS_2026-11-03.md`,
 `logs/V9/REPLAYS_2026-11-03.md`. Every step below keeps the tool tip ≥ 48 mm above the robot base plane.
 
+> **Changed 2026-11-06: run the wand + NDI part with `./scripts/run_v9b.sh` (`--dry-run` shows it). RCM runs only.**
+> The tracked `Scaled5_*` and `NoBuzzArea` runs in the table below are dropped: wrist 3 ~135 deg turns the markers
+> ~110 deg away from a camera that sees the RCM runs (0 % NDI on the 11-03 `Scaled5_Slow` replay; `replay_batch.sh`
+> passed it because it only checked the file was not empty, and now needs 95 % visible). So E2 (NDI tip vibration)
+> and the tracked half of RD2 are not measured. The runner adds the pose-offset test from the E0 `RESULTS.md`. After
+> the wand is off, use `replay_batch.sh --no-ndi`.
+
 ## Before you start
 - [ ] **Wand and SimpleHolder untouched since 2026-11-03** (tool 3 `V2_holder_only` is only valid then). If
       either moved: redo the hand-eye first (*Hand-eye* below).

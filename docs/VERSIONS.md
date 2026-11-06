@@ -2310,3 +2310,8 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   `thesis/planning/08_next_session_V9b.md`. Settings set back to `final` (position, smooth speedj, exponent
   1.0) until then. The failed 09:26 and cut-off 09:34 hand-eye fits are kept in `config/calibrations/` for
   the method chapter.
+- **2026-11-06, `scripts/run_v9b.sh` + `scripts/pose_offset_motion.py`:** runs the remaining wand + NDI runs (RCM only):
+  bridge, unfiltered RCMOnly, optimised RCM set, static floor, pose-offset test at two camera places. Tracked
+  `Scaled5_*` / `NoBuzzArea` runs dropped: at their wrist 3 angle (~135 deg) the markers point ~110 deg away from a camera
+  that sees the RCM runs (11-03 `Scaled5_Slow_Replay1`: 0 of 1166 NDI rows visible). `replay_batch.sh` only checked that
+  `NDI_PATH.csv` was not empty, so it passed that run: it now needs 95 % visible, and `--no-ndi` is for tools without markers.
