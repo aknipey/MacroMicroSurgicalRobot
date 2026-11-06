@@ -1,4 +1,4 @@
-#include "../include/ManipulatorModule.hpp"
+#include "macro_micro_robot/manipulator_module.hpp"
 
 ManipulatorModule::ManipulatorModule(bool isFirstJointPan, double diameter, double halfCurvatureAngle, int numJoints, double jointSeparationDistance)
 {

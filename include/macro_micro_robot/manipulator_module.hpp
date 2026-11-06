@@ -1,5 +1,5 @@
-#ifndef MANIPULATOR_MODULE
-#define MANIPULATOR_MODULE
+#pragma once
+
 #include <Eigen/Dense>
 
 class ManipulatorModule
@@ -52,4 +52,3 @@ private:
     Eigen::Matrix4d CalculateTiltJointTransform();
     double CalculateIsolatedLengthDelta(bool isLeftTendon, int numPrimaryJoints, int numSecondaryJoints, double primaryJointAngle, double secondaryJointAngle);
 };
-#endif

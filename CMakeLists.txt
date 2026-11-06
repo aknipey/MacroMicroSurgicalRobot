@@ -38,10 +38,10 @@ find_package(yaml_cpp_vendor REQUIRED)
 include_directories(include)
 
 ## Helper libraries (pure C++ / Eigen / tf2, no ROS API)
-add_library(pose src/Pose.cpp)
+add_library(pose src/pose.cpp)
 ament_target_dependencies(pose tf2)
 
-add_library(manipulator_module src/ManipulatorModule.cpp)
+add_library(manipulator_module src/manipulator_module.cpp)
 target_link_libraries(manipulator_module Eigen3::Eigen)
 
 ## ur16e_control node

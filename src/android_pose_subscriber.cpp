@@ -202,7 +202,7 @@ int main(int argc, char **argv)
         }
     );
 
-    auto vis_pub = node->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", rclcpp::QoS(10));
+    auto markerPublisher = node->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", rclcpp::QoS(10));
 
     visualization_msgs::msg::Marker marker;
     marker.header.frame_id = "base_link";
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
     marker.color.r = 0.0;
     marker.color.g = 1.0;
     marker.color.b = 0.0;
-    vis_pub->publish(marker);
+    markerPublisher->publish(marker);
 
     marker.action = visualization_msgs::msg::Marker::MODIFY;
 
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
             geometry_msgs::msg::Quaternion newOrientation = tf2::toMsg((currentAngularVelocity * 1e-5 * markerOrientation).normalize());
             RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "New marker orientation: %s", QuaternionToString(newOrientation).c_str());
             marker.pose.orientation = newOrientation;
-            vis_pub->publish(marker);
+            markerPublisher->publish(marker);
 
             currentAngularVelocity.setX(0);
             currentAngularVelocity.setY(0);

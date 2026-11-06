@@ -10,8 +10,8 @@
 #include "omni_msgs/msg/omni_button_event.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include "../include/ManipulatorModule.hpp"
-#include "../include/Pose.hpp"
+#include "macro_micro_robot/manipulator_module.hpp"
+#include "macro_micro_robot/pose.hpp"
 #include <Eigen/Dense>
 #include <Eigen/StdVector>
 #include <Eigen/Geometry>
@@ -282,7 +282,7 @@ Eigen::MatrixXd GetInverseJacobianDamped(
     double leastSquaresDampingFactor
 )
 {
-    Eigen::Matrix4d D = Eigen::Matrix4d::Identity();
+    Eigen::Matrix4d jointLimitWeights = Eigen::Matrix4d::Identity();
 
     double minAngle, maxAngle;
 
@@ -291,7 +291,7 @@ Eigen::MatrixXd GetInverseJacobianDamped(
         minAngle = minJointAngles(i);
         maxAngle = maxJointAngles(i);
 
-        D(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
+        jointLimitWeights(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
     }
 
     // (Joint positions, limits, lambda and D were printed here every cycle at 60 Hz,
@@ -303,15 +303,15 @@ Eigen::MatrixXd GetInverseJacobianDamped(
     // term, so with lambda = 1 the damping was 2 D^2 and each cycle covered only a small
     // part of the error (a 1.5 mm tip step took 1.1 s to settle)
     inverseJacobian = (jacobian.transpose() * jacobian +
-    leastSquaresDampingFactor * leastSquaresDampingFactor * D * D).colPivHouseholderQr().solve(jacobian.transpose());
+    leastSquaresDampingFactor * leastSquaresDampingFactor * jointLimitWeights * jointLimitWeights).colPivHouseholderQr().solve(jacobian.transpose());
 
     return inverseJacobian;
 }
 
-// Apply a total-angle delta to joint i (0 proximal pan, 1 proximal tilt, 2 distal pan, 3 distal tilt)
-void ApplyJointDelta(ManipulatorModule& proximal, ManipulatorModule& distal, int i, double delta)
+// Apply a total-angle delta to one joint (0 proximal pan, 1 proximal tilt, 2 distal pan, 3 distal tilt)
+void ApplyJointDelta(ManipulatorModule& proximal, ManipulatorModule& distal, int jointIndex, double delta)
 {
-    switch (i)
+    switch (jointIndex)
     {
         case 0: proximal.ApplyPanAngleDelta(delta); break;
         case 1: proximal.ApplyTiltAngleDelta(delta); break;
@@ -358,12 +358,12 @@ void GetJointRangeFromMotorLimits(
     {
         for (int direction = -1; direction <= 1; direction += 2)
         {
-            ManipulatorModule p = proximal, d = distal;
+            ManipulatorModule trialProximal = proximal, trialDistal = distal;
             double total = 0.0;
             while (std::abs(total) < maxTotalAngle)
             {
-                ApplyJointDelta(p, d, i, direction * step);
-                if (!MotorsWithinLimits(motorReference + GetMotorPositionsFromJointPositions(p, d), motorMin, motorMax))
+                ApplyJointDelta(trialProximal, trialDistal, i, direction * step);
+                if (!MotorsWithinLimits(motorReference + GetMotorPositionsFromJointPositions(trialProximal, trialDistal), motorMin, motorMax))
                 {
                     break;
                 }

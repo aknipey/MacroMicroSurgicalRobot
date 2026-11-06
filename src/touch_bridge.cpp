@@ -105,30 +105,30 @@ private:
     }
 
     // omni_state's publish_omni_state, from a packet
-    void publish(const TouchStatePacket &p)
+    void publish(const TouchStatePacket &packet)
     {
         const auto stamp = now();
         omni_msgs::msg::OmniState state;
         state.header.stamp = stamp;
-        state.locked = p.white_button;
-        state.close_gripper = p.grey_button;
-        state.pose.position.x = p.position[0];
-        state.pose.position.y = p.position[1];
-        state.pose.position.z = p.position[2];
-        state.pose.orientation.x = p.orientation[0];
-        state.pose.orientation.y = p.orientation[1];
-        state.pose.orientation.z = p.orientation[2];
-        state.pose.orientation.w = p.orientation[3];
-        state.velocity.x = p.velocity[0];
-        state.velocity.y = p.velocity[1];
-        state.velocity.z = p.velocity[2];
+        state.locked = packet.white_button;
+        state.close_gripper = packet.grey_button;
+        state.pose.position.x = packet.position[0];
+        state.pose.position.y = packet.position[1];
+        state.pose.position.z = packet.position[2];
+        state.pose.orientation.x = packet.orientation[0];
+        state.pose.orientation.y = packet.orientation[1];
+        state.pose.orientation.z = packet.orientation[2];
+        state.pose.orientation.w = packet.orientation[3];
+        state.velocity.x = packet.velocity[0];
+        state.velocity.y = packet.velocity[1];
+        state.velocity.z = packet.velocity[2];
         state_pub_->publish(state);
 
         sensor_msgs::msg::JointState joints;
         joints.header.stamp = stamp;
         joints.name = {"waist", "shoulder", "elbow", "yaw", "pitch", "roll"};
-        joints.position = {-p.thetas[1], p.thetas[2], p.thetas[3],
-                           -p.thetas[4] + M_PI, -p.thetas[5] - 3 * M_PI / 4, -p.thetas[6] - M_PI};
+        joints.position = {-packet.thetas[1], packet.thetas[2], packet.thetas[3],
+                           -packet.thetas[4] + M_PI, -packet.thetas[5] - 3 * M_PI / 4, -packet.thetas[6] - M_PI};
         joint_pub_->publish(joints);
 
         geometry_msgs::msg::PoseStamped pose;
@@ -142,18 +142,18 @@ private:
 
         geometry_msgs::msg::Vector3Stamped applied;
         applied.header.stamp = stamp;
-        applied.vector.x = p.force[0];
-        applied.vector.y = p.force[1];
-        applied.vector.z = p.force[2];
+        applied.vector.x = packet.force[0];
+        applied.vector.y = packet.force[1];
+        applied.vector.z = packet.force[2];
         applied_pub_->publish(applied);
 
-        if (p.grey_button != grey_ || p.white_button != white_) {
+        if (packet.grey_button != grey_ || packet.white_button != white_) {
             omni_msgs::msg::OmniButtonEvent event;
-            event.grey_button = p.grey_button;
-            event.white_button = p.white_button;
+            event.grey_button = packet.grey_button;
+            event.white_button = packet.white_button;
             button_pub_->publish(event);
-            grey_ = p.grey_button;
-            white_ = p.white_button;
+            grey_ = packet.grey_button;
+            white_ = packet.white_button;
         }
     }
 
