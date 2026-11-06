@@ -28,7 +28,7 @@ TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
 # 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to 1.0 for Session B.
-TOUCH_SCALE_ROTATION_EXPONENT = 1.0
+TOUCH_SCALE_ROTATION_EXPONENT = 0.5
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
@@ -320,7 +320,7 @@ SERVO_VELOCITY_RATE = 500.0
 # spline mode does), so the joint speed ramps between set points. Real arm only (mock
 # hardware runs no URScript). Read at launch: needs a relaunch.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to True for Session B.
-SERVO_SMOOTH_SPEEDJ = True
+SERVO_SMOOTH_SPEEDJ = False
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.
 VELOCITY_LIMITER = True
