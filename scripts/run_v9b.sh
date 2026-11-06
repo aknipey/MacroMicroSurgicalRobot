@@ -10,8 +10,13 @@
 # You still do: press Play on the pendant after each restart, answer y before anything moves,
 # move the camera before step 5. Stay at the e-stop.
 #
+# Steps 0-6 are the wand runs. Steps 7-11 run with no tool on the arm and no NDI: benchmarks,
+# Scaled5 / NoBuzzArea, LargeVibrations (position and trajectory only, never velocity), the
+# unfiltered baseline. Tool 3 stays configured, so paths match the 11-03 trajectory leg.
+#
 # Usage:
 #   ./scripts/run_v9b.sh                 # from step 0
+#   ./scripts/run_v9b.sh --from=7        # the no-tool runs
 #   ./scripts/run_v9b.sh --from=3        # resume at step 3
 #   ./scripts/run_v9b.sh --only=9
 #   ./scripts/run_v9b.sh --dry-run       # print the plan, change nothing
@@ -42,11 +47,12 @@ for arg in "$@"; do
     --from=*) FROM="${arg#*=}" ;;
     --only=*) ONLY="${arg#*=}" ;;
     --dry-run) DRY_RUN=true ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
 
+NDI_OPT=""
 STACK_PID=""
 PLAYER_PID=""
 STACK_LOG=""
@@ -141,11 +147,15 @@ logs, runs = sys.argv[1], sys.argv[2:]
 for run in runs:
     path = os.path.join(logs, run)
     try:
-        ndi = yaml.safe_load(open(os.path.join(path, "NDI_META.yaml"))) or {}
         meta = yaml.safe_load(open(os.path.join(path, "META.yaml"))) or {}
     except OSError as exc:
         print(f"  {run}: {exc}")
         continue
+    ndi_path = os.path.join(path, "NDI_META.yaml")
+    if not os.path.exists(ndi_path):
+        print(f"  {os.path.basename(run):48s} no NDI  {meta.get('code_version', '?')}")
+        continue
+    ndi = yaml.safe_load(open(ndi_path)) or {}
     rms = [s["error_rms_mm"] for s in ndi.get("rcm_segments") or [] if "error_rms_mm" in s]
     seen = 100.0 * ndi.get("visible_rows", 0) / max(ndi.get("rows", 0), 1)
     version = meta.get("code_version", "?")
@@ -158,7 +168,7 @@ EOF
 batch() {
   local dest="$1" repeats="$2"
   shift 2
-  local args=("--dest=${dest}" "--repeats=${repeats}" "$@") wanted
+  local args=("--dest=${dest}" "--repeats=${repeats}" ${NDI_OPT:+"$NDI_OPT"} "$@") wanted
   wanted=$(( repeats * ($# > 0 ? $# : 4) ))
   if $DRY_RUN; then echo "   replay_batch.sh ${args[*]}"; return 0; fi
   check_new_run_free
@@ -320,6 +330,39 @@ step_6() {
   say "RCM runs done, settings are at final. The wand can come off."
 }
 
+# No tool on the arm, no NDI
+BENCH=(V3/LongBenchmark V3/ShortBenchmark V3/Scaled5_Slow V3/Scaled5_Fast V7/NoBuzzArea)
+
+step_7() {
+  NDI_OPT=--no-ndi
+  mode trajectory
+  batch V9b/NoTool/TrajectoryMode 2 "${BENCH[@]}" V7/LargeVibrations
+}
+
+step_8() {
+  NDI_OPT=--no-ndi
+  mode position
+  batch V9b/NoTool/PositionMode 2 "${BENCH[@]}" V7/LargeVibrations
+}
+
+step_9() {
+  NDI_OPT=--no-ndi
+  say "Unfiltered velocity: 1:5 runs only. Ctrl+C or the pendant stop if it shakes badly."
+  mode velocity-unfiltered
+  batch V9b/NoTool/VelocityUnfiltered 2 V3/Scaled5_Slow V3/Scaled5_Fast
+}
+
+step_10() {
+  NDI_OPT=--no-ndi
+  say "Velocity output: Ctrl+C at once if it buzzes. LargeVibrations is left out here on purpose."
+  mode velocity-optimised
+  batch V9b/NoTool/VelocityOptimised 2 "${BENCH[@]}"
+}
+
+step_11() {
+  step_6
+}
+
 # --- main --------------------------------------------------------------------------------
 set +u
 source "/opt/ros/${ROS_DISTRO:-jazzy}/setup.bash"
@@ -327,7 +370,7 @@ source "${WS}/install/setup.bash"
 set -u
 
 steps=()
-for n in 0 1 2 3 4 5 6; do
+for n in 0 1 2 3 4 5 6 7 8 9 10 11; do
   if [ -n "$ONLY" ]; then
     [ "$n" = "$ONLY" ] && steps+=("$n")
   elif [ "$n" -ge "$FROM" ]; then
@@ -352,10 +395,12 @@ timeout 3 bash -c "</dev/tcp/${ROBOT_IP}/30001" 2>/dev/null || [ -n "$LAUNCH_EXT
 [ -z "$(git -C "$PKG" status --porcelain --untracked-files=no | grep -v 'macro_micro_robot/teleop_settings.py' || true)" ] \
   || die "Uncommitted changes: commit them first, or set_v9_mode.sh refuses and code_version says -dirty."
 check_new_run_free
-ros2 node list 2>/dev/null | grep -q "/ndi_tracking" \
-  || die "NDI tracker not seen. Start it: cd ~/ros2_ws/src/ndi_tracking && python3 -m ndi_tracking run"
+if [ "$STEP" -lt 7 ]; then
+  ros2 node list 2>/dev/null | grep -q "/ndi_tracking" \
+    || die "NDI tracker not seen. Start it: cd ~/ros2_ws/src/ndi_tracking && python3 -m ndi_tracking run"
+fi
 
-say "Running steps ${steps[*]}. Wand and holder must be untouched; don't move the camera until asked."
+say "Running steps ${steps[*]}."
 for STEP in "${steps[@]}"; do
   say "=== Step ${STEP}"
   "step_${STEP}"

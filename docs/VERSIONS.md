@@ -2315,3 +2315,12 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   `Scaled5_*` / `NoBuzzArea` runs dropped: at their wrist 3 angle (~135 deg) the markers point ~110 deg away from a camera
   that sees the RCM runs (11-03 `Scaled5_Slow_Replay1`: 0 of 1166 NDI rows visible). `replay_batch.sh` only checked that
   `NDI_PATH.csv` was not empty, so it passed that run: it now needs 95 % visible, and `--no-ndi` is for tools without markers.
+- **2026-11-06 RCM runs done:** `logs/V9b/REPLAYS_2026-11-06.md` has setup, purpose, results and the failed attempts. The camera had
+  moved 107 mm since 11-03: RCMOnly matches (0.45), SlowChecking does not (1.87 vs 1.29), so compare with today's `PositionBridge`.
+- **`run_v9b.sh` pose runs:** an External Control drop left a trajectory waiting, and it jumped ~170 mm in 2.5 s when the program
+  restarted. The runner now waits 8 s after the recorder start, stops the player and stack on a drop, and needs "Trajectory
+  complete" (`trajectory_player.py` exits 0 on failure). It reads program state from the stack log: subscribing to the
+  program-running topic lined up with the 220-330 ms controller stalls behind the drops (not proven).
+- **`run_v9b.sh` steps 7-11, no tool and no NDI:** benchmarks, Scaled5, NoBuzzArea in trajectory, position and velocity-optimised,
+  LargeVibrations in trajectory and position only, unfiltered Scaled5 at 1:5. Tool 3 stays configured so the paths match the 11-03
+  trajectory leg; the flange stays >= 262 mm above the base plane. Results go to `logs/V9b/NoTool/`.
