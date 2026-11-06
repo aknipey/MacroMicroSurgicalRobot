@@ -291,7 +291,7 @@ SERVO_LOOKAHEAD = 0.05
 # V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
 # only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
 # V9/TrajectoryMode = this. Final choice after the comparison.
-SERVO_OUTPUT = "trajectory"
+SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
