@@ -26,25 +26,38 @@ HANDEYE = '/home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/robot_tcp_han
 X = np.array(json.load(open(HANDEYE))['handeye']['tool0_to_wand'])
 wand = ToolCalibration.load('8700340')
 
+
 def T(p, R):
-    M = np.eye(4); M[:3, :3] = R; M[:3, 3] = p; return M
+    M = np.eye(4)
+    M[:3, :3] = R
+    M[:3, 3] = p
+    return M
+
 
 def pivot(points, dirs):
     """Point closest (least squares) to all lines p + s d."""
-    A = np.zeros((3, 3)); b = np.zeros(3)
+    A = np.zeros((3, 3))
+    b = np.zeros(3)
     for p, d in zip(points, dirs):
-        P = np.eye(3) - np.outer(d, d); A += P; b += P @ p
+        P = np.eye(3) - np.outer(d, d)
+        A += P
+        b += P @ p
     c = np.linalg.solve(A, b)
     e = [np.linalg.norm((np.eye(3) - np.outer(d, d)) @ (c - p)) for p, d in zip(points, dirs)]
     return c, float(np.sqrt(np.mean(np.square(e))))
+
 
 def line_dist(c, p, d):
     return np.linalg.norm((np.eye(3) - np.outer(d, d)) @ (c - p), axis=-1) if np.ndim(p) == 1 else \
         np.array([np.linalg.norm((np.eye(3) - np.outer(di, di)) @ (c - pi)) for pi, di in zip(p, d)])
 
+
 def run(d):
-    meta = yaml.safe_load(open(f'{d}/META.yaml')); cfg = meta['settings']
-    S0 = 1000 * np.array(cfg['TOUCH_RCM_SHAFT_START']); D0 = np.array(cfg['TOUCH_RCM_SHAFT_DIRECTION']); D0 /= np.linalg.norm(D0)
+    meta = yaml.safe_load(open(f'{d}/META.yaml'))
+    cfg = meta['settings']
+    S0 = 1000 * np.array(cfg['TOUCH_RCM_SHAFT_START'])
+    D0 = np.array(cfg['TOUCH_RCM_SHAFT_DIRECTION'])
+    D0 /= np.linalg.norm(D0)
     L = 1000 * cfg['TOUCH_RCM_SHAFT_LENGTH']
     # UR tool0 in base (mm)
     ur = [r for r in csv.DictReader(open(f'{d}/UR_PATH.csv')) if r['source'] in ('rtde', 'tf')]
@@ -58,31 +71,38 @@ def run(d):
     rcm_on = np.array([r['rcm_active'] == '1' for r in nd])
     ndi_rcm = np.array([float(nd[np.argmax(rcm_on)][k]) for k in ('rcm_x', 'rcm_y', 'rcm_z')])
     # camera pose in base from matched samples
-    k = np.clip(np.searchsorted(ut, nt), 1, len(ut) - 1); k -= (np.abs(ut[k - 1] - nt) < np.abs(ut[k] - nt))
+    k = np.clip(np.searchsorted(ut, nt), 1, len(ut) - 1)
+    k -= (np.abs(ut[k - 1] - nt) < np.abs(ut[k] - nt))
     good = np.abs(ut[k] - nt) < 0.005
     C = np.array([T(up[i], uR[i]) @ X @ np.linalg.inv(b) for i, b in zip(k[good], nT[good])])
-    U, _, Vt = np.linalg.svd(C[:, :3, :3].sum(0)); Cb = T(C[:, :3, 3].mean(0), U @ Vt)
+    U, _, Vt = np.linalg.svd(C[:, :3, :3].sum(0))
+    Cb = T(C[:, :3, 3].mean(0), U @ Vt)
     spread = np.sqrt(np.mean(np.sum((C[:, :3, 3] - Cb[:3, 3]) ** 2, 1)))
     cam2base = lambda p: Cb[:3, :3] @ p + Cb[:3, 3]
     # teleop latched point + time (bag)
-    rd = SequentialReader(); rd.open(StorageOptions(uri=f'{d}/rosbag', storage_id='mcap'), ConverterOptions('', ''))
+    rd = SequentialReader()
+    rd.open(StorageOptions(uri=f'{d}/rosbag', storage_id='mcap'), ConverterOptions('', ''))
     rd.set_filter(StorageFilter(topics=[f'/{node}/{t}' for node in ('ur16e_touch_teleop', 'ur5e_touch_teleop') for t in ('rcm_point', 'rcm_active')]))
     tele_rcm = None
     while rd.has_next():
         topic, data, _ = rd.read_next()
         if topic.endswith('rcm_point'):   # latched: the first one can be the previous run's; keep the last
-            m = deserialize_message(data, PointStamped); tele_rcm = 1000 * np.array([m.point.x, m.point.y, m.point.z])
+            m = deserialize_message(data, PointStamped)
+            tele_rcm = 1000 * np.array([m.point.x, m.point.y, m.point.z])
     seg = (nt >= nt[rcm_on][0]) & rcm_on
     # kinematic shaft lines during the segment (the calibrated model), at the NDI sample times
     ks = k[seg & good]
-    kin_p = np.array([up[i] + uR[i] @ S0 for i in ks]); kin_d = np.array([uR[i] @ D0 for i in ks])
+    kin_p = np.array([up[i] + uR[i] @ S0 for i in ks])
+    kin_d = np.array([uR[i] @ D0 for i in ks])
     kin_piv, kin_rms = pivot(kin_p, kin_d)
     # measured shaft lines (NDI wand tip + axis), mapped to base
     ndi_tip = np.array([cam2base((b @ np.append(wand.tip, 1))[:3]) for b in nT[seg & good]])
     ndi_d = np.array([Cb[:3, :3] @ (b[:3, :3] @ -wand.axis) for b in nT[seg & good]])
     ndi_piv, ndi_rms = pivot(ndi_tip, ndi_d)
     # tip at the latch: kinematic vs NDI
-    i0 = ks[0]; kin_tip0 = up[i0] + uR[i0] @ (S0 + L * D0); ndi_tip0 = ndi_tip[0]
+    i0 = ks[0]
+    kin_tip0 = up[i0] + uR[i0] @ (S0 + L * D0)
+    ndi_tip0 = ndi_tip[0]
     ndi_rcm_b = cam2base(ndi_rcm)
     f = lambda v: '[' + ' '.join(f'{x:7.2f}' for x in v) + ']'
     print(f'\n== {d}   (camera-in-base spread {spread:.2f} mm, {good.sum()} pairs)')
@@ -93,6 +113,7 @@ def run(d):
     print(f'  NDI pivot - kinematic pivot {f(ndi_piv - kin_piv)}   {np.linalg.norm(ndi_piv - kin_piv):5.2f} mm')
     print(f'  tip at latch: kin vs NDI    {np.linalg.norm(kin_tip0 - ndi_tip0):5.2f} mm   NDI tip vs NDI latched {np.linalg.norm(ndi_tip0 - ndi_rcm_b):5.2f} mm')
     print(f'  NDI shaft line dist to: teleop pt rms {np.sqrt(np.mean(line_dist(tele_rcm, ndi_tip, ndi_d)**2)):.2f}, NDI pt rms {np.sqrt(np.mean(line_dist(ndi_rcm_b, ndi_tip, ndi_d)**2)):.2f}')
+
 
 for d in sys.argv[1:]:
     run(d)
