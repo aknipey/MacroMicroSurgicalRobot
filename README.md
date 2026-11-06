@@ -86,4 +86,10 @@ Tuning values live in `macro_micro_robot/teleop_settings.py`. Tools live in `con
 | `docs/` | Operating guides, parts list, architecture diagram |
 | `claude-notes/` | Working notes: version history, lab plans, investigations |
 
+## Licence
+
+MIT, see [LICENSE](LICENSE). `vendor/ur_calibration/` and `launch/ur_rsp_smooth_speedj.launch.py`
+are BSD-3-Clause, from Universal Robots' driver. The project builds on Lachlan Scott's 2023 work
+in this repository, which was published without a licence.
+
 Original installation notes by Mustafa Sevinc.
