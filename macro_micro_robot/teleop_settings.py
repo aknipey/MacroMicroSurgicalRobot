@@ -81,14 +81,14 @@ TOUCH_FEEDFORWARD_FILTER = 0.02
 # real 1:1 hand run: 8 Hz -> 6 Hz cut tool jerk by a quarter for ~2-4 ms more lag;
 # 5 Hz cut it by a half for ~5 ms more; on the V5 benchmarks 6 -> 5 Hz cut the 5-15 Hz
 # jitter by 13%. Must be below half TOUCH_PUBLISH_RATE. 0 = off.
-TOUCH_COMMAND_FILTER = 0.0
+TOUCH_COMMAND_FILTER = 5.0
 # Kalman filter on the raw stylus pose (constant-velocity model; the orientation is an
 # extended/error-state version). omni_state repeats each pose for ~4 ms between real
 # updates, which makes the feedforward velocity jump; the filter uses only the real
 # updates and predicts in between. On the V3 benchmarks it cuts the feedforward noise
 # by 17-42% without adding lag (it is 0.5-2 ms ahead), unlike TOUCH_COMMAND_FILTER.
 # True = on.
-TOUCH_KALMAN = False
+TOUCH_KALMAN = True
 # How quickly the hand's velocity may change (process noise). Lower = smoother, but the
 # target runs on past a sudden stop: at 1:1 a stop from 200 mm/s overshoots 0.13 mm
 # with 2.0 but 1.2 mm with 0.1; from 3 rad/s 0.6 deg with 30 (1.0 deg with 10).
@@ -320,7 +320,7 @@ SERVO_VELOCITY_RATE = 500.0
 # spline mode does), so the joint speed ramps between set points. Real arm only (mock
 # hardware runs no URScript). Read at launch: needs a relaunch.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to True for Session B.
-SERVO_SMOOTH_SPEEDJ = False
+SERVO_SMOOTH_SPEEDJ = True
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.
 VELOCITY_LIMITER = True
