@@ -54,14 +54,17 @@ def metrics(run):
         tips.append(tip)
     c, tips = np.array(conds), np.array(tips)
     dt = np.gradient(t)
-    speed = np.linalg.norm(np.gradient(tips, axis=0), axis=1) / dt
+    # Over 50 ms from the actual stamps: bag stamps bunch up, and differencing neighbours
+    # turned a few ms of bunching into false 200 mm/s peaks
+    later = np.minimum(np.searchsorted(t, t + 0.05), len(t) - 1)
+    speed = np.linalg.norm(tips[later] - tips, axis=1) / np.maximum(t[later] - t, 1e-3)
     # Motion phases: first motion, furthest point, and how far back it came
     moving = np.where(speed > MOVING)[0]
     begin, end = moving[0], moving[-1]
     far = np.argmax(c)
     start_tip, end_tip = tips[begin], tips[end]
     w2 = np.degrees(np.abs(np.arctan2(np.sin(q[:, 4]), np.cos(q[:, 4]))))
-    return {"run": os.path.basename(run.rstrip("/")),
+    return {"run": "/".join(run.rstrip("/").split("/")[-2:]),
             "peak_c": round(float(c.max()), 1),
             "time_c_over_30_s": round(float(dt[c > 30].sum()), 1),
             "time_c_over_60_s": round(float(dt[c > 60].sum()), 1),

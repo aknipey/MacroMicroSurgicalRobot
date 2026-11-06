@@ -2330,3 +2330,6 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   it back, so its output could oppose the command. It now cuts the twist, so the output is a part of the command: 0.7 mm, 36 mm/s, 4.8 deg/s,
   same input, same c limit. Simulation, 15 elbow strokes: 15 failed before, none after. Evidence: `logs/V9b/REPLAYS_2026-11-06.md`,
   `thesis/planning/analysis/E6_singularity/`. Real arm: `run_v9b.sh --from=12` (guard on x3, off x3; the guard is always restored).
+- **2026-11-06, E6 on the real arm (3 replays each, same scripted input):** guard on: c 60.4, returned to 0.6 mm, 4.5 deg/s. Guard off: c 204,
+  Servo emergency stop, and the arm could not leave (172 mm from the start, 3 of 3). The mock returned with the guard off, so this needed the arm.
+  `logs/V9b/REPLAYS_2026-11-06.md`, `logs/V9b/Singularity/METRICS.csv`.
