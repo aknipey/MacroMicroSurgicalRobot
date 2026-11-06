@@ -279,15 +279,7 @@ def generate_launch_description():
 
     servo = OpaqueFunction(function=start_servo)
 
-    # Installed node, or straight from the source tree before the next colcon build
-    emulator_condition = IfCondition(LaunchConfiguration("emulate_ur"))
-    if os.path.exists(os.path.join(get_package_prefix("macro_micro_robot"), "lib", "macro_micro_robot", "ur_emulator.py")):
-        ur_emulator = Node(package="macro_micro_robot", executable="ur_emulator.py", name="ur_emulator",
-                           output="screen", condition=emulator_condition)
-    else:
-        source = Path(__file__).resolve().parent.parent / "src" / "ur_emulator.py"
-        ur_emulator = ExecuteProcess(cmd=["python3", str(source)], name="ur_emulator", output="screen",
-                                     condition=emulator_condition)
+    ur_emulator = package_node("ur_emulator.py", "ur_emulator", condition=IfCondition(LaunchConfiguration("emulate_ur")))
 
     recorder = Node(
         package="macro_micro_robot",
