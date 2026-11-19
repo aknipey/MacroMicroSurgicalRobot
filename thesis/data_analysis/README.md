@@ -96,6 +96,8 @@ controller's `base` frame (base_link rotated by π about z), not base_link.
 | 17 | [17_touch_stick_slip](17_touch_stick_slip/analysis.py) | 4.1.4 | Slow-speed catches vs the Touch encoders |
 | 18 | [18_misc_backing](18_misc_backing/analysis.py) | 4.2.1, 4.4.2 | Singularity amplification, demo counts, micro-tool calibration |
 | 19 | [19_benchmark_inputs](19_benchmark_inputs/analysis.py) | 3.4.4, T3.7 | What each recorded input asks of the arm (target speed, extent), vs laparoscopic tip speeds |
+| 20 | [20_v9c_mode_filter_grid](20_v9c_mode_filter_grid/) | 4.1.3–4.1.4, Fig 4.6 | Session D output mode × filter grid |
+| 21 | [21_latch_line_correction](21_latch_line_correction/ANALYSIS.md) | 4.3.1 (T4.2 session D), 4.3.4, Fig 4.11, scorecard (iii) | Cause of the latch offset (tool line from the hand–eye fit) and the measured correction (latch test) |
 
 Folders 14–18 were added on 2026-11-13 to back claims in the draft that no RESULTS.md covered; 08 gained a
 scripted-input section (alternative laws). They have no ANALYSIS.md: the method is in each `analysis.py` docstring.
