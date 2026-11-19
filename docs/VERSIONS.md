@@ -2343,4 +2343,4 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
 - **2026-11-19, `replay_batch.sh` _NO_NDI naming:** a second failed replay of the same run was moved *inside* the first `_NO_NDI` folder
   (as `NEW_RUN`), because both got `<name>_Replay<n>_NO_NDI`. It now takes the next free `_NO_NDI` number. Cause of the failures (V9c step 23):
   SlowChecking replays approach the V7 start joints (TCP z 0.625 m), above the Vega's view (wand lost above ~0.595 m), so the RCM never latched;
-  camera moved, phase B redone from step 21.
+  camera moved; fits (tool0 -> wand) kept, since they do not depend on the camera pose.
