@@ -2344,3 +2344,13 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   (as `NEW_RUN`), because both got `<name>_Replay<n>_NO_NDI`. It now takes the next free `_NO_NDI` number. Cause of the failures (V9c step 23):
   SlowChecking replays approach the V7 start joints (TCP z 0.625 m), above the Vega's view (wand lost above ~0.595 m), so the RCM never latched;
   camera moved; fits (tool0 -> wand) kept, since they do not depend on the camera pose.
+- **2026-11-19, latch offset = tool line mismatch (offline) + phase L test (`run_v9c.sh --phase=L`, `scripts/latch_line_fit.py`):**
+  the "latch offset" is not timing (|offset| vs tip speed at the latch r = 0.008, 63 runs) and not the camera (folder 11). The tool slides
+  100-150 mm through the RCM, and the line the controller holds is fixed in the wand frame but ~0.3 deg (tool 3) / ~1.05 deg (V9c tools 4-6)
+  and ~2 mm off the tracked shaft, so the shaft misses the point by depth x angle. One fixed line per tool cuts the NDI RCM rms from
+  1.1-1.6 to 0.14-0.27 mm on held-out V9c RCMOnly / SlowChecking replays. Corrected tools built from tools 4, 5, 6 and the perturbed
+  7 (+1 mm lateral) and 8 (+2 mm axial) agree to ~0.15 mm / 0.01 deg, so the correction undoes known errors. It does not carry over
+  to FastChecking / WholeRun (extra dynamic part). The direction comes from X * (NDI axis), so a non-zero angle is the hand-eye rotation
+  (or arm orientation), not the NDI axis: the robot really did miss, and the old runs stay as measured. Phase L measures the fix:
+  fresh fit (tool 10), training replays, corrected tool 11 from those only, then six interleaved A/B blocks of SlowChecking, RCMOnly,
+  FastChecking, WholeRun. Prediction before the run: tool 11 <= 0.35 mm rms on RCMOnly and SlowChecking.

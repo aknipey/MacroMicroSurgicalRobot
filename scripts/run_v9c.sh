@@ -20,6 +20,10 @@
 #   33 YOU fit the C3 coupling + wand plate; C3 exchange redo (20 swaps; the script times the still periods)
 #   34 hand-eye fit of the coupling mount -> tool 9, then 5x: YOU exchange, it replays RCMOnly with tool 9
 #   35 settings back to final, default tool back to 2
+# Phase L (steps 40-44, --phase=L): latch-offset test, any mount. 40 hand-eye fit -> tool 10; 41 training
+#   replays (SlowChecking, RCMOnly x2, tool 10); 42 corrected tool 11 (scripts/latch_line_fit.py, training runs
+#   only); 43 six interleaved blocks A B B A A B of SlowChecking, RCMOnly, FastChecking, WholeRun (tool 10 = A,
+#   tool 11 = B); 44 report + final settings, default tool 2. Data in logs/V9c/Latch.
 #   Steps 20-32 run unattended except one check before the first wrist jog.
 #
 # Unattended needs the pendant in REMOTE CONTROL with the External Control program loaded: the
@@ -29,6 +33,7 @@
 # Usage:
 #   ./scripts/run_v9c.sh                 # phase A from step 1
 #   ./scripts/run_v9c.sh --phase=B       # phase B (wand) from step 20
+#   ./scripts/run_v9c.sh --phase=L       # latch-offset test, steps 40-44
 #   ./scripts/run_v9c.sh --from=6        # resume at step 6 (replay numbers carry on)
 #   ./scripts/run_v9c.sh --only=10
 #   ./scripts/run_v9c.sh --dry-run       # print the plan, change nothing
@@ -560,6 +565,68 @@ step_35() {
 
 PHASE_B=(20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35)
 
+# --- phase L: latch-offset test (11-19) ---------------------------------------------------
+# Claim under test: the NDI RCM error is mostly the controller's tool line being ~1 deg / ~2 mm off the wand
+# shaft (VERSIONS.md 11-19). Tool 10 = a fresh hand-eye fit on whatever mount is on (control, A); tool 11 = tool 10
+# corrected by scripts/latch_line_fit.py from training replays only (B). The test replays are new, interleaved
+# A B / B A / A B, and include two trajectories the correction never saw (FastChecking, WholeRun).
+# Prediction written before the test: B <= 0.35 mm rms on RCMOnly and SlowChecking (A ~1.1-1.6).
+LT="${V9C}/Latch"
+FAST=V7/FastCheckingRCMSimpleHolder
+WHOLE=V7/WholeRunDrinkBottleSimpleHolder
+LATCH_TEST=("$SLOW" "$RCMONLY" "$FAST" "$WHOLE")
+
+step_40() {
+  say "=== Step 40: hand-eye fit of the mount that is on now -> tool 10 (control)"
+  $DRY_RUN && { echo "   fit 10 wand_L_fit"; return 0; }
+  ndi_start
+  stop_stack; set_mode p5; set_tool 3; start_stack
+  printf '\a'
+  ask_continue "Wrist jog next (+-30 deg per wrist, wand tip sweeps ~20 cm). Clear around the wand?"
+  fit 10 wand_L_fit
+  ndi_start
+}
+
+step_41() { $DRY_RUN || ndi_start; cell_t 10 p5 "${LT}/Train" 2 "$SLOW" "$RCMONLY"; }
+
+step_42() {
+  say "=== Step 42: corrected tool 11 from the ${LT}/Train replays only"
+  local train=("${LOGS}/${LT}/Train/"*_Replay[0-9]*)
+  if $DRY_RUN; then echo "   latch_line_fit.py fit ${LT}/Train/*_Replay* --add 11 wand_L_corrected"; return 0; fi
+  python3 "${SCRIPT_DIR}/latch_line_fit.py" fit "${train[@]}" --add 11 wand_L_corrected \
+    --json "${SESSION_DIR}/latch_tool11.json" | tee "${STACK_LOG_DIR}/latch_fit.txt" || die "latch_line_fit.py failed"
+  grep -q "corrected:" "${STACK_LOG_DIR}/latch_fit.txt" || die "No corrected tool (see ${STACK_LOG_DIR}/latch_fit.txt)"
+  git -C "$PKG" add config/tools.yaml "${SESSION_DIR}/latch_tool11.json"
+  git -C "$PKG" commit -q -m "V9c: tool 11 wand_L_corrected (latch-line correction of tool 10)" || die "commit failed"
+  note "tool 11: $(grep -E 'line angle|corrected:' "${STACK_LOG_DIR}/latch_fit.txt" | tr -s ' ' | tr '\n' ' ')"
+}
+
+# interleaved, every test replay recorded fresh: A B, B A, A B
+step_43() {
+  local order=(10 11 11 10 10 11) k tool dest
+  for k in "${!order[@]}"; do
+    tool="${order[$k]}"
+    [ "$tool" = 10 ] && dest="${LT}/A_tool10" || dest="${LT}/B_tool11"
+    say "--- Step 43, block $((k + 1))/6: tool ${tool}"
+    $DRY_RUN || ndi_start
+    cell_t "$tool" p5 "$dest" 1 "${LATCH_TEST[@]}"
+  done
+}
+
+step_44() {
+  say "=== Step 44: A/B report, settings back to final, default tool 2"
+  if ! $DRY_RUN; then
+    python3 "${SCRIPT_DIR}/latch_line_fit.py" report "${LOGS}/${LT}/A_tool10/"*_Replay[0-9]* "${LOGS}/${LT}/B_tool11/"*_Replay[0-9]* \
+      | tee "${SESSION_DIR}/LATCH_TEST.txt"
+    note "latch test report: ${SESSION_DIR}/LATCH_TEST.txt"
+    stop_stack
+    set_mode final
+    set_tool 2
+  fi
+}
+
+PHASE_L=(40 41 42 43 44)
+
 # --- main --------------------------------------------------------------------------------
 set +u
 source "/opt/ros/${ROS_DISTRO:-jazzy}/setup.bash"
@@ -570,10 +637,13 @@ steps=()
 case "$PHASE" in
   A|a) PHASE_STEPS=("${PHASE_A[@]}"); FROM="${FROM:-1}" ;;
   B|b) PHASE_STEPS=("${PHASE_B[@]}"); FROM="${FROM:-20}" ;;
-  *) die "--phase=A or --phase=B" ;;
+  L|l) PHASE_STEPS=("${PHASE_L[@]}"); FROM="${FROM:-40}" ;;
+  *) die "--phase=A, B or L" ;;
 esac
 if [ -n "$ONLY" ] && [ "$ONLY" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
 if [ -n "$FROM" ] && [ "$FROM" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
+if [ -n "$ONLY" ] && [ "$ONLY" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}"); PHASE=L; fi
+if [ -n "$FROM" ] && [ "$FROM" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}"); PHASE=L; fi
 for n in "${PHASE_STEPS[@]}"; do
   if [ -n "$ONLY" ]; then
     [ "$n" = "$ONLY" ] && steps+=("$n")
@@ -598,7 +668,7 @@ fi
 [ -z "$(git -C "$PKG" status --porcelain --untracked-files=no | grep -v -E 'macro_micro_robot/teleop_settings.py|config/tools.yaml' || true)" ] \
   || die "Uncommitted changes: commit them first, or code_version says -dirty."
 check_new_run_free
-if [ "$PHASE" = B ]; then
+if [ "$PHASE" = B ] || [ "$PHASE" = L ]; then
   NDI_OPT=""
 else
   NDI_OPT=--no-ndi
@@ -617,6 +687,10 @@ if [ "$PHASE" = B ]; then
   say "Phase B, steps ${steps[*]}: WAND-ONLY mount (SimpleHolder on the flange, no coupling; steps 33-34 ask for the coupling later), camera placed and not touched again, workspace clear."
   say "The script starts and stops the NDI tracker itself: close any 'ndi_tracking run' you have open."
   read -r -p "Wand on, camera fixed, robot clear, start? [y/N] " answer
+elif [ "$PHASE" = L ]; then
+  say "Phase L (latch-offset test), steps ${steps[*]}: the wand on the mount you will keep (coupling or wand-only), camera fixed and seeing the SlowChecking start pose, workspace clear. About 45 min."
+  say "The script starts and stops the NDI tracker itself: close any 'ndi_tracking run' you have open."
+  read -r -p "Wand on, camera fixed, robot clear, start? [y/N] " answer
 else
   say "Phase A, steps ${steps[*]}: BARE FLANGE, nothing on the tool flange, workspace clear."
   say "About $(( ${#steps[@]} * 7 )) min. The arm moves without asking from here on. Stay near the e-stop."
@@ -630,7 +704,9 @@ for STEP in "${steps[@]}"; do
 done
 stop_stack
 note "phase ${PHASE} done"
-if [ "$PHASE" = B ]; then
+if [ "$PHASE" = L ]; then
+  say "Phase L done: ${SESSION_DIR}/LATCH_TEST.txt. Tell Claude the runs are in."
+elif [ "$PHASE" = B ]; then
   say "Phase B done. Back up logs/V9c and logs/Exchange, and tell Claude the runs are in."
 else
   say "Phase A done (settings go back to final on exit). Wand on, then: ./scripts/run_v9c.sh --phase=B"
