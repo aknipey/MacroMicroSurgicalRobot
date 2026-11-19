@@ -1,0 +1,97 @@
+plant V9b/NoTool/PositionMode/LargeVibrations_Replay1 {'k': 0.9998451067606298, 'Td': 0.0, 'tau': 0.02, 'r2': 0.9861163890610187}
+plant V9b/NoTool/PositionMode/LargeVibrations_Replay2 {'k': 1.0073872814536864, 'Td': 0.0, 'tau': 0.024, 'r2': 0.9849602199253916}
+plant V9b/NoTool/PositionMode/LongBenchmark_Replay1 {'k': 0.9597956777537632, 'Td': 0.012, 'tau': 0.008, 'r2': 0.9778616244279579}
+plant V9b/NoTool/PositionMode/LongBenchmark_Replay2 {'k': 0.9579268182222269, 'Td': 0.012, 'tau': 0.008, 'r2': 0.9766666046756433}
+plant V9b/NoTool/PositionMode/NoBuzzArea_Replay1 {'k': 1.0273993298064978, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9955353673264893}
+plant V9b/NoTool/PositionMode/NoBuzzArea_Replay2 {'k': 1.0255739763961882, 'Td': 0.012, 'tau': 0.004, 'r2': 0.9957439785108958}
+plant V9b/NoTool/PositionMode/Scaled5_Fast_Replay1 {'k': 1.0228961622300132, 'Td': 0.01, 'tau': 0.004, 'r2': 0.9943983794756444}
+plant V9b/NoTool/PositionMode/Scaled5_Fast_Replay2 {'k': 1.0247423392194028, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9949197733543759}
+plant V9b/NoTool/PositionMode/Scaled5_Slow_Replay1 {'k': 1.0114713294658713, 'Td': 0.01, 'tau': 0.0, 'r2': 0.9274458263945373}
+plant V9b/NoTool/PositionMode/Scaled5_Slow_Replay2 {'k': 0.9541807505266442, 'Td': 0.0, 'tau': 0.028, 'r2': 0.8444224077279221}
+plant V9b/NoTool/PositionMode/ShortBenchmark_Replay1 {'k': 1.0017911840302869, 'Td': 0.0, 'tau': 0.024, 'r2': 0.9809695128922442}
+plant V9b/NoTool/PositionMode/ShortBenchmark_Replay2 {'k': 0.9960335779248131, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9872425972153966}
+plant V9b/NoTool/VelocityOptimised/LongBenchmark_Replay1 {'k': 0.944834224503375, 'Td': 0.002, 'tau': 0.02, 'r2': 0.9813350420546733}
+plant V9b/NoTool/VelocityOptimised/LongBenchmark_Replay2 {'k': 0.9445511611718729, 'Td': 0.002, 'tau': 0.02, 'r2': 0.9825061752396509}
+plant V9b/NoTool/VelocityOptimised/NoBuzzArea_Replay1 {'k': 0.996897267935163, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9963321637813043}
+plant V9b/NoTool/VelocityOptimised/NoBuzzArea_Replay2 {'k': 0.9966017136391185, 'Td': 0.012, 'tau': 0.008, 'r2': 0.9962512982922413}
+plant V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay1 {'k': 0.9978708657281152, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9908809811314042}
+plant V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay2 {'k': 0.999099730064171, 'Td': 0.01, 'tau': 0.008, 'r2': 0.9961538498727701}
+plant V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay1 {'k': 1.0030617618641078, 'Td': 0.01, 'tau': 0.0, 'r2': 0.9488754477057775}
+plant V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay2 {'k': 1.0035778541233775, 'Td': 0.01, 'tau': 0.0, 'r2': 0.9505460224949439}
+plant V9b/NoTool/VelocityOptimised/ShortBenchmark_Replay1 {'k': 0.9878424549780136, 'Td': 0.0, 'tau': 0.02, 'r2': 0.9944686723816198}
+plant V9b/NoTool/VelocityUnfiltered/Scaled5_Fast_Replay1 {'k': 0.9938641217342884, 'Td': 0.012, 'tau': 0.008, 'r2': 0.9928911542289653}
+plant V9b/NoTool/VelocityUnfiltered/Scaled5_Fast_Replay2 {'k': 0.9906273880833444, 'Td': 0.008, 'tau': 0.008, 'r2': 0.9891571061717443}
+plant V9b/NoTool/VelocityUnfiltered/Scaled5_Slow_Replay1 {'k': 0.9992216395440763, 'Td': 0.012, 'tau': 0.012, 'r2': 0.9389591525255957}
+plant V9b/NoTool/VelocityUnfiltered/Scaled5_Slow_Replay2 {'k': 1.0012542530297843, 'Td': 0.01, 'tau': 0.012, 'r2': 0.9273264773547725}
+V9b/NoTool/PositionMode/LargeVibrations_Replay1 measured 75.2 predicted 78.2
+V9b/NoTool/PositionMode/LargeVibrations_Replay2 measured 77.5 predicted 78.2
+V9b/NoTool/PositionMode/LongBenchmark_Replay1 measured 73.0 predicted 70.5
+V9b/NoTool/PositionMode/LongBenchmark_Replay2 measured 72.0 predicted 70.8
+V9b/NoTool/PositionMode/NoBuzzArea_Replay1 measured 74.0 predicted 79.8
+V9b/NoTool/PositionMode/NoBuzzArea_Replay2 measured 72.5 predicted 79.5
+V9b/NoTool/PositionMode/Scaled5_Fast_Replay1 measured 59.8 predicted 63.0
+V9b/NoTool/PositionMode/Scaled5_Fast_Replay2 measured 60.2 predicted 63.0
+V9b/NoTool/PositionMode/Scaled5_Slow_Replay1 measured 53.0 predicted 58.0
+V9b/NoTool/PositionMode/Scaled5_Slow_Replay2 measured 57.2 predicted 58.0
+V9b/NoTool/PositionMode/ShortBenchmark_Replay1 measured 66.0 predicted 65.0
+V9b/NoTool/PositionMode/ShortBenchmark_Replay2 measured 64.5 predicted 65.2
+V9b/NoTool/VelocityOptimised/LongBenchmark_Replay1 measured 76.0 predicted 71.8
+V9b/NoTool/VelocityOptimised/LongBenchmark_Replay2 measured 76.0 predicted 72.3
+V9b/NoTool/VelocityOptimised/NoBuzzArea_Replay1 measured 75.2 predicted 79.8
+V9b/NoTool/VelocityOptimised/NoBuzzArea_Replay2 measured 77.8 predicted 79.8
+V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay1 measured 62.0 predicted 63.5
+V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay2 measured 61.5 predicted 63.5
+V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay1 measured 51.8 predicted 63.5
+V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay2 measured 52.3 predicted 63.5
+V9b/NoTool/VelocityOptimised/ShortBenchmark_Replay1 measured 67.2 predicted 66.0
+V9b/NoTool/VelocityUnfiltered/Scaled5_Fast_Replay1 measured 47.0 predicted 47.8
+V9b/NoTool/VelocityUnfiltered/Scaled5_Fast_Replay2 measured 46.5 predicted 47.5
+V9b/NoTool/VelocityUnfiltered/Scaled5_Slow_Replay1 measured 47.5 predicted 50.2
+V9b/NoTool/VelocityUnfiltered/Scaled5_Slow_Replay2 measured 48.0 predicted 48.0
+/home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/thesis/data_analysis/02_closed_loop_latency_model/analysis.py:311: UserWarning: No contour levels were found within the data range.
+  ax.contour(fgrid, kgrid, lag, levels=[50], colors='white', linewidths=1.5)
+| V9b/NoTool/VelocityUnfiltered/Scaled5_Slow_Replay2 | velocity_unfiltered | 1:5 | 48.0 | 48.0 | +0.0 |
+
+rms error: all 4.4 ms (n = 25); 1:5 runs 5.2 ms; 1:1 runs 3.5 ms. Replay floor (folder 12): 0.7 ms SD.
+
+**Validation gate (rms ≤ 10 ms):** all runs PASSED; 1:5 runs PASSED. Sections 3–4 are usable for the report only if the 1:5 gate passed (they are computed on 1:5 inputs).
+
+## 3. Filter cost inside the loop (same plant and input; only the command filter changes)
+
+| Run | mode | f_c (Hz) | lag with filter (ms) | without (ms) | added by the filter (ms) | open-loop 0.225/f_c (ms) |
+|---|---|---|---|---|---|---|
+| V9b/NoTool/PositionMode/Scaled5_Fast_Replay1 | position | 5.0 | 63.0 | 46.5 | 16.5 | 45 |
+| V9b/NoTool/PositionMode/Scaled5_Fast_Replay2 | position | 5.0 | 63.0 | 46.5 | 16.5 | 45 |
+| V9b/NoTool/PositionMode/Scaled5_Slow_Replay1 | position | 5.0 | 58.0 | 34.0 | 24.0 | 45 |
+| V9b/NoTool/PositionMode/Scaled5_Slow_Replay2 | position | 5.0 | 58.0 | 34.0 | 24.0 | 45 |
+| V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay1 | velocity_optimised | 5.0 | 63.5 | 47.0 | 16.5 | 45 |
+| V9b/NoTool/VelocityOptimised/Scaled5_Fast_Replay2 | velocity_optimised | 5.0 | 63.5 | 47.0 | 16.5 | 45 |
+| V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay1 | velocity_optimised | 5.0 | 63.5 | 45.2 | 18.2 | 45 |
+| V9b/NoTool/VelocityOptimised/Scaled5_Slow_Replay2 | velocity_optimised | 5.0 | 63.5 | 46.5 | 17.0 | 45 |
+
+Curve on `V9b/NoTool/PositionMode/Scaled5_Fast_Replay1` (its leave-one-out position plant):
+
+| f_c (Hz) | open loop 0.225/f_c (ms) | closed loop, model (ms) | 15–25 Hz reduction of model tool velocity |
+|---|---|---|---|
+| 2 | 112 | 71.0 | 100 % |
+| 3 | 75 | 30.5 | 100 % |
+| 4 | 56 | 21.2 | 100 % |
+| 5 | 45 | 16.5 | 100 % |
+| 6 | 38 | 13.8 | 99 % |
+| 8 | 28 | 10.2 | 98 % |
+| 10 | 22 | 8.5 | 95 % |
+| 12 | 19 | 7.8 | 90 % |
+| 15 | 15 | 7.2 | 80 % |
+
+Folder 01 measured more 1–8 Hz flange motion with filtering (up to 2.6–3.7× power). The model, same input: 1–8 Hz tool-velocity power ratio filtered/unfiltered = 1.82 → reproduced.
+
+## 4. Design map (position plant, same 1:5 input)
+
+Feasible (lag ≤ 50 ms and ≥ 30 % 15–25 Hz reduction): 7 of 56: f_c 20 Hz / Kp 2, f_c 20 Hz / Kp 4, f_c 20 Hz / Kp 6, f_c 20 Hz / Kp 8, f_c 20 Hz / Kp 12, f_c 20 Hz / Kp 16, f_c 20 Hz / Kp 20.
+Shipped: f_c 5.0 Hz, Kp 8.0. Reduction here is of the simulated tool velocity (the command path through the plant), not measured arm vibration (folder 01).
+
+## Figures
+
+- `figures/predicted_vs_measured.png`
+- `figures/filter_cost.png`
+- `figures/design_map.png`
