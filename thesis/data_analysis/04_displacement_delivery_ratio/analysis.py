@@ -76,7 +76,7 @@ def main():
     for pat in PATTERNS:
         for r in runs.find_runs(pat):
             # No exclusion on META tcp_offset.check_max_mm: it mostly measures TF timing while moving
-            # (scripts/kinematics_check.py), and this analysis uses FK of the joints, not TF.
+            # (thesis/run_tools/kinematics_check.py), and this analysis uses FK of the joints, not TF.
             try:
                 a = analyse(r)
             except Exception as e:                       # report, do not hide

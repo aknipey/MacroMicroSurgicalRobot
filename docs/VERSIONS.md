@@ -34,7 +34,7 @@ Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 results, original → replay map, and why the NDI error is mostly factory-kinematics error.
 
 Lag is the time shift that best lines the robot's tool0 path up with the stylus
-target path (`scripts/plot_paths.py`). Each version's section below has the full
+target path (`thesis/run_tools/plot_paths.py`). Each version's section below has the full
 detail: code state, what was implemented and why, runs, and results.
 
 ## Runs and comparing versions
@@ -48,7 +48,7 @@ one by hand into `logs/V<n>/`. The exact settings for any run are in its `META.y
 
 **Comparing versions:** replay a reference run's stylus into the new version
 (`ros2 run macro_micro_robot stylus_replay.py V3/CyclingScaling` with the stack on
-`input:=replay ur_type:=ur16e`), then `python3 scripts/plot_paths.py logs/V<n>`
+`input:=replay ur_type:=ur16e`), then `python3 thesis/run_tools/plot_paths.py logs/V<n>`
 writes `METRICS.yaml` per run and `METRICS_SUMMARY.csv` per folder. Only replays
 of the same run have identical input, so compare those, not two hand-made runs.
 A replayed run has a `REPLAY.yaml` naming its source.
@@ -109,7 +109,7 @@ MoveIt Servo (250 Hz) --> UR joint controller --> UR16e
   0.02` s) added to the P controller.
 - Pen twist via swing-twist decomposition, mapped to wrist 3 (`TOUCH_ENABLE_TWIST`).
 - Teleop publishes its target on `~/target_pose`. The recorder writes the path
-  logs and a rosbag (`ls_thesis/run_logger.py`), and `scripts/plot_paths.py`
+  logs and a rosbag (`ls_thesis/run_logger.py`), and `thesis/run_tools/plot_paths.py`
   plots the logs and computes the metrics.
 - Quieter launch output (`verbose:=true` restores it).
 
@@ -1122,7 +1122,7 @@ The robot's motion is unchanged by part 2: it only adds forces on the stylus.
 | `stylus_replay.py` replays the RCM chord (WHITE + GREY), `--rcm` for runs recorded with RCM already on, back-to-back RCM replays, and waits for the tracker | The SimpleHolder runs are RCM runs; before, a replay moved the tool freely | [replays enter RCM](#replays-enter-rcm-mode-2026-10-22) |
 | UR16e hard-coded (`ur5e_teleop.launch.py` default, `launch_system.sh`); the default kinematics are UR16e factory values, not the old UR5e calibration file | The lab arm is a UR16e; `launch_system.sh` still passed `ur5e` | [UR16e](#robot-type-hard-coded-to-ur16e-2026-10-26) |
 | `plot_paths.py`: mouse-wheel zoom on the 3D path | Close-up checks of small deviations | [NDI hook](#ndi-tracking-hook-2026-10-20-alongside-v7) |
-| `scripts/rcm_offset_check.py`: teleop vs NDI RCM points and pivots in base_link | To find where the NDI-measured RCM error comes from | `logs/V7/REPLAYS_2026-10-26.md` |
+| `thesis/run_tools/rcm_offset_check.py`: teleop vs NDI RCM points and pivots in base_link | To find where the NDI-measured RCM error comes from | `logs/V7/REPLAYS_2026-10-26.md` |
 
 ### V7 runs (`logs/V7/`)
 
@@ -1654,7 +1654,7 @@ files are finished before the folder is copied.
 domain: GREY start/stop and RCM on/off reached the tracker, NDI files landed in NEW_RUN
 next to the recorder's own.
 
-**Plots (2026-10-20):** `scripts/plot_paths.py` 3D path figure zooms with the mouse wheel
+**Plots (2026-10-20):** `thesis/run_tools/plot_paths.py` 3D path figure zooms with the mouse wheel
 (`scroll_zoom_3d`, about the box centre, all axes equally so the scale stays equal).
 Matplotlib's 3D axes only zoom with a right-drag, which was awkward for close-up checks of
 small deviations. Plotting only; no effect on runs.
@@ -1721,7 +1721,7 @@ NDI data. Results, the original-to-replay map and the analysis are in
 0.05-0.23 mm, but the NDI-measured error (0.4-2.9 mm rms) is mostly pose-dependent error in
 the UR16e factory kinematics (TF vs the controller's calibrated tool0: 0.1-0.25°). Loading
 the arm's own calibration is the untested next step; `ur_calibration` failed to connect.
-Analysis script: `scripts/rcm_offset_check.py`.
+Analysis script: `thesis/run_tools/rcm_offset_check.py`.
 
 ## V8 — summary of what changed from V7
 
@@ -1734,7 +1734,7 @@ Analysis script: `scripts/rcm_offset_check.py`.
 | The robot runs a copy of the driver's URScript whose `speedj` ramps over each 2 ms step (`SERVO_SMOOTH_SPEEDJ`) | Buzz / grind: 0.3-1.0 A of 120-250 Hz current on the big joints while accelerating, absent from the command | [buzz](#buzz--grind-speedj-ramps-over-each-2-ms-step-2026-10-30) |
 | Micro module: transient-local states + 1 Hz republish, robust Arduino handshake (`Serial_Control` repo), motor command = rest + tendon model, rounding, joint limits from the motor limits | The Touch never moved it (startup deadlock); then the motors moved ~1/1000 of what they should | [micro module](#micro-module-startup-deadlock-lost-handshake-and-motors-barely-moving-2026-10-30) |
 | Micro module: stylus position control (0.05×, task weighting), damping and orientation lag cut | Position barely moved the tip; the user wants a responsive Touch | [position](#micro-module-stylus-position-control-and-a-responsive-touch-2026-10-30) |
-| `scripts/tip_ball_calibration.py`: tool tip in tool0 from one NDI ball, no wand; micro module = tool 2 (tip (−8.7, 17.0, 436.0) mm, 200 mm shaft) | The micro module has no wand; `robot-tcp --tip-ball` needs one | [tip ball](#tool-tip-from-a-single-marker-ball-no-wand-scriptstip_ball_calibrationpy-2026-10-30) |
+| `scripts/calibration/tip_ball_calibration.py`: tool tip in tool0 from one NDI ball, no wand; micro module = tool 2 (tip (−8.7, 17.0, 436.0) mm, 200 mm shaft) | The micro module has no wand; `robot-tcp --tip-ball` needs one | [tip ball](#tool-tip-from-a-single-marker-ball-no-wand-scriptstip_ball_calibrationpy-2026-10-30) |
 
 None of these has a dedicated real-arm benchmark yet: the speedj script, the micro fixes and position control are verified in simulation / with fakes; the tool switch and the tip-ball calibration ran on the real setup.
 
@@ -1941,7 +1941,7 @@ on the real module, so direction, frame and feel are unverified. Tilting while h
 the stylus still asks the 4-DOF module for both a rotation and a fixed tip, so it
 compromises.
 
-## Tool tip from a single marker ball, no wand: `scripts/tip_ball_calibration.py` (2026-10-30)
+## Tool tip from a single marker ball, no wand: `scripts/calibration/tip_ball_calibration.py` (2026-10-30)
 
 **What:** calibrates a tool tip in tool0 from one passive marker ball on the tip, for the
 micro module, which has no wand. You freedrive the arm with the ball in view. Vega frames
@@ -2127,7 +2127,7 @@ The ~36 ms before Servo's output (teleop node + Servo) is the same in both modes
   while `logs/NEW_RUN` exists or the `ndi_tracking` node is not on ROS, and stops at the
   first replay that has no saved recording (`REPLAY.yaml`) or no `NDI_PATH.csv` (that one
   is kept as `..._NO_NDI`).
-- `scripts/wand_tool_calibration.py`: refits the hand-eye from a divot-less `robot-tcp
+- `scripts/calibration/wand_tool_calibration.py`: refits the hand-eye from a divot-less `robot-tcp
   --wand-is-tool` raw recording (newest `calibrations/raw/robot_tcp_*.npz`, wrist 1/2/3
   jogged, the sequence twice), with ndi_tracking's own fit. It drops NDI frames whose implied
   camera pose is > 30 mm off (mis-tracked wand), and fits each half on its own as a
@@ -2176,7 +2176,7 @@ factory model (a UR5e model would be ~30 mm off). The arm's own calibration is s
 extracted (see the V7 replay notes).
 
 **Old recordings:** bags before this date have `/ur5e_touch_teleop/...` topics.
-`scripts/rcm_offset_check.py` reads both names. Historical sections above keep the old names,
+`thesis/run_tools/rcm_offset_check.py` reads both names. Historical sections above keep the old names,
 as they describe the code at their tags.
 
 **Outside this repo:** `ndi_tracking` default `--rcm-topic` → `/ur16e_touch_teleop/rcm_active`, and
@@ -2231,7 +2231,7 @@ the output parses in xacro; an unreachable robot gives exit 1 after 3 tries. See
 **Real robot not yet run.**
 
 **Next:** extract on the arm (driver must then print `Calibration checked successfully.`), redo the wand
-hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remaining_experiments.md` §1.3).
+hand-eye and the micro tip ball, then the RD1 replays (`docs/lab_plans/07_remaining_experiments.md` §1.3).
 
 **Same day, after the tests above:**
 - **Real arm, first extraction (2026-11-03):** `config/calibrations/ur16e_kinematics_2026-11-03.yaml`, hash
@@ -2246,7 +2246,7 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   logging / the tool library, not motion. **Set back to `"position"` / `True` / `1.0` for Session B.**
 - An unsaved `logs/NEW_RUN` (2026-10-30 17:18, 136 s Touch run, no NDI) was moved to
   `logs/V8/UNSAVED_2026-10-30_171830` before the next recording could delete it.
-- **`scripts/wrist_jog.py`:** writes the hand-eye wrist jog (wrists 1-2-3 one at a time, ±30°,
+- **`scripts/calibration/wrist_jog.py`:** writes the hand-eye wrist jog (wrists 1-2-3 one at a time, ±30°,
   A·sin(2πt/T), 14 s each, twice: 90 s) from the current pose as a `trajectory_player.py` file,
   instead of jogging by hand on the pendant. That needed External Control stopped and never repeated.
   Refuses > 45° or > 30°/s. Mock test (velocity-mode stack, 7 s per wrist): each wrist −30.0…+30.0°,
@@ -2266,7 +2266,7 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   spread 6.0 mm / 0.25°, halves 0.4 mm, wand still to 0.04 mm / 0.01° (rest before/after). Tip
   (−1.01, 16.34, 324.99) mm, within ~1 mm of the 09:34 attempt. Tool 1 (10-26, nominal model) is kept for
   comparison.
-- **Calibration confirmed on the arm (`scripts/kinematics_check.py`, new):** in the first calibrated
+- **Calibration confirmed on the arm (`thesis/run_tools/kinematics_check.py`, new):** in the first calibrated
   replay (V8/CalibratedKinematics/FastCheckingRCMSimpleHolder_Replay1), tool0 through the calibrated file
   matches the controller's TCP to 0.000 mm spread / 0.000°, against 0.847 mm / 0.374° for the nominal model.
   A 10-26 replay gives 0.000 / 0.000 (calibrated) vs 0.638 / 0.371 (nominal), so the offline
@@ -2304,13 +2304,13 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   Scaled5_Fast ~70 mm (estimate), but LongBenchmark 11 mm, ShortBenchmark 4.9 mm (measured) and
   LargeVibrations ~1 mm. Those three were recorded with a shorter tool: not replayed with the wand mounted.
 | (after V8) | `f9af572` | 2026-11-03 | Arm's own kinematic calibration loaded (`ur_calibration_extract`, `kinematics_params_file`); tool 3 `V2_holder_only` hand-eye through it (`wrist_jog.py`); META `kinematics` block; `kinematics_check.py` | ROS used the nominal UR16e model (driver ERROR in 125 logs); the driver's ur_calibration 3.8.0 never connects and writes wrong rpy. Docs: `docs/UR_CALIBRATION_FIX.md` | ROS tool0 = controller TCP to 0.000 mm (nominal 0.85 mm). Replays `logs/V8/CalibratedKinematics/REPLAYS_2026-11-03.md`: SlowChecking 2.87 → 1.30 mm rms, others ~1.2-1.3, RCMOnly 0.47-0.50 |
-| V9 (part 1) | `0156789`, `977f652` | 2026-11-03 | Same RCM replay set in position and trajectory output (velocity = V8/CalibratedKinematics); `set_v9_mode.sh` | 3-mode comparison, same day / code / kinematics / tool; first real-arm position mode | Position: 12 replays, no faults, same RCM accuracy as velocity. `logs/V9/REPLAYS_2026-11-03.md`. Part 2: `thesis/planning/08_next_session_V9b.md` |
+| V9 (part 1) | `0156789`, `977f652` | 2026-11-03 | Same RCM replay set in position and trajectory output (velocity = V8/CalibratedKinematics); `set_v9_mode.sh` | 3-mode comparison, same day / code / kinematics / tool; first real-arm position mode | Position: 12 replays, no faults, same RCM accuracy as velocity. `logs/V9/REPLAYS_2026-11-03.md`. Part 2: `docs/lab_plans/08_next_session_V9b.md` |
 - **End of the 11-03 session:** V9 part 1 = RCM set in position (V9/PositionMode) and trajectory
   (V9/TrajectoryMode); results in `logs/V9/REPLAYS_2026-11-03.md`. Remaining NDI runs and the order:
-  `thesis/planning/08_next_session_V9b.md`. Settings set back to `final` (position, smooth speedj, exponent
+  `docs/lab_plans/08_next_session_V9b.md`. Settings set back to `final` (position, smooth speedj, exponent
   1.0) until then. The failed 09:26 and cut-off 09:34 hand-eye fits are kept in `config/calibrations/` for
   the method chapter.
-- **2026-11-06, `scripts/run_v9b.sh` + `scripts/pose_offset_motion.py`:** runs the remaining wand + NDI runs (RCM only):
+- **2026-11-06, `scripts/lab/run_v9b.sh` + `scripts/lab/pose_offset_motion.py`:** runs the remaining wand + NDI runs (RCM only):
   bridge, unfiltered RCMOnly, optimised RCM set, static floor, pose-offset test at two camera places. Tracked
   `Scaled5_*` / `NoBuzzArea` runs dropped: at their wrist 3 angle (~135 deg) the markers point ~110 deg away from a camera
   that sees the RCM runs (11-03 `Scaled5_Slow_Replay1`: 0 of 1166 NDI rows visible). `replay_batch.sh` only checked that
@@ -2325,18 +2325,18 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   LargeVibrations in trajectory and position only, unfiltered Scaled5 at 1:5. Tool 3 stays configured so the paths match the 11-03
   trajectory leg; the flange stays >= 262 mm above the base plane. Results go to `logs/V9b/NoTool/`.
 - **2026-11-06, singularity guard run-off fixed (`SingularityGuard.__call__`):** a scripted stroke into the wrist singularity
-  (`scripts/singularity_input.py`, repeatable with no Touch) showed the guard holding c = 60 but the tool leaving its target with the
+  (`scripts/lab/singularity_input.py`, repeatable with no Touch) showed the guard holding c = 60 but the tool leaving its target with the
   stylus held past the limit: 609 mm height drop, 155 mm/s, 89 deg/s on the mock. R6.3 only covered the short case. The guard cut q' and mapped
   it back, so its output could oppose the command. It now cuts the twist, so the output is a part of the command: 0.7 mm, 36 mm/s, 4.8 deg/s,
   same input, same c limit. Simulation, 15 elbow strokes: 15 failed before, none after. Evidence: `logs/V9b/REPLAYS_2026-11-06.md`,
-  `thesis/planning/analysis/E6_singularity/`. Real arm: `run_v9b.sh --from=12` (guard on x3, off x3; the guard is always restored).
+  `thesis/earlier/E6_singularity/`. Real arm: `run_v9b.sh --from=12` (guard on x3, off x3; the guard is always restored).
 - **2026-11-06, E6 on the real arm (3 replays each, same scripted input):** guard on: c 60.4, returned to 0.6 mm, 4.5 deg/s. Guard off: c 204,
   Servo emergency stop, and the arm could not leave (172 mm from the start, 3 of 3). The mock returned with the guard off, so this needed the arm.
   `logs/V9b/REPLAYS_2026-11-06.md`, `logs/V9b/Singularity/METRICS.csv`.
 - **2026-11-06, exchange protocol confirmed by the user:** 30 s still, 20 swaps (wand moved out of view, lever closed fully, 5 s seated),
   30 s still. Matches the 21 still segments in each `logs/Exchange` set, so R8.2 no longer rests on an inferred protocol and RD4 needs
   no redo for coupling repeatability. Written up in `logs/Exchange/PROTOCOL.md`.
-- **2026-11-06, micro module recalibrated (`scripts/micro_tool_calibration.py`, tool 2):** four dots, two opposite pairs, so the shaft axis comes from the
+- **2026-11-06, micro module recalibrated (`scripts/calibration/micro_tool_calibration.py`, tool 2):** four dots, two opposite pairs, so the shaft axis comes from the
   midpoints and no frame needs every dot. Each dot is fitted as a point fixed in tool0 with base -> camera. Tip (-6.41, 15.56, 436.28) mm, 1.68 deg off tool0 z,
   through the calibrated kinematics; the 10-30 entry used the nominal model. Tip = metal end + 21.8 mm measured, continuum section assumed straight.
   `wrist_jog.py --wrist3-amplitude` added to turn a tool about its shaft. Details: `logs/V9b/REPLAYS_2026-11-06.md`.
@@ -2344,7 +2344,7 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   (as `NEW_RUN`), because both got `<name>_Replay<n>_NO_NDI`. It now takes the next free `_NO_NDI` number. Cause of the failures (V9c step 23):
   SlowChecking replays approach the V7 start joints (TCP z 0.625 m), above the Vega's view (wand lost above ~0.595 m), so the RCM never latched;
   camera moved; fits (tool0 -> wand) kept, since they do not depend on the camera pose.
-- **2026-11-19, latch offset = tool line mismatch (offline) + phase L test (`run_v9c.sh --phase=L`, `scripts/latch_line_fit.py`):**
+- **2026-11-19, latch offset = tool line mismatch (offline) + phase L test (`run_v9c.sh --phase=L`, `thesis/run_tools/latch_line_fit.py`):**
   the "latch offset" is not timing (|offset| vs tip speed at the latch r = 0.008, 63 runs) and not the camera (folder 11). The tool slides
   100-150 mm through the RCM, and the line the controller holds is fixed in the wand frame but ~0.3 deg (tool 3) / ~1.05 deg (V9c tools 4-6)
   and ~2 mm off the tracked shaft, so the shaft misses the point by depth x angle. One fixed line per tool cuts the NDI RCM rms from

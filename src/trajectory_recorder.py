@@ -36,7 +36,7 @@ this node's clock (`t`, s since start); the sender's own stamp is kept as `stamp
 
 NEW_RUN is deleted when the next recording starts - rename the folder to keep
 it. With LOG_KEEP_ALL_RUNS each run is also copied to <log_dir>/runs/<date_time>/.
-Plot with scripts/plot_paths.py.
+Plot with thesis/run_tools/plot_paths.py.
 """
 
 import csv

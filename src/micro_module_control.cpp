@@ -17,8 +17,8 @@
 #include "tf2_ros/transform_listener.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include "../include/ManipulatorModule.hpp"
-#include "../include/Pose.hpp"
+#include "macro_micro_robot/ManipulatorModule.hpp"
+#include "macro_micro_robot/Pose.hpp"
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 #include <Eigen/StdVector>

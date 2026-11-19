@@ -236,7 +236,7 @@ the flange in the first holder and 325 mm in the second, whose body was 45 mm sh
 
 The micro module's hardware, wiring and parts list are those of Scott (2023): four hobby servos pulling the tendons
 of a continuum tip on a 4 mm stainless steel tube, driven by an Arduino Mega 2560 in a junction box, at a parts cost
-of about AUD 250 ([`PartsList.pdf`](../PartsList.pdf)). The repairs made in this work are listed in report Section
+of about AUD 250 ([`PartsList.pdf`](PartsList.pdf)). The repairs made in this work are listed in report Section
 3.2.4. It was mounted on a coupling tool plate (photo (d) above).
 
 ---
@@ -284,7 +284,7 @@ own pivot point.
 
 ### 5.3 Wrist-jog hand–eye calibration
 
-Code: [`scripts/wrist_jog.py`](../scripts/wrist_jog.py), [`scripts/wand_tool_calibration.py`](../scripts/wand_tool_calibration.py).
+Code: [`scripts/calibration/wrist_jog.py`](../scripts/calibration/wrist_jog.py), [`scripts/calibration/wand_tool_calibration.py`](../scripts/calibration/wand_tool_calibration.py).
 
 1. With the wand in its holder and in view, a script writes a joint motion from the arm's current pose: each of
    wrists 1, 2 and 3 in turn follows $A\sin(2\pi t/T)$ with $A = 30°$ and $T = 14$ s (peak 13°/s), with a pause
@@ -301,7 +301,7 @@ Code: [`scripts/wrist_jog.py`](../scripts/wrist_jog.py), [`scripts/wand_tool_cal
 
 ### 5.4 Micro module tip
 
-Code: [`scripts/micro_tool_calibration.py`](../scripts/micro_tool_calibration.py).
+Code: [`scripts/calibration/micro_tool_calibration.py`](../scripts/calibration/micro_tool_calibration.py).
 
 The micro module carries no rigid marker body. Four single markers were fixed to it: two on opposite sides at the
 base of the metal shaft and two on opposite sides at its end, with the gaps of each pair checked with callipers. The

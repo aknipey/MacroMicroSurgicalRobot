@@ -68,7 +68,7 @@ controller's `base` frame (base_link rotated by π about z), not base_link.
 - `runs.py`: run discovery and a run table (version, mode, trajectory, replay n, scale, filter cutoff,
   kinematics, camera day) built **from META/REPLAY files**, never from folder names alone.
 - `style.py`: one colour + marker per condition, shared by every figure (the categorical slots of
-  `thesis/plotting/common.py`; run the dataviz palette validator once on the final set), figure widths
+  `thesis/earlier/plotting/common.py`; run the dataviz palette validator once on the final set), figure widths
   for the report (full 15 cm, half 7.3 cm), vector PDF + PNG preview.
 - `checks.py`: stream gaps (> 3× median dt), NDI visibility, `tcp_offset.check_max_mm` > 5 mm (wrong
   kinematics), camera-moved test (robot-vs-NDI residual step), each returning a reason string.
