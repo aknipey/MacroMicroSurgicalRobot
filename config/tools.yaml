@@ -86,3 +86,11 @@ tools:
     calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-19_153434.json
     date: '2026-11-19'
     notes: V9c session D 2026-11-19 15:34
+  11:
+    name: wand_L_corrected
+    tip_tool0_mm: [-3.4545, 9.3169, 322.7328]
+    direction_tool0: [0.005802, 0.015263, 0.999867]
+    shaft_length_mm: 158.6
+    calibration: manual
+    date: '2026-11-19'
+    notes: 'latch-line correction of tool 10 from 4 run(s): 0.49 deg, 5.22 mm'
