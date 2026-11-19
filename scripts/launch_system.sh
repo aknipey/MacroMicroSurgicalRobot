@@ -5,7 +5,7 @@
 # bridge, UR16e driver, control nodes, RViz).
 #
 # This replaces manually opening N terminals, sourcing ROS 2 in each one, and
-# running the commands from MICRO_MODULE_STARTUP.md / README.md by hand.
+# running the commands from README.md by hand.
 #
 # Usage:
 #   ./launch_system.sh <mode> [options]

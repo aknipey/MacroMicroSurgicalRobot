@@ -1,35 +1,12 @@
-// ur_calibration_extract: reads the arm's factory kinematic calibration from the UR controller and writes
-// it as a kinematics_params_file for ur_description / ur16e_teleop.launch.py.
+// Reads the arm's factory kinematic calibration from the UR controller and writes it as a
+// kinematics_params_file for ur_description / ur16e_teleop.launch.py.
 //
-// Why this exists instead of `ros2 launch ur_calibration calibration_correction.launch.py`
-// (full story: docs/UR_CALIBRATION_FIX.md):
-//
-//   The driver in src/Universal_Robots_ROS2_Driver is 3.8.0, built against apt ur_client_library 2.15.2.
-//   Its ur_calibration has two bugs, both fixed upstream on the jazzy branch after 3.8.0:
-//
-//   1. It never connects (upstream 0089621, "#1981"). In client library 2.15.2 only Pipeline::init()
-//      opens the primary-interface socket (init -> URProducer::setupProducer -> URStream::connect).
-//      calibration_correction.cpp calls pipeline.run() without init(), so it reads from an unopened
-//      socket: "Stream is invalid. Connect it before trying to read!", forever.
-//   2. Even once connected, the file it writes is wrong (upstream 81df755, "#2030"). Calibration::toYaml()
-//      wrote each link rotation with Eigen eulerAngles(0, 1, 2) (R = Rx*Ry*Rz), but URDF <origin rpy> is
-//      R = Rz(yaw)*Ry(pitch)*Rx(roll). They differ whenever a nominal quarter-turn is combined with a
-//      calibration delta, i.e. on most UR links, so the "calibrated" URDF would not match the controller.
-//
-//   We don't edit the driver repo (edit scope is this package). Instead vendor/ur_calibration/ holds
-//   byte-identical copies of upstream jazzy's calibration.hpp/.cpp (which have fix 2), and this file
-//   replaces calibration_correction.cpp + CalibrationConsumer (with fix 1). Once the driver checkout is
-//   updated to >= 3.10.0 the stock tool works too; this one stays useful for the checks below.
-//
-// Added on top of upstream, so a wrong file can't get through silently:
-//   - Bounded connect / receive (upstream retries forever and waits forever).
-//   - Before writing, rebuilds the chain from the YAML exactly as URDF does and compares it with forward
-//     kinematics computed straight from the controller's raw D-H parameters (independent of ur_calibration's
-//     chain correction). Refuses to write if they differ by more than CHECK_TOLERANCE.
-//   - Optionally compares with the nominal model (nominal_kinematics_file): how far ROS's tool0 has been
-//     from the controller's, i.e. the error every run before this file existed carried.
-//   - Writes the raw D-H parameters and the check results into the file as comments, so the file is
-//     self-describing and can be re-checked offline (dh_file parameter) without the robot.
+// Replaces the driver's calibration_correction, which in 3.8.0 never connects and writes wrong
+// link rotations (docs/UR_CALIBRATION_FIX.md). vendor/ur_calibration/ holds upstream jazzy's
+// calibration.hpp/.cpp unchanged. On top of upstream: bounded connect/receive; before writing,
+// the YAML chain is checked against FK from the controller's raw D-H parameters (refuses past
+// CHECK_TOLERANCE); optional comparison with the nominal model; the raw D-H parameters and
+// check results are written into the file as comments so it can be re-checked offline (dh_file).
 
 #include <Eigen/Dense>
 

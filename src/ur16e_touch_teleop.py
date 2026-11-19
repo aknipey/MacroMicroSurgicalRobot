@@ -1,78 +1,22 @@
 #!/usr/bin/env python3
-"""Touch (Geomagic / 3D Systems) stylus teleoperation of the UR16e through MoveIt Servo.
+"""Touch stylus teleoperation of the UR16e through MoveIt Servo.
 
-Hold the WHITE button to drive the robot (clutch / deadman). The stylus pose
-at the moment the button goes down is the origin: while held, the robot tool
-follows the stylus displacement and tilt since then (scaled by
-`translation_scale` / `rotation_scale`); releasing it freezes the robot so you
-can re-centre the stylus and press again.
+WHITE is the clutch: while held, tool0 follows the stylus motion since the press.
+Double-click WHITE cycles the motion scale (`scale_steps`). A GREY click starts or stops
+recording; holding GREY for `mode_switch_hold_time` switches between this arm (macro) and
+micro_module_control (micro), published latched on `mode_topic`.
 
-Double-click WHITE to cycle the motion scale (1:1 -> 1:5 -> 1:20 by default,
-`scale_steps`). Nothing waits to see whether a press becomes a double click:
-both presses engage straight away, and the new scale applies from the second
-press (which re-captures the origin, so the robot does not jump). Tilt and
-twist are scaled by step ** `scale_rotation_exponent` (1 by default: the same as translation). The current
-scale is published latched on ~/motion_scale for the logs.
+WHITE + GREY latches the tool tip as a remote centre of motion (RCM): the stylus then drives
+the tip, the arm pivots the shaft about the point, and pen twist rolls the tool. The same
+chord, with the tool retracted, leaves RCM mode. The RCM tool comes from the tool library
+(`tool_library`, switch with the `tool` parameter).
 
-Click the GREY button to start / stop recording a trajectory and the
-Touch / UR path logs (needs trajectory_recorder running). It acts on release, as a
-click shorter than `mode_switch_hold_time` and not touching WHITE.
+Also: a singularity guard on the arm Jacobian's condition number (`singularity_guard`),
+haptic cues on the stylus (`haptics`), and the target and RCM state on ~/target_pose,
+~/motion_scale, ~/condition_number, ~/rcm_* for the logger.
 
-Hold GREY for `mode_switch_hold_time` (1 s) without touching WHITE to switch the
-stylus between the macro (this arm) and micro (micro_module_control) module; the
-mode is published latched on `mode_topic` (/teleop_mode, "macro" or "micro").
-In micro mode WHITE drives the micro-manipulator instead and this node ignores it
-(no engage, no scale change, no RCM chord); GREY clicks still record.
-
-RCM (remote centre of motion) mode: while holding WHITE, click GREY. The tool tip
-(the `rcm_shaft_*` tool, see teleop_settings) is latched as a fixed pivot point,
-e.g. a port. From then on the stylus drives the tool tip: the arm pivots the shaft
-about that point to aim it at the tip target, the distance past it is the insertion
-depth (capped at shaft length - `rcm_depth_margin`), pen twist rolls the tool about
-the shaft and pen tilt is ignored. Sideways stylus motion swings tool0 by the same
-amount at every depth (`rcm_tool0_gain`, up to `rcm_tool0_gain_depth`), so the tip
-moves less the shallower it is; an extra fade near the point is optional
-(`rcm_pivot_fade_depth`, off by default). Hold WHITE + click
-GREY again to leave, which needs the tool retracted to `rcm_exit_depth`; it can be
-pulled out up to `rcm_retract_depth` past the point first. The RCM
-state is published on ~/rcm_active, ~/rcm_point, ~/rcm_error (shaft line to the
-point), ~/insertion_depth and ~/tool_tip.
-
-Tools: the RCM tool comes from the numbered library in `tool_library`
-(macro_micro_robot/tools.py), starting on its default. Set the `tool` parameter to switch
-(the launch_system.sh terminal does this when you type a number); the switch is
-refused in RCM mode, while WHITE drives the arm, or while any joint has moved faster
-than `tool_switch_max_joint_speed` in the last `tool_switch_still_time`. The library
-is re-read on every switch, and the active tool is published latched on ~/active_tool.
-
-While engaged, the stylus pose mapped into the robot frame (the tool0 pose the
-robot is being pulled towards) is published on ~/target_pose, once per stylus
-sample and stamped with the stylus sample's own stamp, for the logger.
-
-Frames: the omni_state driver publishes the stylus position in millimetres
-with x = right, y = away from the operator (towards the Touch body), z = up.
-With `mapping` = "toward_base" (default) the Touch is treated as a small copy
-of the robot seen from the tool: up is up, pushing the stylus towards the
-Touch body moves the tool horizontally towards the robot base, and right is
-right from that viewpoint. The direction is frozen when WHITE is pressed.
-With `mapping` = "fixed", `axis_map` says which stylus axis drives each robot
-axis of `base_frame`. Stylus tilts are mapped through the same frame, so the
-wrist tilts the way the pen does. Twisting the pen about its own axis
-(`enable_twist`) turns the tool about tool0 z, i.e. the last joint.
-
-Singularities (`singularity_guard`): near one (wrist 2 near 0 / 180 deg, elbow
-straight, wrist centre over the base) the part of the motion heading into it is
-slowed and then removed, so the tool slides along the edge instead of stalling,
-and if the arm is past the limit (or starts there) holding WHITE backs it out.
-The arm's condition number is published on ~/condition_number.
-
-Haptic cues (`haptics`, sent to the driver's force_feedback topic) while WHITE is
-held: in RCM mode a soft wall at the deepest insertion and at the retract limit and
-a click as the tip target crosses the RCM point; a small tap when RCM mode turns on
-or off (two when it refuses to turn off); near a singularity a
-push on the stylus in the direction that leads out of it, growing from the guard's
-slow to its stop threshold. The driver keeps the last force it was sent, so the
-node sends zero when it starts and when it exits.
+Mapping "toward_base" (default): up is up, towards the Touch body moves the tool towards the
+robot base. "fixed" uses `axis_map`. Defaults are in macro_micro_robot/teleop_settings.py.
 """
 
 import signal

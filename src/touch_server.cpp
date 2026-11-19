@@ -1,25 +1,14 @@
-// Touch (OpenHaptics) servo loop in a process of its own, with no ROS libraries.
+// Touch (OpenHaptics) servo loop in its own process, with no ROS libraries.
 //
-// OpenHaptics stops rendering forces - silently: no HD error, the 1 kHz loop runs and
-// HD_FORCE_OUTPUT reads enabled - in any process that has liblttng-ust or libnuma
-// loaded, and every ROS 2 node loads both (rcl -> tracetools -> lttng-ust -> numa).
-// So omni_state's position and buttons work but no force ever reaches the motors.
-// This program does the device side exactly as omni_state's servo callback does (same
-// axes, units, filters, calibration), and touch_bridge does the ROS side; they talk
+// OpenHaptics silently renders no force in a process that has liblttng-ust or libnuma loaded,
+// and every ROS 2 node loads both. So this program does the device side as omni_state's servo
+// callback does (same axes, units, filters, calibration), and touch_bridge does the ROS side,
 // over UDP on localhost. Do not link this executable against anything from ROS.
 //
-// Each servo tick sends a TouchStatePacket to 127.0.0.1:STATE_PORT. Forces arrive as
-// TouchForcePacket on FORCE_PORT, in the /phantom/state axes (N), and are applied as
-// they are (omni_state's axis swap). Position-dependent cues (RCM walls and detent)
-// arrive as a TouchScenePacket and are rendered here, every tick, from the current
-// position: computed in the teleop over ROS, they reached the pen tens of ms late and
-// shook it. A force or scene older than FORCE_TIMEOUT is dropped (omni_state kept the
-// last force for ever). The total is capped and slew-limited.
-//
-// omni_state also subtracted 0.001 N per mm/s of its 20 Hz-filtered velocity from every
-// force. On the real Touch that "damping" shook the pen at ~25 Hz (the filter's lag
-// turns it into a push along the motion there), 2 N while the cue asked for 0.3 N, so it
-// is left out: whoever sends the force adds any damping it wants.
+// Each tick sends a TouchStatePacket to STATE_PORT. TouchForcePackets (N, /phantom/state axes)
+// arrive on FORCE_PORT; TouchScenePackets (RCM walls, detent) are rendered here every tick from
+// the current position. Anything older than FORCE_TIMEOUT is dropped; the total is capped and
+// slew-limited. omni_state's velocity damping is left out (it shook the pen).
 
 #include <HD/hd.h>
 #include <HDU/hduError.h>

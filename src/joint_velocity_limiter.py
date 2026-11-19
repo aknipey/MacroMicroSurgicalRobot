@@ -1,46 +1,18 @@
 #!/usr/bin/env python3
-"""Smooths and limits MoveIt Servo's joint velocities before they reach the UR
-(SERVO_OUTPUT "velocity" only):
+"""Limits and smooths MoveIt Servo's joint velocities before they reach the UR.
 
-    servo_node --Float64MultiArray qd--> /joint_velocity_limiter/commands
-    joint_velocity_limiter --qd--> /forward_velocity_controller/commands  (or ur_emulator)
+    servo_node --qd--> /joint_velocity_limiter/commands
+    output "velocity": --qd--> /forward_velocity_controller/commands (speedj)
+    output "position": --q + qd * lead--> /forward_position_controller/commands (servoj)
 
-In velocity mode the UR runs `speedj(qd, 40 rad/s^2, 2 ms)` on whatever arrives, and
-nothing between Servo and the arm smooths or limits it. On the real UR16e that gave
-wrist torque chatter at the command update rate, and joint faults (C306A0) with the
-chatter at its worst and a wrist at 28-43 rad/s^2 (see docs/VERSIONS.md, V5).
+Each command is scaled (all joints together) to `speed_fraction` of the URDF limits, then
+limited to `max_acceleration`, then smoothed by two first-order stages of `smoothing` s
+(which cannot overshoot the caps). If Servo goes quiet the last command is repeated, then
+zeroed after VELOCITY_WATCHDOG_TIMEOUT.
 
-Each command from Servo is, in this order:
-1. scaled down, all joints together, so no joint exceeds `speed_fraction` of its
-   URDF velocity limit (the tool keeps its direction, it just goes slower),
-2. limited in acceleration: the change from the previous limited command is scaled
-   down, all joints together, so no joint changes speed faster than its
-   `max_acceleration`,
-3. smoothed: two first-order stages with time constant `smoothing` each (critically
-   damped). This rounds the corners the caps make when they engage and the steps
-   left when a command arrives late. Its impulse response is never negative, so the
-   output can never exceed the speed or acceleration caps (a Butterworth overshoots).
-
-Within the limits only the smoothing acts (~6 ms at 3 ms). The output is published as
-each command arrives. If Servo goes quiet for a period (it sends a few zeros when it
-halts, then nothing) its last command is repeated through the limits and smoothing on a
-timer, as Servo would have, and replaced by zero after VELOCITY_WATCHDOG_TIMEOUT, so
-the arm never keeps a half-finished speed.
-
-With `output` "position" (SERVO_OUTPUT "position") the limited velocities are
-integrated into joint positions for forward_position_controller, so the UR runs servoj
-instead of speedj (speedj buzzed in some poses, servoj never did):
-
-    joint_velocity_limiter --q + qd * lead--> /forward_position_controller/commands
-
-The position is this node's own running sum, not rebuilt from /joint_states each step
-(that is what makes Servo's own position output crawl on the real arm). It starts from
-the measured joints, again whenever the arm was moved by something else while this
-node was idle, and is never allowed more than `max_position_error` ahead of them. Each
-command is sent `lead` seconds ahead at the current speed, to cancel servoj's own lag.
-
-Started by ur16e_teleop.launch.py when SERVO_OUTPUT is "position", or "velocity" with
-VELOCITY_LIMITER on.
+In position mode the position is this node's own running sum (not rebuilt from
+/joint_states each step), started from the measured joints and held within
+`max_position_error` of them.
 """
 
 import xml.etree.ElementTree as ET

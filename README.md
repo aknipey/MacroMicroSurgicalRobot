@@ -1,534 +1,135 @@
-# A Low-Cost Teleoperable Surgical Robot with a Macro-Micro Structure and a Continuum Tip for Open-Source Research
+# A Low-Cost Teleoperable Surgical Robot with a Macro-Micro Structure and a Continuum Tip
 
-ROS 2 package providing simultaneous teleoperation of a custom micro-manipulator and a Universal Robots UR16e robotic arm via a 3D Systems Touch haptic stylus.
-
-> **Note:** This package was originally written for **ROS 1 Noetic (catkin)** and has been migrated to **ROS 2 Jazzy (ament_cmake / colcon)**. The control logic is unchanged; only the ROS plumbing and build system were ported. See _ROS 2 dependencies & known external gaps_ below for packages you must obtain separately.
-
-Additional dependencies and their installation instructions can be found in these repositories:
-
-[https://github.com/LMBScott/motor_angles_msg/](https://github.com/LMBScott/motor_angles_msg/)
-
-[https://github.com/LMBScott/Serial_Control/](https://github.com/LMBScott/Serial_Control/)
-
-## Package contents
-
-| Node                        | Language | Purpose                                                                                                                   |
-| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `ur16e_control`              | C++      | Touch → UR16e cartesian teleoperation (tf2 + controller-manager service load/switch + `FollowCartesianTrajectory` action). |
-| `micro_module_control`      | C++      | Touch → micro-manipulator Jacobian control (Eigen, `motor_angles_msg`).                                                   |
-| `android_pose_subscriber`   | C++      | Touch → rviz marker visualisation.                                                                                        |
-| `android_pose_publisher.py` | Python   | Android-phone websocket → `PoseStamped`.                                                                                  |
-| `ur16e_keyboard_teleop.py`  | Python   | Keyboard → UR16e Cartesian jogging via MoveIt Servo.                                                                       |
-| `ur16e_touch_teleop.py`     | Python   | Touch stylus → UR16e teleoperation via MoveIt Servo (white = clutch, grey click = record, grey hold 1 s = switch arm / micro). |
-| `trajectory_recorder.py`   | Python   | Records UR16e joint + tool-pose trajectories to YAML/CSV, shows the path in RViz.                                           |
-| `trajectory_player.py`     | Python   | Replays a recorded trajectory (or moves to a home pose) via the scaled joint trajectory controller.                        |
-
-## ROS 2 dependencies & known external gaps
-
-These are **not** part of this repository and must be present in your colcon workspace before the package will build/run:
-
-- **`omni_msgs`** — provides `OmniState` / `OmniButtonEvent`. Supplied by the ROS 2 Geomagic/3D-Systems Touch driver. Source-build it into your workspace.
-- **`cartesian_control_msgs`** — provides the `FollowCartesianTrajectory` action. Ships with the ROS 2 UR driver / `cartesian_controllers`. Try `sudo apt install ros-jazzy-cartesian-control-msgs`, otherwise source-build.
-- **`motor_angles_msg`** — the previous student's _custom_ message package (link above) is **ROS 1 only**. A small ROS 2 `rosidl` port (one `MotorAngles.msg` with the four `*_angle` fields) is required before `micro_module_control` will build.
-- Runtime drivers: the **ROS 2 UR driver**, a **ROS 2 Touch driver**, and a replacement for `rosserial` (e.g. **micro-ROS** or a serial bridge) for the micro-module Arduino.
-
-## Installation
-
-1. Install **Ubuntu 24.04 LTS**.
-2. (For real UR16e control) Apply a real-time kernel patch — see the [UR ROS 2 driver real-time docs](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver).
-3. Install [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html):
-   ```
-   sudo apt install ros-jazzy-desktop
-   ```
-4. Install build tooling and core dependencies:
-   ```
-   sudo apt install python3-colcon-common-extensions python3-rosdep \
-       ros-jazzy-tf2-geometry-msgs ros-jazzy-controller-manager-msgs \
-       ros-jazzy-joint-state-publisher ros-jazzy-joint-state-publisher-gui \
-       ros-jazzy-xacro libeigen3-dev python3-websocket
-   sudo rosdep init   # skip if already initialised
-   rosdep update
-   ```
-5. Create a colcon workspace and clone this repository into it:
-   ```
-   mkdir -p ~/ros2_ws/src && cd ~/ros2_ws/src
-   git clone <this-repo-url> macro_micro_robot
-   ```
-6. Clone/source-build the external packages listed in _ROS 2 dependencies & known external gaps_ into `~/ros2_ws/src` as well (`omni_msgs`, `cartesian_control_msgs`, a ROS 2 `motor_angles_msg`).
-7. Install the [Geomagic Touch driver](https://github.com/bharatm11/Geomagic_Touch_ROS_Drivers) (ROS 2 fork) and the [OpenHaptics SDK](https://support.3dsystems.com/s/article/OpenHaptics-for-Linux-Developer-Edition-v34?language=en_US). For a 64-bit system, create the symbolic links:
-   ```
-   sudo ln -s /usr/lib/x86_64-linux-gnu/libraw1394.so.11.0.1 /usr/lib/libraw1394.so.8
-   sudo ln -s /usr/lib64/libPHANToMIO.so.4.3 /usr/lib/libPHANToMIO.so.4
-   sudo ln -s /usr/lib64/libHD.so.3.0.0 /usr/lib/libHD.so.3.0
-   sudo ln -s /usr/lib64/libHL.so.3.0.0 /usr/lib/libHL.so.3.0
-   ```
-   Run `./Touch_Setup` and `./Touch_Diagnostic` (with the Touch connected) to verify communication.
-8. Resolve dependencies and build:
-   ```
-   cd ~/ros2_ws
-   rosdep install --from-paths src --ignore-src -r -y
-   colcon build --symlink-install
-   source install/setup.bash
-   ```
-
-> Thanks to Mustafa Sevinc for writing the original installation instructions.
-
-## ROS 2 Startup Commands
-
-> ROS 2 has no `roscore`; nodes discover each other automatically. `source ~/ros2_ws/install/setup.bash` in every terminal first.
-
-### The easy way: `launch_system.sh`
-
-`scripts/launch_system.sh` starts every dependency for a given scenario (Touch
-driver, Arduino serial bridge, UR16e driver, control nodes, RViz) with one
-command, in the right order, in the background, with logs collected under
-`log/launch_system/`. Ctrl+C stops everything it started.
+ROS 2 Jazzy package that teleoperates a Universal Robots UR16e (the macro stage) and a
+tendon-driven continuum micro-manipulator (the micro stage) with a 3D Systems Touch haptic
+stylus. The arm is driven through MoveIt Servo. On top of plain teleoperation the package provides:
+- a remote centre of motion (RCM) mode for keyhole work;
+- a singularity guard;
+- haptic cues on the stylus;
+- a library of calibrated tools;
+- recording of every run, and replay of a run's exact stylus input.
 
 ```
+Touch ─► touch_server ─UDP─► touch_bridge ─► ur16e_touch_teleop ─► MoveIt Servo ─► joint_velocity_limiter ─► UR16e
+                                                   │  (RCM, guard, haptics)                 (position / velocity)
+                                                   └─► micro_module_control ─► serial bridge ─► micro module
+```
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`src/`](src) | Nodes: Touch and keyboard teleop, trajectory recorder and player, stylus replay, joint velocity limiter, UR emulator, Touch driver (`touch_server` + `touch_bridge`), micro-module control, tool library CLI |
+| [`macro_micro_robot/`](macro_micro_robot) | Shared Python: **all tuning values** ([`teleop_settings.py`](macro_micro_robot/teleop_settings.py)), Servo and kinematics helpers, singularity guard, tool library, haptics |
+| [`include/macro_micro_robot/`](include/macro_micro_robot) | C++ headers |
+| [`launch/`](launch), [`urdf/`](urdf), [`meshes/`](meshes), [`rviz/`](rviz) | Launch files and the micro-module model |
+| [`config/`](config) | Tool library (`tools.yaml`), arm and tool calibrations, smoothed speedj URScript |
+| [`scripts/`](scripts) | `launch_system.sh` (start a session), `replay_batch.sh`, `set_v9_mode.sh`; `calibration/` (tool and hand-eye calibration), `lab/` (scripted lab sessions), `touch_diagnostics/` |
+| [`thesis/`](thesis/README.md) | All offline analysis of the recorded runs: the report's analyses in `data_analysis/`, per-run checks in `run_tools/` |
+| [`docs/`](docs) | Guides, lab log, report supplement, parts list, architecture diagram |
+| [`vendor/ur_calibration/`](vendor/ur_calibration) | Unmodified upstream code from the UR driver (do not edit) |
+| `logs/` | Recorded runs (not in git) |
+
+## Install
+
+You need Ubuntu 24.04 and ROS 2 Jazzy. The real arm also needs a real-time kernel; see the
+[UR driver docs](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver).
+
+Clone into `~/ros2_ws/src/MacroMicroSurgicalRobot`. `LOG_DIR` and `TOOL_LIBRARY` in
+`teleop_settings.py` assume that path. These packages go in the same workspace:
+
+| Package | For |
+|---|---|
+| [Universal_Robots_ROS2_Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) | Arm driver, `ur_moveit_config` |
+| `cartesian_control_msgs` | Build dependency of the legacy `ur16e_control` node |
+| `omni_msgs` (from a ROS 2 Geomagic Touch driver) | Touch messages |
+| `motor_angles_msg` | Micro-module messages; a ROS 2 port of [the original](https://github.com/LMBScott/motor_angles_msg/) |
+| [Serial_Control](https://github.com/LMBScott/Serial_Control/) | Micro-module Arduino bridge |
+| `ndi_tracking` | NDI optical tracking of runs and tool calibration (optional) |
+| [OpenHaptics SDK](https://support.3dsystems.com/s/article/OpenHaptics-for-Linux-Developer-Edition-v34?language=en_US) | `touch_server`; skipped at build time if absent |
+
+```bash
 cd ~/ros2_ws
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh display                     # RViz only, no hardware
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh keyboard                    # Arduino only, keyboard teleop
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh touch                       # Touch + Arduino, no UR16e
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur16e --robot-ip=192.168.0.100
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh full --robot-ip=192.168.0.100 --arduino-port=/dev/ttyACM1
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --packages-up-to macro_micro_robot
+source install/setup.bash
 ```
 
-Run `./src/MacroMicroSurgicalRobot/scripts/launch_system.sh help` for every
-mode and flag (`--arduino-port`, `--calibration-file`, `--baud`, `--with-rviz`,
-`--dry-run`, ...), or `./src/MacroMicroSurgicalRobot/scripts/launch_system.sh
-stop` to kill a run whose terminal you already closed.
+With `--symlink-install`, changes to Python files and `teleop_settings.py` take effect the next
+time the nodes start, with no rebuild.
 
-**Arm calibration:** by default ROS uses the nominal UR16e model, not this arm's factory calibration.
-Extract it with `ros2 launch macro_micro_robot ur_calibration_extract.launch.py` (the driver's own
-`ur_calibration` is broken in our 3.8.0 checkout) and pass the result with `--calibration-file=`.
-See [docs/UR_CALIBRATION_FIX.md](docs/UR_CALIBRATION_FIX.md).
+## Run
 
-The rest of this section documents what the script does under the hood, for
-manual/single-terminal use or debugging.
+`scripts/launch_system.sh` starts a whole session in order and stops it all on Ctrl+C.
+`scripts/launch_system.sh help` lists every mode and flag.
 
-### Visualisation only (no hardware)
-
-```
-ros2 launch macro_micro_robot display.launch.py
-```
-
-### Touch Stylus
-
-1. Add permissions for the touch USB device: `sudo chmod 777 /dev/ttyACM0`
-2. Start the Touch driver (command depends on your ROS 2 Touch driver package, e.g.):
-   `ros2 launch macro_micro_robot touch_driver.launch.py` (not omni_common's `omni_state`: its forces never reach the motors)
-
-### UR16e
-
-1. Start the UR ROS 2 driver:
-   ```
-   ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur16e \
-       robot_ip:=192.168.0.100
-   ```
-2. Start the LS_ROS_CONTROL program on the UR16e Teach Pendant.
-3. Start the control node: `ros2 run macro_micro_robot ur16e_control`
-
-> `ur16e_control` is a direct ROS 1 port and asks for a
-> `pose_based_cartesian_traj_controller`, which the ROS 2 UR driver does not
-> provide. Use the keyboard / Touch teleop below instead.
-
-### UR16e teleoperation (keyboard or Touch) and trajectory recording
-
-Motion goes through **MoveIt Servo**: the teleop nodes publish Cartesian
-velocity commands, Servo turns them into joint positions for the UR driver's
-`forward_position_controller`, and stops the arm near singularities, joint
-limits and self-collisions.
-
-```
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur16e-keyboard --robot-ip=192.168.0.100 --with-rviz
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur16e-touch    --robot-ip=192.168.0.100 --with-rviz
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur16e-keyboard --mock --with-rviz   # no robot needed
+```bash
+cd ~/ros2_ws
+S=src/MacroMicroSurgicalRobot/scripts/launch_system.sh
+$S ur16e-touch --mock --with-rviz                              # simulated arm, real Touch
+$S ur16e-touch --calibration-file=<yaml> --with-micro          # real arm + micro module
+$S ur16e-keyboard --mock --with-rviz                           # simulated arm, keyboard
+$S touch                                                       # micro module only
+$S display                                                     # RViz model, no hardware
 ```
 
-or by hand:
+On the real arm, start the External Control program on the teach pendant once the driver is up.
+New to the lab setup? Follow [docs/RUN_UR16E_TOUCH.md](docs/RUN_UR16E_TOUCH.md) step by step.
 
-```
-ros2 launch macro_micro_robot ur16e_teleop.launch.py robot_ip:=192.168.0.100   # add use_mock_hardware:=true to simulate
-ros2 run macro_micro_robot ur16e_keyboard_teleop.py                             # second terminal
-# or: ros2 launch macro_micro_robot ur16e_teleop.launch.py robot_ip:=... input:=touch
-```
+### Stylus controls
 
-On the real robot, start the External Control program on the Teach Pendant
-after the driver is up. The simulated arm starts straight up (a singularity
-Servo refuses to move out of), so first run
-`ros2 run macro_micro_robot trajectory_player.py home`.
+| Input | Action |
+|---|---|
+| Hold WHITE | Drive the arm (release to stop and re-centre) |
+| Double-click WHITE | Cycle the motion scale (1:1, 1:5, 1:20) |
+| Click GREY | Start or stop recording a run |
+| WHITE + click GREY | Enter RCM mode (latches the tool tip as the pivot); again, retracted, to leave |
+| Hold GREY 1 s | Switch the stylus between the arm and the micro module |
+| Type a number + Enter (launcher terminal) | Switch to that tool from `config/tools.yaml` |
 
-**Keyboard** (`ur16e_keyboard_teleop.py`): `w/s` ±X, `a/d` ±Y, `r/f` ±Z,
-`u/o` `i/k` `j/l` roll/pitch/yaw, `SPACE` stop, `+/-` speed, `t` toggle
-base/tool frame, `[` start recording, `]` stop + save. Hold a key to keep
-moving; the arm stops ~0.15 s after release.
+> Switch off servo power on the micro module before unplugging its USB cable.
 
-**Touch** (`ur16e_touch_teleop.py`): hold the **white** button to drive the arm.
-The stylus pose at the press is the origin; the tool then follows the stylus
-movement and tilt since then (release to re-centre the stylus). Click **grey**
-to start/stop recording (it acts on release). Hold **grey** for 1 s without
-touching white to switch the stylus between the arm (macro) and the
-micro-manipulator; see _Micro Module_. Mapping (`mapping:=toward_base`, the default): up is
-up, stylus towards the Touch body moves the tool horizontally towards the
-robot base, right is right as seen from the tool looking at the base, and pen
-tilts/twists tilt the wrist the same way. Parameters: `translation_scale`
-(default 1.0), `enable_rotation` (default true), `rotation_scale` (1.0),
-`max_linear_speed` (0.15 m/s), `mapping:=fixed` + `axis_map` (default
-`[y, -x, z]`) for a fixed stylus→base_link mapping. Example:
-`ros2 run macro_micro_robot ur16e_touch_teleop.py --ros-args -p translation_scale:=2.0 -p enable_rotation:=false`
+### Recording and replay
 
-**Trajectories**: `trajectory_recorder.py` (started by the launch file) saves
-each recording to `~/ros2_ws/trajectories/trajectory_<date>_<time>.yaml`
-(joint angles + tool pose at 25 Hz) and a `.csv` of the same data for plotting.
-The path being recorded is shown in RViz (green); recordings can also be
-started/stopped with `ros2 service call /trajectory_recorder/start std_srvs/srv/Trigger`
-(and `/stop`). Replay one with:
+Each recording lands in `logs/NEW_RUN/`. It holds the path CSVs, the raw stylus, a rosbag and
+`META.yaml` with the code version and every setting. The next recording replaces it, so rename the
+folder to keep the run.
 
-```
-ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5     # or a file path
-ros2 run macro_micro_robot trajectory_player.py home                   # safe ready pose
+```bash
+ros2 run macro_micro_robot trajectory_player.py home                 # safe ready pose
+ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5   # replay joint trajectory
+ros2 launch macro_micro_robot ur16e_teleop.launch.py input:=replay   # then:
+ros2 run macro_micro_robot stylus_replay.py V9b/SomeRun              # replay the same hand input
+python3 src/MacroMicroSurgicalRobot/thesis/run_tools/plot_paths.py   # plot the last run
 ```
 
-The player asks for confirmation, moves to the recording's first pose over
-5 s, replays it (shown in RViz in orange), then hands control back to teleop.
-
-### Micro Module
-
-1. Add permissions for the Arduino device: `sudo chmod 777 /dev/ttyACM1`
-2. Start the serial bridge for the micro-module microcontroller (micro-ROS agent or serial bridge replacing `rosserial`).
-3. Start the control node: `ros2 run macro_micro_robot micro_module_control`
-
-Hold the stylus **white** button to drive the micro-manipulator (it used to be
-grey). With the arm teleop running too, both nodes share the stylus:
-
-```
-./src/MacroMicroSurgicalRobot/scripts/launch_system.sh ur16e-touch --with-micro --robot-ip=192.168.0.100
-```
-
-The stylus starts on the arm. Hold **grey** for 1 s without touching white to
-switch to the micro module, and again to switch back. `ur16e_touch_teleop`
-publishes the mode on `/teleop_mode` (latched, `macro` / `micro`), and each
-node ignores white while the other one is active. Without
-`ur16e_touch_teleop` running nothing is published, and the micro module is
-always the active one.
-
-Alternatively, `ros2_bridge/keyboard_control.py` drives the servos straight
-from the keyboard (no Touch device needed) — useful for bench-testing; this is
-what `launch_system.sh keyboard` runs.
-
-NOTE: Be sure to manually disable power to the servo motors via the switch on the micro module before unplugging the control USB cable.
-
-📌 UR16e + LS Thesis System — Installation & Startup Notes
-🟡 Current Status (as of last session)
-ROS 2 Jazzy installed and working
-macro_micro_robot workspace builds successfully with colcon
-External dependencies partially installed:
-omni_msgs (Geomagic Touch interface)
-cartesian_control_msgs (built from source)
-motor_angles_msg (local source build)
-ur_robot_driver (installed from source — now available)
-❌ Current Missing / Incomplete Setup
-
-1. UR16e Robot Setup (NOT DONE YET)
-   Robot has not been powered on
-   Teach pendant has not been configured
-   Remote control mode not enabled
-   External Control URCap may not be installed
-   Robot IP not confirmed
-   No verified network connection to robot
-2. Touch Device (NOT REQUIRED FOR FIRST TEST)
-   Geomagic Touch driver currently unstable
-   USB “resource busy” errors present
-   Not required for initial UR16e bring-up
-3. UR ROS Control Runtime (NOT RUNNING YET)
-   ur_robot_driver installed but not launched in real mode
-   Controller manager not active
-   No active /controller_manager services
-   🚀 Full System Startup Procedure (REAL ROBOT MODE)
-   🔴 STEP 1 — Power on UR16e robot
-   Turn on UR control box
-   Wait for teach pendant to boot
-   Press ON / Start Robot
-   Wait until robot is fully initialized (motors enabled)
-   🔵 STEP 2 — Configure teach pendant
-   Ensure robot is not running any program
-   Switch to:
-   Remote Control mode
-   Ensure system is idle (no active motion program)
-   🟡 STEP 3 — Network verification
-
-On laptop:
-
-ping <robot_ip>
-
-Expected:
-
-stable replies from robot IP (e.g. 192.168.0.100)
-🟢 STEP 4 — Start UR ROS 2 driver (REAL MODE)
-source /opt/ros/jazzy/setup.bash
-source ~/ros2_ws/install/setup.bash
-
-ros2 launch ur_robot_driver ur_control.launch.py \
- ur_type:=ur16e \
- robot_ip:=<robot_ip>
-
-Expected logs:
-
-UR hardware interface initialized
-controller_manager active
-joint_state_broadcaster running
-🔵 STEP 5 — Verify ROS control is active
-ros2 service list | grep controller
-
-Expected:
-
-/controller_manager/load_controller
-/controller_manager/list_controllers
-🟣 STEP 6 — Run thesis control node
-ros2 run macro_micro_robot ur16e_control
-
-System should now:
-
-connect to controller manager
-load required controllers
-begin teleoperation pipeline
-⚠️ Safety Notes
-Robot may move immediately when control node starts
-Ensure workspace is clear before enabling control
-Keep emergency stop accessible at all times
-Start with low-speed / small motion tests
-🧠 System Architecture (final intended state)
-Touch device (optional, later)
-↓
-macro_micro_robot teleop nodes
-↓
-ur_robot_driver (ROS 2 control)
-↓
-UR16e robot (real hardware)
-🟡 Next Steps After Basic Setup Works
-Validate controller loading sequence
-Test 1 cm Cartesian motion command
-Re-enable Touch device input
-Integrate full teleoperation loop (Touch → UR16e)
-
-
-🧠 Categories of Errors
-1. ❌ Runtime / system configuration errors (NOT code fixes)
-
-These are environment/robot issues:
-
-🚫 UR16e not connected / controller manager missing
-
-Error:
-
-Failed to call load_controller service
-Could not contact /controller_manager
-
-Cause:
-
-UR driver not running
-robot not in Remote mode
-External Control program not active
-wrong IP / network
-
-Fix (NOT code):
-
-start UR driver first
-ensure robot is running + remote mode enabled
-🚫 UR driver cannot connect to robot
-
-Error:
-
-Failed to connect to robot on IP ...:30001/30002/30004
-
-Cause:
-
-wrong IP
-robot off / not booted
-no network access
-missing UR External Control program
-
-Fix (NOT code):
-
-network setup + robot startup procedure
-🚫 Touch device failure
-
-Error:
-
-Failed to initialize haptic device
-LibUSB Error: Resource busy
-
-Cause:
-
-USB already claimed by another process
-driver conflict
-hardware issue
-
-Fix (NOT code):
-
-kill other processes
-restart driver / unplug device
-2. ⚠️ Build system / dependency issues (PARTLY code-related)
-⚠️ Missing ROS packages (APT / rosdep failures)
-
-Example:
-
-Unable to locate package ros-jazzy-cartesian-control-msgs
-
-Meaning:
-
-dependency not available in binary repo
-
-Fix options:
-
-✔ correct: build from source (you did this)
-✔ OR remove dependency if unused
-
-Code-side improvement:
-
-document clearly in README
-optionally wrap dependency as optional build
-⚠️ Incorrect dependency declarations in package.xml
-Example issue:
-<depend>eigen</depend>
-
-Problem:
-
-eigen is not a ROS package
-
-Fix:
-Replace with:
-
-<build_depend>eigen3_cmake_module</build_depend>
-
-or better:
-
-remove entirely if only used via CMake find_package(Eigen3)
-3. ⚠️ Code-level issues in your thesis package (REAL IMPROVEMENTS)
-
-These are the most important “fix in code” items.
-
-🧩 Issue A — Hard dependency on controller manager at startup
-Problem:
-
-Your node:
-
-immediately tries to call load_controller
-exits if service is unavailable
-Why this is fragile:
-requires strict launch order
-breaks in simulation or partial startup
-causes immediate failure like you saw
-✔ Fix (recommended)
-
-Add service waiting + retry loop:
-
-if (!client->wait_for_service(10s)) {
-    RCLCPP_WARN(node->get_logger(),
-        "Controller manager not ready, retrying...");
-    return;
-}
-
-or better:
-
-async retry timer instead of exit
-🧩 Issue B — No “simulation-safe mode”
-Problem:
-
-ur16e_control assumes:
-
-real controller manager exists
-robot is present
-Fix:
-
-Add parameter:
-
-declare_parameter("use_real_robot", true);
-
-Then:
-
-if (!use_real_robot) {
-    RCLCPP_INFO(..., "Skipping controller setup (simulation mode)");
-    return;
-}
-🧩 Issue C — Tight coupling between Touch + robot startup
-Problem:
-
-System expects both:
-
-/omni/state
-UR controller manager
-
-to exist at the same time.
-
-This caused cascading failure.
-
-✔ Fix:
-
-Split responsibilities:
-
-Touch node = independent publisher
-UR node = independent consumer
-teleop node = bridge only
-
-Add checks:
-
-if (!topic_exists("/omni/state")) {
-    RCLCPP_WARN(..., "Touch not available, running idle mode");
-}
-🧩 Issue D — No graceful degradation on missing inputs
-Problem:
-
-Nodes crash or fail when:
-
-topic missing
-service missing
-robot absent
-✔ Fix:
-
-Use “soft failure” pattern:
-
-never exit immediately
-instead:
-log warning
-keep node alive
-retry periodically
-🧩 Issue E — Hardcoded IP / robot assumptions
-Problem:
-
-Robot IP is often embedded or assumed.
-
-✔ Fix:
-
-Move to parameters:
-
-declare_parameter("robot_ip", "192.168.0.100");
-
-Launch file sets it.
-
-🧩 Issue F — Controller loading not abstracted
-Problem:
-
-Direct calls like:
-
-load_controller()
-switch_controller()
-
-inside main logic.
-
-✔ Fix:
-
-Encapsulate:
-
-class ControllerInterface {
-public:
-    bool load();
-    bool activate();
-    bool ready();
-};
-
-This makes:
-
-simulation support easier
-debugging cleaner
-startup order safer
+`scripts/replay_batch.sh` replays a set of runs several times each into a version folder.
+
+### Calibration
+
+| Task | How |
+|---|---|
+| Arm kinematics (do once per arm) | `ros2 launch macro_micro_robot ur_calibration_extract.launch.py`, then pass the file with `--calibration-file=` ([why](docs/UR_CALIBRATION_FIX.md)) |
+| NDI wand as a tool (hand-eye) | `scripts/calibration/wrist_jog.py` + `wand_tool_calibration.py` |
+| Micro-module tip | `scripts/calibration/micro_tool_calibration.py` |
+| Add a tool to the library | `ros2 run macro_micro_robot tool_library.py add ...` |
+
+Procedures are in [docs/THESIS_APPENDIX.md §5](docs/THESIS_APPENDIX.md#5-calibration-procedures).
+
+## Documentation
+
+| File | What |
+|---|---|
+| [docs/RUN_UR16E_TOUCH.md](docs/RUN_UR16E_TOUCH.md) | Step-by-step guide for running the real arm |
+| [docs/VERSIONS.md](docs/VERSIONS.md) | Lab log: every stack version (V1–V9c), what changed and why, with its git tag or commit |
+| [docs/THESIS_APPENDIX.md](docs/THESIS_APPENDIX.md) | Report supplement: architecture, settings, hardware, calibration, risk, reproducibility |
+| [docs/UR_CALIBRATION_FIX.md](docs/UR_CALIBRATION_FIX.md) | Why the driver's calibration tool is replaced |
+| [docs/HAPTICS_HANDOFF.md](docs/HAPTICS_HANDOFF.md) | Touch force-feedback findings |
+| [docs/lab_plans/](docs/lab_plans) | Lab session plans |
+| [thesis/README.md](thesis/README.md) | How to rerun the analysis |
+
+## Credits
+
+The micro module and its original ROS 1 control code are Lachlan Scott's work (2023, this
+repository). The original installation notes are by Mustafa Sevinc. `vendor/ur_calibration/` and
+`launch/ur_rsp_smooth_speedj.launch.py` come from Universal Robots' ROS 2 driver (BSD-3-Clause).

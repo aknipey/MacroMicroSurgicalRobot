@@ -3,13 +3,10 @@
 <package format="3">
   <name>macro_micro_robot</name>
   <version>0.1.0</version>
-  <description>Provides all required hardware interfacing for my thesis project.</description>
+  <description>Teleoperation of a UR16e and a continuum micro-manipulator with a 3D Systems Touch stylus, through MoveIt Servo, with RCM mode, run recording and replay.</description>
 
-  <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <maintainer email="z5207471@student.unsw.edu.au">z5207471@student.unsw.edu.au</maintainer>
 
-  <!-- One license tag required, multiple allowed, one license per tag -->
-  <!--   Commonly used license strings: BSD, MIT, Apache-2.0, GPL-3.0-only, ... -->
   <license>TODO</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -42,14 +39,13 @@
   <depend>ur_client_library</depend>
   <depend>yaml_cpp_vendor</depend>
 
-  <!-- Runtime-only packages used by the display launch file -->
+  <!-- Runtime -->
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>
   <exec_depend>xacro</exec_depend>
   <exec_depend>rviz2</exec_depend>
 
-  <!-- UR16e keyboard / Touch teleop and trajectory record + replay -->
   <exec_depend>ur_robot_driver</exec_depend>
   <exec_depend>ur_moveit_config</exec_depend>
   <exec_depend>moveit_servo</exec_depend>

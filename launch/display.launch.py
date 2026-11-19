@@ -63,8 +63,7 @@ def generate_launch_description():
         name='rviz',
         output='screen',
         arguments=['-d', LaunchConfiguration('rvizconfig')],
-        # Equivalent to required="true" in the original ROS 1 launch file:
-        # shut the whole launch down when rviz is closed.
+        # Closing RViz ends the launch.
         on_exit=Shutdown(),
     )
 

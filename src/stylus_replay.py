@@ -1,34 +1,16 @@
 #!/usr/bin/env python3
-"""Replays the Touch stylus from a logged run into the teleop node, so every version
-of the stack can be tested with exactly the same hand motion.
+"""Replays the Touch stylus of a logged run into the teleop node, so every version of the
+stack gets exactly the same hand motion.
 
-    # Stack without the Touch driver (teleop node listens, nothing else publishes)
     ros2 launch macro_micro_robot ur16e_teleop.launch.py input:=replay
-    # Second terminal, as often as you like:
-    ros2 run macro_micro_robot stylus_replay.py V2/Up_10CM            # run folder, relative to logs/
-    ros2 run macro_micro_robot stylus_replay.py ~/some/other/run      # or any run folder
+    ros2 run macro_micro_robot stylus_replay.py V2/Up_10CM        # run folder under logs/, or a path
 
-1. Reads the stylus pose and buttons from the run's STYLUS_RAW.csv (full rate, from
-   the start of the recording - the rosbag misses up to ~2 s while `ros2 bag record`
-   subscribes), the robot's joint angles at the start from TRAJECTORY.yaml, and the
-   motion scale from the rosbag.
-2. Sets the teleop node to the same motion scale (double clicks with the stylus held
-   still) and moves the robot to the start joint angles over --approach-time s (asks
-   first unless --yes): the teleop target is relative to where the robot was when
-   WHITE went down.
-3. Starts trajectory_recorder, plays the stylus back with its original timing
-   (restamped to now; GREY on its own is masked out so it cannot toggle the
-   recording, but GREY pressed while WHITE is held - the RCM chord - is replayed),
-   releases WHITE, then stops the recorder. Refuses to start with RCM mode on.
-   --rcm: for runs recorded with RCM mode already on, turn it on at the start pose
-   (WHITE + GREY with the stylus still, before the recorder starts), so the RCM point
-   is the tip there. If RCM mode is still on from the last replay (it ended with the
-   tool in), the robot moves straight to the start pose and leaves RCM mode there.
-4. Writes REPLAY.yaml into logs/NEW_RUN saying which run it replayed.
-
-Replays of replays work too (they log STYLUS_RAW.csv like any run). The stylus
-driver must not be running (launch with input:=replay), otherwise its messages
-would mix with the replayed ones.
+Reads STYLUS_RAW.csv, the start joint angles (TRAJECTORY.yaml) and the motion scale
+(rosbag); sets the same scale, moves the arm to the start pose (asks unless --yes),
+records while it plays the stylus back with its original timing, and writes REPLAY.yaml
+into logs/NEW_RUN. GREY alone is masked; the WHITE + GREY RCM chord is replayed.
+--rcm turns RCM mode on at the start pose for runs recorded inside it.
+The Touch driver must not be running.
 """
 
 import argparse
@@ -70,9 +52,7 @@ STATE_TOPIC = "/phantom/state"
 BUTTON_TOPIC = "/phantom/button"
 SCALE_TOPIC = "/ur16e_touch_teleop/motion_scale"
 RCM_ACTIVE_TOPIC = "/ur16e_touch_teleop/rcm_active"
-# Bags recorded before the 2026-11-02 rename have the teleop's topics under this node name.
-# Reading only the new name made every older run look like "no motion_scale = 1:1": the V7
-# RCMOnly original (1:5) was replayed at 1:1 on 2026-11-03.
+# Bags recorded before the ur5e -> ur16e rename have the teleop's topics under this node name.
 OLD_TELEOP_NODE = "/ur5e_touch_teleop/"
 PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
 UR_JOINTS = [
