@@ -4,6 +4,7 @@
 # so every recording's code_version names the mode it ran in. Restart the stack after.
 #
 #   ./scripts/set_v9_mode.sh trajectory | position | velocity-unfiltered | velocity-optimised | final
+#                            | p5 | p10 | p20 | poff | v5 | v10 | v20 | voff
 #
 # All V9 modes keep TOUCH_SCALE_ROTATION_EXPONENT = 0.5 (as on 2026-10-26), so the 1:5 runs compare.
 #   trajectory           SERVO_OUTPUT trajectory, stock speedj, filter 5 Hz, Kalman on
@@ -11,6 +12,10 @@
 #   velocity-unfiltered  SERVO_OUTPUT velocity,   stock speedj, filter off,  Kalman off  (1:5 runs only!)
 #   velocity-optimised   SERVO_OUTPUT velocity,   smooth speedj, filter 5 Hz, Kalman on
 #   final                the defaults after V9: position, smooth speedj, filter 5 Hz, Kalman on, exponent 1.0
+#
+# V9c grid (output x filter cutoff; stock speedj in every cell, so only output and cutoff change):
+#   p5 p10 p20 poff      SERVO_OUTPUT position, filter 5 / 10 / 20 Hz (Kalman on) or off (Kalman off)
+#   v5 v10 v20 voff      SERVO_OUTPUT velocity, same cutoffs. Velocity cells: 1:5 runs only!
 #
 # Refuses while a replay is running or logs/NEW_RUN exists (a commit mid-run would mislabel it).
 
@@ -25,7 +30,15 @@ case "$MODE" in
   velocity-unfiltered) OUT=velocity;   SMOOTH=False; FILTER=0.0; KALMAN=False; EXP=0.5 ;;
   velocity-optimised)  OUT=velocity;   SMOOTH=True;  FILTER=5.0; KALMAN=True;  EXP=0.5 ;;
   final)               OUT=position;   SMOOTH=True;  FILTER=5.0; KALMAN=True;  EXP=1.0 ;;
-  *) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  p5)   OUT=position; SMOOTH=False; FILTER=5.0;  KALMAN=True;  EXP=0.5 ;;
+  p10)  OUT=position; SMOOTH=False; FILTER=10.0; KALMAN=True;  EXP=0.5 ;;
+  p20)  OUT=position; SMOOTH=False; FILTER=20.0; KALMAN=True;  EXP=0.5 ;;
+  poff) OUT=position; SMOOTH=False; FILTER=0.0;  KALMAN=False; EXP=0.5 ;;
+  v5)   OUT=velocity; SMOOTH=False; FILTER=5.0;  KALMAN=True;  EXP=0.5 ;;
+  v10)  OUT=velocity; SMOOTH=False; FILTER=10.0; KALMAN=True;  EXP=0.5 ;;
+  v20)  OUT=velocity; SMOOTH=False; FILTER=20.0; KALMAN=True;  EXP=0.5 ;;
+  voff) OUT=velocity; SMOOTH=False; FILTER=0.0;  KALMAN=False; EXP=0.5 ;;
+  *) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
 
 if pgrep -f "stylus_replay.py|replay_batch.sh" >/dev/null; then

@@ -8,9 +8,10 @@
 # stops at the first one without it (LOG_REQUIRE_NDI is off, so nothing else would).
 #
 # Usage:
-#   ./scripts/replay_batch.sh [--dest=V8] [--repeats=3] [--no-ndi] [run[:--rcm] ...]
+#   ./scripts/replay_batch.sh [--dest=V8] [--repeats=3] [--no-ndi] [--yes] [run[:--rcm] ...]
 #
 #   --no-ndi for runs with no markers on the tool: skips the tracker checks
+#   --yes    skip the "robot clear?" question (for run_v9c.sh, which asks once per session)
 #   run      folder relative to logs/, e.g. V7/FastCheckingRCMSimpleHolder;
 #            append :--rcm for runs recorded with RCM mode already on
 #   default  the four V7 SimpleHolder originals (as replayed on 2026-10-26)
@@ -25,6 +26,7 @@ LOGS="$(cd "${SCRIPT_DIR}/../logs" && pwd)"
 DEST="V8"
 REPEATS=3
 REQUIRE_NDI=true
+ASSUME_YES=false
 RUNS=()
 
 for arg in "$@"; do
@@ -32,7 +34,8 @@ for arg in "$@"; do
     --dest=*) DEST="${arg#*=}" ;;
     --repeats=*) REPEATS="${arg#*=}" ;;
     --no-ndi) REQUIRE_NDI=false ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --yes) ASSUME_YES=true ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "Unknown option: $arg" >&2; exit 1 ;;
     *) RUNS+=("$arg") ;;
   esac
@@ -67,8 +70,10 @@ fi
 mkdir -p "${LOGS}/${DEST}"
 
 echo "Replaying ${#RUNS[@]} run(s) x ${REPEATS} into logs/${DEST}/ - the robot will move without asking."
-read -r -p "Robot clear and External Control running? [y/N] " answer
-[ "$answer" = "y" ] || [ "$answer" = "Y" ] || exit 1
+if ! $ASSUME_YES; then
+  read -r -p "Robot clear and External Control running? [y/N] " answer
+  [ "$answer" = "y" ] || [ "$answer" = "Y" ] || exit 1
+fi
 
 done_list=()
 for spec in "${RUNS[@]}"; do
