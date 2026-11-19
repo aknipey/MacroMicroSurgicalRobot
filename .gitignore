@@ -52,3 +52,8 @@ CATKIN_IGNORE
 
 # VSCode
 .vscode
+
+# Thesis analysis: regenerable cache and local backups
+thesis/data_analysis/common/cache/
+thesis/data_analysis_backup_*.tar.gz
+__pycache__/
