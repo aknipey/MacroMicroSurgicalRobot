@@ -94,3 +94,11 @@ tools:
     calibration: manual
     date: '2026-11-19'
     notes: 'latch-line correction of tool 10 from 4 run(s): 0.49 deg, 5.22 mm'
+  12:
+    name: wand_L_corrected_all4
+    tip_tool0_mm: [-1.8637, 9.6678, 322.8453]
+    direction_tool0: [0.005849, 0.017662, 0.999827]
+    shaft_length_mm: 158.6
+    calibration: manual
+    date: '2026-11-19'
+    notes: 'latch-line correction of tool 10 from 6 run(s): 0.36 deg, 3.60 mm'
