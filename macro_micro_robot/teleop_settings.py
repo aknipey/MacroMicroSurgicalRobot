@@ -81,14 +81,14 @@ TOUCH_FEEDFORWARD_FILTER = 0.02
 # real 1:1 hand run: 8 Hz -> 6 Hz cut tool jerk by a quarter for ~2-4 ms more lag;
 # 5 Hz cut it by a half for ~5 ms more; on the V5 benchmarks 6 -> 5 Hz cut the 5-15 Hz
 # jitter by 13%. Must be below half TOUCH_PUBLISH_RATE. 0 = off.
-TOUCH_COMMAND_FILTER = 0.0
+TOUCH_COMMAND_FILTER = 5.0
 # Kalman filter on the raw stylus pose (constant-velocity model; the orientation is an
 # extended/error-state version). omni_state repeats each pose for ~4 ms between real
 # updates, which makes the feedforward velocity jump; the filter uses only the real
 # updates and predicts in between. On the V3 benchmarks it cuts the feedforward noise
 # by 17-42% without adding lag (it is 0.5-2 ms ahead), unlike TOUCH_COMMAND_FILTER.
 # True = on.
-TOUCH_KALMAN = False
+TOUCH_KALMAN = True
 # How quickly the hand's velocity may change (process noise). Lower = smoother, but the
 # target runs on past a sudden stop: at 1:1 a stop from 200 mm/s overshoots 0.13 mm
 # with 2.0 but 1.2 mm with 0.1; from 3 rad/s 0.6 deg with 30 (1.0 deg with 10).
@@ -291,7 +291,7 @@ SERVO_LOOKAHEAD = 0.05
 # V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
 # only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
 # V9/TrajectoryMode = this. Final choice after the comparison.
-SERVO_OUTPUT = "velocity"
+SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
