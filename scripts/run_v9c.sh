@@ -446,6 +446,7 @@ countdown() {
 
 step_20() {
   say "=== Step 20: warm-up RCMOnly, tool 3, P5 -> ${V9C}/Warmup (checks the wand is seen at the RCM poses)"
+  $DRY_RUN || ndi_start
   cell_t 3 p5 "${V9C}/Warmup" 1 "$RCMONLY"
 }
 
