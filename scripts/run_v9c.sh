@@ -7,7 +7,9 @@
 #   inputs at position 20 Hz. Tool 3 stays configured, as in session C, so paths match V9b/NoTool.
 #   Order: P5 V5 P10 V10 P20 V20 Poff Voff P5_end P20(1:1). Velocity cells are 1:5 only.
 #
-# Phase B (steps 20-35, --phase=B): wand on the coupling, NDI. The script runs the tracker itself.
+# Phase B (steps 20-35, --phase=B): NDI. Steps 20-32 with the WAND-ONLY mount (SimpleHolder straight on the
+#   flange, no quick-change coupling, so no coupling error in the RCM results); steps 33-34 with the C3 coupling.
+#   The script runs the tracker itself.
 #   20 warm-up RCMOnly (tool 3): checks the camera sees the wand at the RCM poses
 #   21 three hand-eye fits back to back (wrist jog + robot-tcp) -> tools 4, 5, 6
 #   22 NDI static floor (30 s, arm still)
@@ -15,8 +17,8 @@
 #   24-28 RCMOnly x3 in V5 P20 V20 Poff Voff (tool 4): RCM error and tip vibration per mode
 #   29-30 fits 2 and 3 (tools 5, 6), P5: SlowChecking x2 each
 #   31-32 perturbed tool 4: +1 mm across the shaft (tool 7), +2 mm along it (tool 8), SlowChecking x2
-#   33 C3 exchange redo (YOU swap the tool, 20x; the script times the still periods)  [--from=33]
-#   34 exchange -> RCMOnly, 5x (YOU swap, then it replays)
+#   33 YOU fit the C3 coupling + wand plate; C3 exchange redo (20 swaps; the script times the still periods)
+#   34 hand-eye fit of the coupling mount -> tool 9, then 5x: YOU exchange, it replays RCMOnly with tool 9
 #   35 settings back to final, default tool back to 2
 #   Steps 20-32 run unattended except one check before the first wrist jog.
 #
@@ -395,6 +397,9 @@ fit() {
     note "fit ${num}: NOT RECOMMENDED ($(echo "$cal_out" | grep "NOT RECOMMENDED"))"
     [ "$num" = 4 ] && die "Fit 1 is not usable (see above): the RCM runs need it. Check the wand is in view, then --phase=B --from=21."
   fi
+  if echo "$cal_out" | grep -q "NOT RECOMMENDED" && [ "$num" = 9 ]; then
+    die "The coupling-mount fit is not usable (see above). Check the wand is in view, then --phase=B --from=34."
+  fi
   ros2 run macro_micro_robot tool_library.py add "$num" "$name" --from "$json" --length "$SHAFT_MM" --force \
     --notes "V9c session D $(date +%F\ %H:%M)" || die "tool_library add failed"
   git -C "$PKG" add "$json" config/tools.yaml
@@ -507,7 +512,8 @@ step_33() {
   say "=== Step 33: C3 exchange redo (arm not commanded)"
   $DRY_RUN && { echo "   stop stack; NDI recording: 60 s still, 20 swaps, 60 s still -> logs/Exchange/<time>_QC_V3_redo"; return 0; }
   stop_stack
-  ask_continue "C3 coupling, wand on its tool plate. Nobody touches the table except to work the lever."
+  printf '\a'
+  ask_continue "Swap to the C3 COUPLING now: coupling on the flange, wand on its C3 tool plate, lever closed, in the camera's view. Nobody touches the table except to work the lever. Done?"
   exchange_set QC_V3_redo
   local a
   read -r -p "Also redo C2 now (swap to the C2 tool plate first, ~15 min)? [y/N] " a
@@ -519,10 +525,16 @@ step_33() {
 }
 
 step_34() {
-  say "=== Step 34: exchange, then RCMOnly through the arm, 5x -> ${V9C}/ExchangeRCM"
-  $DRY_RUN && { echo "   5x: you exchange; replay_batch.sh --repeats=1 RCMOnly (tool 4, P5)"; return 0; }
+  say "=== Step 34: hand-eye fit of the coupling mount (tool 9), then exchange + RCMOnly, 5x -> ${V9C}/ExchangeRCM"
+  $DRY_RUN && { echo "   fit 9 wand_D_C3_coupling; 5x: you exchange; replay_batch.sh --repeats=1 RCMOnly (tool 9, P5)"; return 0; }
+  # The wand sits differently on the coupling than in the wand-only mount, so it needs its own calibration.
+  # Fitted from where the arm stopped after step 32 (SlowChecking end pose, wand seen there); step 33 doesn't move it.
   ndi_start
-  stop_stack; set_mode p5; set_tool 4; start_stack
+  stop_stack; set_mode p5; set_tool 3; start_stack
+  ask_continue "Wrist jog with the coupling fitted next (+-30 deg per wrist). Clear around the wand?"
+  fit 9 wand_D_C3_coupling
+  ndi_start
+  stop_stack; set_tool 9; start_stack
   local i t0 t1
   for i in 1 2 3 4 5; do
     printf '\a'
@@ -600,7 +612,7 @@ if [ -z "$LAUNCH_EXTRA" ]; then
   fi
 fi
 if [ "$PHASE" = B ]; then
-  say "Phase B, steps ${steps[*]}: WAND on the C3 coupling, camera placed (and not touched again), workspace clear."
+  say "Phase B, steps ${steps[*]}: WAND-ONLY mount (SimpleHolder on the flange, no coupling; steps 33-34 ask for the coupling later), camera placed and not touched again, workspace clear."
   say "The script starts and stops the NDI tracker itself: close any 'ndi_tracking run' you have open."
   read -r -p "Wand on, camera fixed, robot clear, start? [y/N] " answer
 else
