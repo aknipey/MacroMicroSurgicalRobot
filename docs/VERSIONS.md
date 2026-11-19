@@ -2360,9 +2360,9 @@ hand-eye and the micro tip ball, then the RD1 replays (`docs/lab_plans/07_remain
   pose-dependent, which one fixed tool cannot cancel. B FastChecking_Replay2 ran at 1:20 (scale switched 7 s before; TCP path 472 vs
   ~3080 mm), kept as `_WRONG_SCALE`; `latch_line_fit.py` now reads only `<name>_Replay<n>` folders; `--only=45` replays one more.
 - **2026-11-19, follow-up chosen after the phase L result (`run_v9c.sh --from=46`):** tool 12 = tool 10 corrected on all four
-  trajectories (Train + the first tool-10 fast checking and whole run replays; mount untouched since phase L). Test: new
+  trajectories (Train + the first tool-10 fast probing and phantom task replays; mount untouched since phase L). Test: new
   replays, blocks 12 12 10 12 (the tool-10 block is a drift check, `Latch/A_tool10_drift`). Prediction written before the run
-  (offline, held-out tool-10 replays): 0.31 / 0.22 / 0.50 / 0.63 mm for RCM only / slow / fast / whole run; offline predictions
+  (offline, held-out tool-10 replays): 0.31 / 0.22 / 0.50 / 0.63 mm for phantom RCM / slow probing / fast probing / phantom task; offline predictions
   were ~0.4 mm optimistic for trajectories not trained on. Target: all four <= 1.0 mm with one tool. Report it as a follow-up,
   not as the pre-registered test.
 
@@ -2395,3 +2395,14 @@ No change to the stack. The lab work is finished, so the repository was cut down
   Earlier entries in this log still name these paths; at the tag or commit an entry gives, the files are there.
 - **Moved:** `kinematics_check.py` and `latch_line_fit.py` joined the other calibration tools in
   `scripts/calibration/`. They are calibration procedures, and `thesis/results` imports them from there.
+
+## RCM trajectory names in the report; Scott's thesis in the repo (2026-11-20, after V9c)
+
+- **Renamed for the report:** RCM only → *phantom RCM*, whole run → *phantom task*, fast checking → *fast
+  probing*, slow checking → *slow probing*. "Checking" told the reader nothing; the new names say which two
+  inputs came from the phantom and which two probe around the latched point. Display labels and prose changed
+  in `thesis/results` (M01, M02, R02, R03, R05 regenerated) and in the report. Recording folders and the code
+  keys (`RCMOnly`, `WholeRunDrinkBottle`, `FastChecking`, `SlowChecking`) keep their IDs; the map is in
+  `thesis/results/README.md`. Earlier entries in this log keep the old names.
+- **Added** `docs/references/Scott_2023_honours_thesis.pdf` (compressed from the 69 MB original, images
+  downsampled) so the report's citation of the predecessor thesis has a URL.

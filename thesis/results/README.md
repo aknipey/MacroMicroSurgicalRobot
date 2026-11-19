@@ -19,6 +19,21 @@ Each folder holds:
 
 The recordings they read are in [`data/recordings/`](../../data/README.md).
 
+## RCM trajectory names
+
+The report and figures name the four RCM inputs differently from their recording folders, which keep the IDs they
+were recorded under:
+
+| Report name | Recording ID | What it is |
+|---|---|---|
+| Phantom RCM | `RCMOnlySimpleHolder` | 1:5, recorded on the abdominal phantom with RCM already latched |
+| Phantom task | `WholeRunDrinkBottleSimpleHolder` | 1:1, a complete sequence on the phantom: approach, latch, work, withdraw |
+| Fast probing | `FastCheckingRCMSimpleHolder` | 1:1, fast motion around the latched point (mostly pivoting) |
+| Slow probing | `SlowCheckingRCMSimpleHolder` | 1:1, slow motion around the latched point (mostly insertion depth) |
+
+Older notes (`docs/VERSIONS.md`, `ANALYSIS.md` files) use the recording IDs or the earlier names "RCM only",
+"whole run", "fast checking" and "slow checking".
+
 ## Index
 
 | ID | Folder | Report section | Question | Report figure(s) |

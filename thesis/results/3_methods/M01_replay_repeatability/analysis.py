@@ -153,8 +153,8 @@ def main():
     pr = np.array([r['path_rms'] for r in rows])
     L += ['', f'Arm-path difference between replays: median {np.median(pr):.0f} µm rms, range {pr.min():.0f}–'
           f'{pr.max():.0f} µm, over {len(rows)} groups. After the best constant shift per pair, what remains is mostly '
-          'replay timing jitter of a few ms, which shows as path difference in proportion to speed (largest on the fast '
-          'pivoting FastChecking runs). The metric floors above are the numbers to compare effects against.', '',
+          'replay timing jitter of a few ms, which shows as path difference in proportion to speed (largest on the '
+          'fast probing (FastChecking) runs). The metric floors above are the numbers to compare effects against.', '',
           '## Prior claims checked', '', '- "replays match within 1 %": see the lag SD relative to ~60–200 ms lags.',
           '- "RCM replays repeat to ~0.1 mm": see the NDI RCM row of the floor table.', '', '## Figures', '']
 

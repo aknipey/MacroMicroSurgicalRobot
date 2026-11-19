@@ -28,8 +28,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 RNG = np.random.default_rng(10)
 SETS = ['RCMOnly', 'WholeRunDrinkBottle', 'FastChecking', 'SlowChecking']
-SET_LABEL = {'RCMOnly': 'RCM only', 'WholeRunDrinkBottle': 'Whole run', 'FastChecking': 'Fast checking',
-             'SlowChecking': 'Slow checking'}
+SET_LABEL = {'RCMOnly': 'Phantom RCM', 'WholeRunDrinkBottle': 'Phantom task', 'FastChecking': 'Fast probing',
+             'SlowChecking': 'Slow probing'}
 
 
 def kinematic_term(run):
@@ -154,7 +154,7 @@ def main():
                  f"{g('latch'):.2f} | {g('chain'):.2f} | {g('kin_cf'):.2f} |")
     L += ['', '**Note: the kinematic term is not separated here.** Pushing the same tool geometry through the nominal and '
           'the calibrated model gives a "model difference" of 0.6–1.0 mm, larger than the *total* measured error on '
-          'some runs (e.g. RCM only, 10-26), which is impossible for a real error component. The tool (hand–eye) '
+          'some runs (e.g. phantom RCM, 10-26), which is impossible for a real error component. The tool (hand–eye) '
           'calibration was itself fitted through one model, so swapping the model without refitting the tool creates '
           'an artificial difference. A valid kinematic term needs the tool refitted per model from the raw hand–eye '
           'recordings (`src/ndi_tracking/calibrations/raw/robot_tcp_*.npz`, joints recovered by IK), as planned in '

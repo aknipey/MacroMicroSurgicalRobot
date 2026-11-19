@@ -28,10 +28,10 @@ INPUTS = [  # (name, scale, run folder of one replay)
     ('LargeVibrations', '1:1', 'V9b/NoTool/PositionMode/LargeVibrations_Replay1'),
     ('Scaled5_Fast', '1:5', 'V9b/NoTool/PositionMode/Scaled5_Fast_Replay1'),
     ('Scaled5_Slow', '1:5', 'V9b/NoTool/PositionMode/Scaled5_Slow_Replay1'),
-    ('RCMOnly', '1:5', 'V9/PositionMode/RCMOnlySimpleHolder_Replay1'),
-    ('WholeRun', '1:1', 'V9/PositionMode/WholeRunDrinkBottleSimpleHolder_Replay1'),
-    ('FastChecking', '1:1', 'V9/PositionMode/FastCheckingRCMSimpleHolder_Replay1'),
-    ('SlowChecking', '1:1', 'V9/PositionMode/SlowCheckingRCMSimpleHolder_Replay1'),
+    ('Phantom RCM', '1:5', 'V9/PositionMode/RCMOnlySimpleHolder_Replay1'),
+    ('Phantom task', '1:1', 'V9/PositionMode/WholeRunDrinkBottleSimpleHolder_Replay1'),
+    ('Fast probing', '1:1', 'V9/PositionMode/FastCheckingRCMSimpleHolder_Replay1'),
+    ('Slow probing', '1:1', 'V9/PositionMode/SlowCheckingRCMSimpleHolder_Replay1'),
     ('SingularityInput', '1:1', 'V9b/Singularity/GuardOn/SingularityInput_Replay1'),
 ]
 

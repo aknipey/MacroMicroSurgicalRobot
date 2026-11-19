@@ -29,8 +29,8 @@ _spec.loader.exec_module(_rcm09)
 camera_check, CAM_STEP_MM = _rcm09.camera_check, _rcm09.CAM_STEP_MM   # folder R02's check, same threshold
 
 SETS = ['RCMOnly', 'SlowChecking', 'FastChecking', 'WholeRunDrinkBottle']
-LABEL = {'RCMOnly': 'RCM only', 'SlowChecking': 'Slow checking', 'FastChecking': 'Fast checking',
-         'WholeRunDrinkBottle': 'Whole run'}
+LABEL = {'RCMOnly': 'Phantom RCM', 'SlowChecking': 'Slow probing', 'FastChecking': 'Fast probing',
+         'WholeRunDrinkBottle': 'Phantom task'}
 GROUPS = {   # group -> data/recordings/ globs; holder and flange mounting groups
     'Fresh fit': ['V7/*SimpleHolder_Replay*'],
     'Calibrated holder': ['V8/CalibratedKinematics/*SimpleHolder_Replay*', 'V9/*/*SimpleHolder_Replay*'],
@@ -168,7 +168,7 @@ def main():
     L += ['## 1. Is the offset a latch-timing effect?', '',
           f"Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, {len(t)} runs with the tip tracked before the "
           f"latch: r = {r_:.3f}. Tip speed {rng([o['speed'] for o in t], '{:.1f}')} mm/s, offset "
-          f"{rng([o['offset'] for o in t])} mm. RCM-only runs latch at rest and have no pre-latch speed.", '']
+          f"{rng([o['offset'] for o in t])} mm. Phantom RCM runs latch at rest and have no pre-latch speed.", '']
 
     # --- 2. line model per mounting and set
     L += ['## 2. One line fixed in the wand frame, per mounting and trajectory', '',
@@ -183,23 +183,23 @@ def main():
             res = [fixed_line_residual([o['_run']], [o['_run']])[0] for o in v]
             L.append(f"| {g} | {LABEL[s]} | {len(v)} | {np.median([o['rms'] for o in v]):.2f} | {np.median(res):.2f} | "
                      f"{np.median([o['angle'] for o in v]):.2f} | {np.median([o['slope'] for o in v]):.2f} |")
-    L += ['', 'The flange-mounted fresh-fit rows use the initial flange-mounted fit; RCM only spans six output/filter settings.', '']
+    L += ['', 'The flange-mounted fresh-fit rows use the initial flange-mounted fit; phantom RCM spans six output/filter settings.', '']
 
     # --- 3. flange-mounted fresh-fit baseline (Table 4.2 rows)
     d4 = [o for o in inc if o['group'] == 'FLANGE_TEST' and o['tool'] == 4]
     L += ['## 3. Flange-mounted fresh fit (tool 4), for Table 4.2', '',
-          f"- RCM only, P5: {rng([o['rms'] for o in d4 if o['set'] == 'RCMOnly' and o['mode'] == 'P5'])} "
+          f"- Phantom RCM, P5: {rng([o['rms'] for o in d4 if o['set'] == 'RCMOnly' and o['mode'] == 'P5'])} "
           f"(n = {sum(o['set'] == 'RCMOnly' and o['mode'] == 'P5' for o in d4)}); all six settings: "
           f"{rng([o['rms'] for o in d4 if o['set'] == 'RCMOnly'])} (n = {sum(o['set'] == 'RCMOnly' for o in d4)}, "
           f"settings {', '.join(sorted({o['mode'] for o in d4 if o['set'] == 'RCMOnly'}))})",
-          f"- Slow checking, P5: {rng([o['rms'] for o in d4 if o['set'] == 'SlowChecking'])} "
+          f"- Slow probing, P5: {rng([o['rms'] for o in d4 if o['set'] == 'SlowChecking'])} "
           f"(n = {sum(o['set'] == 'SlowChecking' for o in d4)})",
           f"- Controller's own error, all flange-mounted runs: {rng([o['ctrl'] for o in d4])}", '']
     other = [o for o in inc if o['group'] == 'FLANGE_TEST' and o['tool'] in (5, 6)]
-    L += [f"- Fits 2 and 3 (tools 5, 6), slow checking: {rng([o['rms'] for o in other])} (n = {len(other)})"]
+    L += [f"- Fits 2 and 3 (tools 5, 6), slow probing: {rng([o['rms'] for o in other])} (n = {len(other)})"]
     for tn, lab in ((7, '+1 mm across the shaft'), (8, '+2 mm along the shaft')):
         v = [o for o in inc if o['group'] == 'FLANGE_TEST' and o['tool'] == tn]
-        L.append(f"- Tool 4 moved {lab} (tool {tn}), slow checking: {rng([o['rms'] for o in v])} (n = {len(v)})")
+        L.append(f"- Tool 4 moved {lab} (tool {tn}), slow probing: {rng([o['rms'] for o in v])} (n = {len(v)})")
     L.append('')
 
     # --- 4. cross-validation (flange-mounted tool 4; holder-tool and flange-mounted runs)
@@ -213,7 +213,7 @@ def main():
     for s in ('RCMOnly', 'SlowChecking'):
         v = [o for o in te if o['set'] == s]
         p = fixed_line_residual(runs_of(tr), runs_of(v))
-        L.append(f"| D: RCM only + slow checking, P5 replays 1–2 | D {LABEL[s]}, every other replay and setting | {len(v)} | "
+        L.append(f"| D: phantom RCM + slow probing, P5 replays 1–2 | D {LABEL[s]}, every other replay and setting | {len(v)} | "
                  f"{rng([o['rms'] for o in v])} | {rng(p)} |")
     for g in ('Calibrated holder', 'FLANGE_FRESH'):
         for sub in sorted({o['key'].split('/')[1] for o in base[g]}):
@@ -224,7 +224,7 @@ def main():
             for s in ('SlowChecking', 'FastChecking', 'WholeRunDrinkBottle'):
                 v = [o for o in tst if o['set'] == s]
                 if v:
-                    L.append(f"| {g} {sub}: RCM only | {LABEL[s]} | {len(v)} | {rng([o['rms'] for o in v])} | "
+                    L.append(f"| {g} {sub}: phantom RCM | {LABEL[s]} | {len(v)} | {rng([o['rms'] for o in v])} | "
                              f"{rng(fixed_line_residual(runs_of(trn), runs_of(v)))} |")
     L.append('')
 
@@ -257,7 +257,7 @@ def main():
 
     # --- 6. latch test
     L += ['## 6. Latch test: fresh fit against corrected tool, interleaved', '',
-          f'Prediction written before the run: Corrected tool <= {PREDICTION_MM} mm on RCM only and slow checking.', '',
+          f'Prediction written before the run: Corrected tool <= {PREDICTION_MM} mm on phantom RCM and slow probing.', '',
           '| Trajectory | tool | n | NDI rms mean [range] | depth slope (mm/100 mm) | line angle (°) | controller rms |',
           '|---|---|---|---|---|---|---|']
     lt = {}
@@ -278,7 +278,7 @@ def main():
                 verdict = ' (prediction met)' if b.max() <= PREDICTION_MM else ' (prediction NOT met)'
             L.append(f"- {LABEL[s]}: Corrected/fresh = {b.mean() / a.mean():.2f}, Corrected − fresh = {b.mean() - a.mean():+.2f} mm{verdict}")
     L += ['', '### Follow-up, chosen after the result above: corrected-on-all-four tool = fresh fit corrected on all four trajectories', '',
-          'Trained on the four training runs plus the first tool-10 fast checking and whole run replays; tested on new '
+          'Trained on the four training runs plus the first tool-10 fast probing and phantom task replays; tested on new '
           'replays (blocks 12 12 10 12). Offline prediction written before the run: '
           + ', '.join('%s %.2f' % (LABEL[k], v) for k, v in PREDICTION_C.items()) + ' mm.', '',
           '| Trajectory | n | NDI rms mean [range] | predicted | replays over 1 mm | line angle (°) | fresh-fit drift block vs fresh-fit mean |',
@@ -314,7 +314,7 @@ def main():
           '- "r = 0.008 between offset and latch speed": section 1.',
           '- "fixed line explains slow runs to 0.13–0.25 mm; ~0.3° (B/C), ~1.05° (D)": section 2.',
           '- "corrected tools from the corrected tools agree to ~0.15 mm / 0.01°": section 5.',
-          '- "phase L: Corrected tool <= 0.35 mm on RCM only and slow checking; fast better; whole run worse": section 6.',
+          '- "phase L: Corrected tool <= 0.35 mm on phantom RCM and slow probing; fast better; phantom task worse": section 6.',
           '- "corrected-on-all-four tool (all four): 0.31 / 0.22 / 0.50 / 0.63 mm" (prediction): section 6, follow-up.', '']
 
     # --- figures
@@ -343,7 +343,7 @@ def fig_depth(inc):
     ax.set_ylabel('RCM error (mm)')
     ax.set_ylim(bottom=0)
     ax.legend(frameon=False, loc='upper left')
-    panel(ax, 'a', 'Slow checking')
+    panel(ax, 'a', 'Slow probing')
     fig_b = fig
     return save(fig_b, HERE, 'latch_depth')
 

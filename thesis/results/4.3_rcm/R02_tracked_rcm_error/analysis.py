@@ -19,8 +19,8 @@ from common.style import FULL, INK2, MODE, MUTED, save, style, day_label  # noqa
 import matplotlib.pyplot as plt  # noqa: E402
 
 SETS = ['RCMOnly', 'WholeRunDrinkBottle', 'FastChecking', 'SlowChecking']
-SET_LABEL = {'RCMOnly': 'RCM only', 'WholeRunDrinkBottle': 'Whole run', 'FastChecking': 'Fast checking',
-             'SlowChecking': 'Slow checking'}
+SET_LABEL = {'RCMOnly': 'Phantom RCM', 'WholeRunDrinkBottle': 'Phantom task', 'FastChecking': 'Fast probing',
+             'SlowChecking': 'Slow probing'}
 PATTERNS = ['V7/*SimpleHolder_Replay*', 'V8/CalibratedKinematics/*SimpleHolder_Replay*',
             'V9/*/*SimpleHolder_Replay*', 'V9b/*/*SimpleHolder_Replay*']
 CAM_STEP_MM = 3.0
@@ -163,7 +163,7 @@ def main():
     allc = np.array([o['ctrl_mm'] for o in inc]); alln = np.array([o['rms'] for o in inc])
     L += ['', f"Controller's own RCM error: {np.nanmin(allc):.2f}–{np.nanmax(allc):.2f} mm rms; NDI / controller "
           f"ratio {np.nanmin(alln / allc):.1f}–{np.nanmax(alln / allc):.1f}.",
-          f"RCM only under 1 mm in every included run: {all(o['rms'] < 1 for o in inc if o['set'] == 'RCMOnly')}.",
+          f"Phantom RCM under 1 mm in every included run: {all(o['rms'] < 1 for o in inc if o['set'] == 'RCMOnly')}.",
           '', '## Camera placement per day (fitted camera position in base, mm; median over runs)', '']
     for d in sorted({o['day'] for o in inc}):
         P = np.array([o['cam_pos'] for o in inc if o['day'] == d and o['cam_pos']])
@@ -197,7 +197,7 @@ def main():
     ax.axhline(1.0, color=INK2, ls='--', lw=0.8)
     ax.text(-0.45, 1.04, '1 mm threshold', fontsize=8, color=INK2, ha='left', va='bottom')
     ax.set_xticks(range(len(SETS))); ax.set_xticklabels([SET_LABEL[s] for s in SETS])
-    ax.tick_params(axis='x', pad=24, length=0); ax.set_xlabel('Recorded trajectory')
+    ax.tick_params(axis='x', pad=72, length=0); ax.set_xlabel('Recorded trajectory')
     ax.set_ylabel('RCM error, rms (mm)'); ax.set_ylim(-0.05, None)
     hs = [plt.Line2D([], [], ls='', marker=STRIP_STYLE[m]['marker'], color=STRIP_STYLE[m]['color'],
                      label=STRIP_STYLE[m]['label']) for m in STRIP_STYLE if m in {c[1] for c in cl}]

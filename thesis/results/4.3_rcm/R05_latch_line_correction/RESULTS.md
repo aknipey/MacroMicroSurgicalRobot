@@ -12,58 +12,58 @@ Included: 141 runs.
 
 ## 1. Is the offset a latch-timing effect?
 
-Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, 0 runs with the tip tracked before the latch: r = nan. Tip speed – mm/s, offset – mm. RCM-only runs latch at rest and have no pre-latch speed.
+Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, 0 runs with the tip tracked before the latch: r = nan. Tip speed – mm/s, offset – mm. Phantom RCM runs latch at rest and have no pre-latch speed.
 
 ## 2. One line fixed in the wand frame, per mounting and trajectory
 
 | Setting | Trajectory | n | as run (median) | fixed-line residual (median) | line angle (°, median) | depth slope (mm/100 mm, median) |
 |---|---|---|---|---|---|---|
-| Fresh fit | RCM only | 3 | 0.42 | 0.33 | 0.21 | 0.18 |
-| Fresh fit | Slow checking | 3 | 2.86 | 0.40 | 0.61 | 2.99 |
-| Fresh fit | Fast checking | 5 | 1.71 | 0.69 | 0.43 | -0.67 |
-| Fresh fit | Whole run | 3 | 0.90 | 0.65 | 0.92 | 0.84 |
-| Calibrated holder | RCM only | 9 | 0.47 | 0.15 | 0.28 | 0.30 |
-| Calibrated holder | Slow checking | 9 | 1.31 | 0.17 | 0.23 | 1.35 |
-| Calibrated holder | Fast checking | 9 | 1.22 | 0.51 | 0.32 | -0.35 |
-| Calibrated holder | Whole run | 9 | 1.24 | 0.35 | 0.36 | 0.51 |
-| FLANGE_FRESH | RCM only | 7 | 0.45 | 0.17 | 0.44 | 0.24 |
-| FLANGE_FRESH | Slow checking | 5 | 1.89 | 0.22 | 0.08 | 1.84 |
-| FLANGE_FRESH | Fast checking | 3 | 1.81 | 0.52 | 0.18 | -0.46 |
-| FLANGE_FRESH | Whole run | 3 | 0.92 | 0.37 | 0.30 | 0.15 |
-| FLANGE_TEST | RCM only | 18 | 1.54 | 0.23 | 1.12 | 1.79 |
-| FLANGE_TEST | Slow checking | 3 | 1.11 | 0.13 | 1.05 | 1.39 |
+| Fresh fit | Phantom RCM | 3 | 0.42 | 0.33 | 0.21 | 0.18 |
+| Fresh fit | Slow probing | 3 | 2.86 | 0.40 | 0.61 | 2.99 |
+| Fresh fit | Fast probing | 5 | 1.71 | 0.69 | 0.43 | -0.67 |
+| Fresh fit | Phantom task | 3 | 0.90 | 0.65 | 0.92 | 0.84 |
+| Calibrated holder | Phantom RCM | 9 | 0.47 | 0.15 | 0.28 | 0.30 |
+| Calibrated holder | Slow probing | 9 | 1.31 | 0.17 | 0.23 | 1.35 |
+| Calibrated holder | Fast probing | 9 | 1.22 | 0.51 | 0.32 | -0.35 |
+| Calibrated holder | Phantom task | 9 | 1.24 | 0.35 | 0.36 | 0.51 |
+| FLANGE_FRESH | Phantom RCM | 7 | 0.45 | 0.17 | 0.44 | 0.24 |
+| FLANGE_FRESH | Slow probing | 5 | 1.89 | 0.22 | 0.08 | 1.84 |
+| FLANGE_FRESH | Fast probing | 3 | 1.81 | 0.52 | 0.18 | -0.46 |
+| FLANGE_FRESH | Phantom task | 3 | 0.92 | 0.37 | 0.30 | 0.15 |
+| FLANGE_TEST | Phantom RCM | 18 | 1.54 | 0.23 | 1.12 | 1.79 |
+| FLANGE_TEST | Slow probing | 3 | 1.11 | 0.13 | 1.05 | 1.39 |
 
-The flange-mounted fresh-fit rows use the initial flange-mounted fit; RCM only spans six output/filter settings.
+The flange-mounted fresh-fit rows use the initial flange-mounted fit; phantom RCM spans six output/filter settings.
 
 ## 3. Flange-mounted fresh fit (tool 4), for Table 4.2
 
-- RCM only, P5: 1.54–1.58 (n = 3); all six settings: 1.51–1.58 (n = 18, settings P20, P5, Poff, V20, V5, Voff)
-- Slow checking, P5: 1.09–1.12 (n = 3)
+- Phantom RCM, P5: 1.54–1.58 (n = 3); all six settings: 1.51–1.58 (n = 18, settings P20, P5, Poff, V20, V5, Voff)
+- Slow probing, P5: 1.09–1.12 (n = 3)
 - Controller's own error, all flange-mounted runs: 0.05–0.06
 
-- Fits 2 and 3 (tools 5, 6), slow checking: 1.06–1.18 (n = 4)
-- Tool 4 moved +1 mm across the shaft (tool 7), slow checking: 0.98–0.99 (n = 2)
-- Tool 4 moved +2 mm along the shaft (tool 8), slow checking: 1.12–1.13 (n = 2)
+- Fits 2 and 3 (tools 5, 6), slow probing: 1.06–1.18 (n = 4)
+- Tool 4 moved +1 mm across the shaft (tool 7), slow probing: 0.98–0.99 (n = 2)
+- Tool 4 moved +2 mm along the shaft (tool 8), slow probing: 1.12–1.13 (n = 2)
 
 ## 4. Does a line fitted on some runs predict others?
 
 | Trained on | Tested on (held out) | n | as run | predicted residual |
 |---|---|---|---|---|
-| D: RCM only + slow checking, P5 replays 1–2 | D RCM only, every other replay and setting | 16 | 1.51–1.57 | 0.24–0.27 |
-| D: RCM only + slow checking, P5 replays 1–2 | D Slow checking, every other replay and setting | 1 | 1.12–1.12 | 0.14–0.14 |
-| Calibrated holder CalibratedKinematics: RCM only | Slow checking | 3 | 1.27–1.31 | 0.22–0.22 |
-| Calibrated holder CalibratedKinematics: RCM only | Fast checking | 3 | 1.22–1.33 | 0.74–0.74 |
-| Calibrated holder CalibratedKinematics: RCM only | Whole run | 3 | 1.23–1.27 | 1.13–1.14 |
-| Calibrated holder PositionMode: RCM only | Slow checking | 3 | 1.25–1.31 | 0.22–0.22 |
-| Calibrated holder PositionMode: RCM only | Fast checking | 3 | 0.90–1.42 | 0.73–0.75 |
-| Calibrated holder PositionMode: RCM only | Whole run | 3 | 1.24–1.30 | 1.13–1.15 |
-| Calibrated holder TrajectoryMode: RCM only | Slow checking | 3 | 1.39–1.44 | 0.20–0.21 |
-| Calibrated holder TrajectoryMode: RCM only | Fast checking | 3 | 0.95–0.99 | 0.71–0.72 |
-| Calibrated holder TrajectoryMode: RCM only | Whole run | 3 | 1.08–1.14 | 1.10–1.11 |
-| FLANGE_FRESH PositionBridge: RCM only | Slow checking | 2 | 1.82–1.90 | 0.30–0.33 |
-| FLANGE_FRESH VelocityOptimised: RCM only | Slow checking | 3 | 1.87–1.92 | 0.31–0.32 |
-| FLANGE_FRESH VelocityOptimised: RCM only | Fast checking | 3 | 1.74–1.81 | 0.73–0.74 |
-| FLANGE_FRESH VelocityOptimised: RCM only | Whole run | 3 | 0.87–0.92 | 1.06–1.07 |
+| D: phantom RCM + slow probing, P5 replays 1–2 | D Phantom RCM, every other replay and setting | 16 | 1.51–1.57 | 0.24–0.27 |
+| D: phantom RCM + slow probing, P5 replays 1–2 | D Slow probing, every other replay and setting | 1 | 1.12–1.12 | 0.14–0.14 |
+| Calibrated holder CalibratedKinematics: phantom RCM | Slow probing | 3 | 1.27–1.31 | 0.22–0.22 |
+| Calibrated holder CalibratedKinematics: phantom RCM | Fast probing | 3 | 1.22–1.33 | 0.74–0.74 |
+| Calibrated holder CalibratedKinematics: phantom RCM | Phantom task | 3 | 1.23–1.27 | 1.13–1.14 |
+| Calibrated holder PositionMode: phantom RCM | Slow probing | 3 | 1.25–1.31 | 0.22–0.22 |
+| Calibrated holder PositionMode: phantom RCM | Fast probing | 3 | 0.90–1.42 | 0.73–0.75 |
+| Calibrated holder PositionMode: phantom RCM | Phantom task | 3 | 1.24–1.30 | 1.13–1.15 |
+| Calibrated holder TrajectoryMode: phantom RCM | Slow probing | 3 | 1.39–1.44 | 0.20–0.21 |
+| Calibrated holder TrajectoryMode: phantom RCM | Fast probing | 3 | 0.95–0.99 | 0.71–0.72 |
+| Calibrated holder TrajectoryMode: phantom RCM | Phantom task | 3 | 1.08–1.14 | 1.10–1.11 |
+| FLANGE_FRESH PositionBridge: phantom RCM | Slow probing | 2 | 1.82–1.90 | 0.30–0.33 |
+| FLANGE_FRESH VelocityOptimised: phantom RCM | Slow probing | 3 | 1.87–1.92 | 0.31–0.32 |
+| FLANGE_FRESH VelocityOptimised: phantom RCM | Fast probing | 3 | 1.74–1.81 | 0.73–0.74 |
+| FLANGE_FRESH VelocityOptimised: phantom RCM | Phantom task | 3 | 0.87–0.92 | 1.06–1.07 |
 
 ## 5. Does the correction recover the same tool from different starting errors?
 
@@ -81,44 +81,44 @@ Tools 7 and 8 use tool 4's hand-eye fit. Spread of the five corrected tools: tip
 
 ## 6. Latch test: fresh fit against corrected tool, interleaved
 
-Prediction written before the run: Corrected tool <= 0.35 mm on RCM only and slow checking.
+Prediction written before the run: Corrected tool <= 0.35 mm on phantom RCM and slow probing.
 
 | Trajectory | tool | n | NDI rms mean [range] | depth slope (mm/100 mm) | line angle (°) | controller rms |
 |---|---|---|---|---|---|---|
-| RCM only | Fresh fit | 3 | 0.62 [0.60–0.63] | 0.63 | 0.50 | 0.06–0.06 |
-| RCM only | Corrected tool | 3 | 0.28 [0.28–0.29] | 0.28 | 0.02 | 0.06–0.06 |
-| Slow checking | Fresh fit | 3 | 0.98 [0.96–1.01] | 0.72 | 0.39 | 0.05–0.05 |
-| Slow checking | Corrected tool | 3 | 0.26 [0.24–0.28] | 0.03 | 0.13 | 0.05–0.05 |
-| Fast checking | Fresh fit | 3 | 2.12 [2.04–2.20] | 0.24 | 0.23 | 0.26–0.26 |
-| Fast checking | Corrected tool | 3 | 0.91 [0.88–0.94] | -0.17 | 0.27 | 0.26–0.26 |
-| Whole run | Fresh fit | 3 | 0.74 [0.71–0.76] | 0.37 | 0.12 | 0.09–0.09 |
-| Whole run | Corrected tool | 3 | 1.17 [1.14–1.19] | 0.49 | 0.39 | 0.09–0.09 |
+| Phantom RCM | Fresh fit | 3 | 0.62 [0.60–0.63] | 0.63 | 0.50 | 0.06–0.06 |
+| Phantom RCM | Corrected tool | 3 | 0.28 [0.28–0.29] | 0.28 | 0.02 | 0.06–0.06 |
+| Slow probing | Fresh fit | 3 | 0.98 [0.96–1.01] | 0.72 | 0.39 | 0.05–0.05 |
+| Slow probing | Corrected tool | 3 | 0.26 [0.24–0.28] | 0.03 | 0.13 | 0.05–0.05 |
+| Fast probing | Fresh fit | 3 | 2.12 [2.04–2.20] | 0.24 | 0.23 | 0.26–0.26 |
+| Fast probing | Corrected tool | 3 | 0.91 [0.88–0.94] | -0.17 | 0.27 | 0.26–0.26 |
+| Phantom task | Fresh fit | 3 | 0.74 [0.71–0.76] | 0.37 | 0.12 | 0.09–0.09 |
+| Phantom task | Corrected tool | 3 | 1.17 [1.14–1.19] | 0.49 | 0.39 | 0.09–0.09 |
 
-- RCM only: Corrected/fresh = 0.46, Corrected − fresh = -0.34 mm (prediction met)
-- Slow checking: Corrected/fresh = 0.26, Corrected − fresh = -0.72 mm (prediction met)
-- Fast checking: Corrected/fresh = 0.43, Corrected − fresh = -1.21 mm
-- Whole run: Corrected/fresh = 1.57, Corrected − fresh = +0.43 mm
+- Phantom RCM: Corrected/fresh = 0.46, Corrected − fresh = -0.34 mm (prediction met)
+- Slow probing: Corrected/fresh = 0.26, Corrected − fresh = -0.72 mm (prediction met)
+- Fast probing: Corrected/fresh = 0.43, Corrected − fresh = -1.21 mm
+- Phantom task: Corrected/fresh = 1.57, Corrected − fresh = +0.43 mm
 
 ### Follow-up, chosen after the result above: corrected-on-all-four tool = fresh fit corrected on all four trajectories
 
-Trained on the four training runs plus the first tool-10 fast checking and whole run replays; tested on new replays (blocks 12 12 10 12). Offline prediction written before the run: RCM only 0.31, Slow checking 0.22, Fast checking 0.50, Whole run 0.63 mm.
+Trained on the four training runs plus the first tool-10 fast probing and phantom task replays; tested on new replays (blocks 12 12 10 12). Offline prediction written before the run: Phantom RCM 0.31, Slow probing 0.22, Fast probing 0.50, Phantom task 0.63 mm.
 
 | Trajectory | n | NDI rms mean [range] | predicted | replays over 1 mm | line angle (°) | fresh-fit drift block vs fresh-fit mean |
 |---|---|---|---|---|---|---|
-| RCM only | 3 | 0.35 [0.34–0.35] | 0.31 | 0 of 3 | 0.14 | +0.01 |
-| Slow checking | 3 | 0.35 [0.33–0.38] | 0.22 | 0 of 3 | 0.03 | +0.06 |
-| Fast checking | 3 | 1.06 [1.04–1.08] | 0.50 | 3 of 3 | 0.15 | +0.03 |
-| Whole run | 3 | 0.99 [0.97–1.01] | 0.63 | 1 of 3 | 0.29 | -0.01 |
+| Phantom RCM | 3 | 0.35 [0.34–0.35] | 0.31 | 0 of 3 | 0.14 | +0.01 |
+| Slow probing | 3 | 0.35 [0.33–0.38] | 0.22 | 0 of 3 | 0.03 | +0.06 |
+| Fast probing | 3 | 1.06 [1.04–1.08] | 0.50 | 3 of 3 | 0.15 | +0.03 |
+| Phantom task | 3 | 0.99 [0.97–1.01] | 0.63 | 1 of 3 | 0.29 | -0.01 |
 
 - All four trajectories <= 1.0 mm with corrected-on-all-four tool: no (largest 1.08 mm)
 
-- Training runs (fresh fit): RCM only 0.62, RCM only 0.62, Slow checking 0.97, Slow checking 1.05
+- Training runs (fresh fit): Phantom RCM 0.62, Phantom RCM 0.62, Slow probing 0.97, Slow probing 1.05
 
 ## 7. Is the line error the same on every trajectory?
 
 Line angle (°) per trajectory with the same tool, median over replays:
 
-| Tool | RCM only | Slow checking | Fast checking | Whole run |
+| Tool | Phantom RCM | Slow probing | Fast probing | Phantom task |
 |---|---|---|---|---|
 | Fresh fit | 0.50 | 0.38 | 0.22 | 0.12 |
 | Corrected tool | 0.02 | 0.13 | 0.27 | 0.39 |
@@ -129,7 +129,7 @@ Line angle (°) per trajectory with the same tool, median over replays:
 - "r = 0.008 between offset and latch speed": section 1.
 - "fixed line explains slow runs to 0.13–0.25 mm; ~0.3° (B/C), ~1.05° (D)": section 2.
 - "corrected tools from the corrected tools agree to ~0.15 mm / 0.01°": section 5.
-- "phase L: Corrected tool <= 0.35 mm on RCM only and slow checking; fast better; whole run worse": section 6.
+- "phase L: Corrected tool <= 0.35 mm on phantom RCM and slow probing; fast better; phantom task worse": section 6.
 - "corrected-on-all-four tool (all four): 0.31 / 0.22 / 0.50 / 0.63 mm" (prediction): section 6, follow-up.
 
 ## Figures
