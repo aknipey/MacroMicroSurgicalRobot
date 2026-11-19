@@ -4,7 +4,7 @@
 # that segment can be the RCM point). Edit by hand or with
 #   ros2 run macro_micro_robot tool_library.py add|remove|default ...
 # The teleop re-reads this file on every tool switch.
-default: 2
+default: 12
 tools:
   1:
     name: NDI wand 8700340
