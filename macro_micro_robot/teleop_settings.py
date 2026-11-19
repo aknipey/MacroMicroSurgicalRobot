@@ -81,7 +81,7 @@ TOUCH_FEEDFORWARD_FILTER = 0.02
 # real 1:1 hand run: 8 Hz -> 6 Hz cut tool jerk by a quarter for ~2-4 ms more lag;
 # 5 Hz cut it by a half for ~5 ms more; on the V5 benchmarks 6 -> 5 Hz cut the 5-15 Hz
 # jitter by 13%. Must be below half TOUCH_PUBLISH_RATE. 0 = off.
-TOUCH_COMMAND_FILTER = 5.0
+TOUCH_COMMAND_FILTER = 20.0
 # Kalman filter on the raw stylus pose (constant-velocity model; the orientation is an
 # extended/error-state version). omni_state repeats each pose for ~4 ms between real
 # updates, which makes the feedforward velocity jump; the filter uses only the real
