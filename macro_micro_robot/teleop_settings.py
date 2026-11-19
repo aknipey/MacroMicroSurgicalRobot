@@ -28,7 +28,7 @@ TOUCH_SCALE_STEPS = [1.0, 0.2, 0.05]
 # TOUCH_TWIST_SCALE. 1 = the same as translation (1:5 -> rotation 1:5, 1:20 -> 1:20);
 # 0.5 = square root (1:2.24 / 1:4.47, before 2026-10-30), 0 = rotation never scaled.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to 1.0 for Session B.
-TOUCH_SCALE_ROTATION_EXPONENT = 0.5
+TOUCH_SCALE_ROTATION_EXPONENT = 1.0
 # Two WHITE presses this close together (s, press to press) are a double click.
 # The robot still follows the stylus during both presses - nothing waits for this.
 TOUCH_DOUBLE_CLICK_TIME = 0.3
@@ -81,14 +81,14 @@ TOUCH_FEEDFORWARD_FILTER = 0.02
 # real 1:1 hand run: 8 Hz -> 6 Hz cut tool jerk by a quarter for ~2-4 ms more lag;
 # 5 Hz cut it by a half for ~5 ms more; on the V5 benchmarks 6 -> 5 Hz cut the 5-15 Hz
 # jitter by 13%. Must be below half TOUCH_PUBLISH_RATE. 0 = off.
-TOUCH_COMMAND_FILTER = 0.0
+TOUCH_COMMAND_FILTER = 5.0
 # Kalman filter on the raw stylus pose (constant-velocity model; the orientation is an
 # extended/error-state version). omni_state repeats each pose for ~4 ms between real
 # updates, which makes the feedforward velocity jump; the filter uses only the real
 # updates and predicts in between. On the V3 benchmarks it cuts the feedforward noise
 # by 17-42% without adding lag (it is 0.5-2 ms ahead), unlike TOUCH_COMMAND_FILTER.
 # True = on.
-TOUCH_KALMAN = False
+TOUCH_KALMAN = True
 # How quickly the hand's velocity may change (process noise). Lower = smoother, but the
 # target runs on past a sudden stop: at 1:1 a stop from 200 mm/s overshoots 0.13 mm
 # with 2.0 but 1.2 mm with 0.1; from 3 rad/s 0.6 deg with 30 (1.0 deg with 10).
@@ -291,7 +291,7 @@ SERVO_LOOKAHEAD = 0.05
 # V9 (2026-11-03): one replay set per output mode, otherwise the Session A settings, so the sets differ
 # only in the output mode. Session A (V8/CalibratedKinematics) = "velocity", V9/PositionMode = "position",
 # V9/TrajectoryMode = this. Final choice after the comparison.
-SERVO_OUTPUT = "velocity"
+SERVO_OUTPUT = "position"
 # Servo's own singularity check (condition number thresholds): it scales the whole
 # twist down from SLOWDOWN and halts at STOP - and above STOP it halts *every* command,
 # even one leading back out (seen on the mock arm at c = 554 with a twist straight out),
@@ -320,7 +320,7 @@ SERVO_VELOCITY_RATE = 500.0
 # spline mode does), so the joint speed ramps between set points. Real arm only (mock
 # hardware runs no URScript). Read at launch: needs a relaunch.
 # SESSION A (2026-11-03): 10-26 replay value, so only the kinematics differ from that set. Back to True for Session B.
-SERVO_SMOOTH_SPEEDJ = False
+SERVO_SMOOTH_SPEEDJ = True
 # joint_velocity_limiter.py between Servo and forward_velocity_controller: smooths and
 # limits each joint's speed and acceleration. True = on.
 VELOCITY_LIMITER = True
