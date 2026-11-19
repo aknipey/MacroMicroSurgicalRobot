@@ -2354,3 +2354,8 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   (or arm orientation), not the NDI axis: the robot really did miss, and the old runs stay as measured. Phase L measures the fix:
   fresh fit (tool 10), training replays, corrected tool 11 from those only, then six interleaved A/B blocks of SlowChecking, RCMOnly,
   FastChecking, WholeRun. Prediction before the run: tool 11 <= 0.35 mm rms on RCMOnly and SlowChecking.
+- **2026-11-19, phase L result + step 45:** tool 11 (corrected) vs tool 10 (fresh fit, 0.49 deg): RCMOnly 0.62 -> 0.28 mm, SlowChecking
+  0.98 -> 0.26 mm (prediction <= 0.35 met; depth slope 0.72 -> 0.03 mm/100 mm), FastChecking 2.12 -> 0.89 mm, WholeRun 0.74 -> 1.17 mm
+  (worse: its line angle is 0.12 deg with tool 10, so the 0.49 deg correction over-corrects it). About 0.3-0.4 deg of the line error is
+  pose-dependent, which one fixed tool cannot cancel. B FastChecking_Replay2 ran at 1:20 (scale switched 7 s before; TCP path 472 vs
+  ~3080 mm), kept as `_WRONG_SCALE`; `latch_line_fit.py` now reads only `<name>_Replay<n>` folders; `--only=45` replays one more.

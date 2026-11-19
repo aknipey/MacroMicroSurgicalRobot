@@ -625,6 +625,25 @@ step_44() {
   fi
 }
 
+# one extra B FastChecking (11-19: B Replay2 ran at 1:20, kept as _WRONG_SCALE); --only=45, not in the full phase
+step_45() {
+  say "=== Step 45: one more FastChecking with tool 11 -> ${LT}/B_tool11"
+  $DRY_RUN || ndi_start
+  cell_t 11 p5 "${LT}/B_tool11" 1 "$FAST"
+  if ! $DRY_RUN; then
+    local run len
+    run=$(cd "$LOGS" && ls -1dtr "${LT}/B_tool11/"FastChecking*_Replay[0-9]* | tail -1)
+    len=$(awk -F, 'NR > 1 { x = $5 * 1000; y = $6 * 1000; z = $7 * 1000; if (NR > 2) L += sqrt((x - a) ^ 2 + (y - b) ^ 2 + (z - c) ^ 2); a = x; b = y; c = z } END { printf "%.0f", L }' "${LOGS}/${run}/UR_PATH.csv")
+    note "${run}: TCP path ${len} mm (full FastChecking ~3080)"
+    [ "$len" -ge 2500 ] || echo "!!! ${run}: TCP path only ${len} mm (full run ~3080): wrong motion scale again? Don't use it."
+    python3 "${SCRIPT_DIR}/latch_line_fit.py" report "${LOGS}/${LT}/A_tool10/"*_Replay[0-9]* "${LOGS}/${LT}/B_tool11/"*_Replay[0-9]* \
+      | tee "${SESSION_DIR}/LATCH_TEST.txt" | tail -9
+    stop_stack
+    set_mode final
+    set_tool 2
+  fi
+}
+
 PHASE_L=(40 41 42 43 44)
 
 # --- main --------------------------------------------------------------------------------
@@ -642,7 +661,7 @@ case "$PHASE" in
 esac
 if [ -n "$ONLY" ] && [ "$ONLY" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
 if [ -n "$FROM" ] && [ "$FROM" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
-if [ -n "$ONLY" ] && [ "$ONLY" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}"); PHASE=L; fi
+if [ -n "$ONLY" ] && [ "$ONLY" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}" 45); PHASE=L; fi
 if [ -n "$FROM" ] && [ "$FROM" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}"); PHASE=L; fi
 for n in "${PHASE_STEPS[@]}"; do
   if [ -n "$ONLY" ]; then

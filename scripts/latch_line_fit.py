@@ -23,6 +23,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -165,7 +166,9 @@ def expand(paths):
     out = []
     for p in paths:
         hits = sorted(glob.glob(p)) or [p]
-        out += [h for h in hits if os.path.exists(os.path.join(h, 'NDI_PATH.csv')) and not h.rstrip('/').endswith('_NO_NDI')]
+        # only complete replays: <name>_Replay<n>, not _NO_NDI / _WRONG_SCALE / _INCOMPLETE ones
+        out += [h for h in hits if os.path.exists(os.path.join(h, 'NDI_PATH.csv'))
+                and (re.search(r'_Replay\d+$', h.rstrip('/')) or '_Replay' not in h)]
     return out
 
 
