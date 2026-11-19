@@ -100,8 +100,11 @@ for spec in "${RUNS[@]}"; do
       visible_pct=$(awk -F, 'NR > 1 { n++; v += $4 } END { print (n ? int(100 * v / n) : 0) }' "${LOGS}/NEW_RUN/NDI_PATH.csv")
     fi
     if $REQUIRE_NDI && [ "$visible_pct" -lt 95 ]; then
-      mv "${LOGS}/NEW_RUN" "${target}_NO_NDI"
-      echo "!!! Wand tracked for only ${visible_pct} % of this replay (kept as ${DEST}/${name}_Replay${n}_NO_NDI) - stopping the batch." >&2
+      # a free _NO_NDI name: mv into an existing one would nest NEW_RUN inside it (11-19)
+      m=$n
+      while [ -e "${LOGS}/${DEST}/${name}_Replay${m}_NO_NDI" ]; do m=$((m + 1)); done
+      mv "${LOGS}/NEW_RUN" "${LOGS}/${DEST}/${name}_Replay${m}_NO_NDI"
+      echo "!!! Wand tracked for only ${visible_pct} % of this replay (kept as ${DEST}/${name}_Replay${m}_NO_NDI) - stopping the batch." >&2
       echo "    Check the tracker sees the wand, then run the batch again." >&2
       break 2
     fi
