@@ -119,7 +119,13 @@ stop_stack() {
 }
 
 # From the stack log, never by subscribing (a new subscriber lined up with the 11-06 stalls)
-program_state() { grep -E "Robot program (running|stopped)" "$STACK_LOG" 2>/dev/null | tail -1; }
+program_state() {
+  if [ -n "$LAUNCH_EXTRA" ]; then   # mock hardware has no robot program
+    grep -q "Touch teleop ready" "$STACK_LOG" 2>/dev/null && echo "running"
+    return 0
+  fi
+  grep -E "Robot program (running|stopped)" "$STACK_LOG" 2>/dev/null | tail -1
+}
 
 start_stack() {
   stop_stack
