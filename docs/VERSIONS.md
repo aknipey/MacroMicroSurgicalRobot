@@ -2359,3 +2359,9 @@ hand-eye and the micro tip ball, then the RD1 replays (`thesis/planning/07_remai
   (worse: its line angle is 0.12 deg with tool 10, so the 0.49 deg correction over-corrects it). About 0.3-0.4 deg of the line error is
   pose-dependent, which one fixed tool cannot cancel. B FastChecking_Replay2 ran at 1:20 (scale switched 7 s before; TCP path 472 vs
   ~3080 mm), kept as `_WRONG_SCALE`; `latch_line_fit.py` now reads only `<name>_Replay<n>` folders; `--only=45` replays one more.
+- **2026-11-19, follow-up chosen after the phase L result (`run_v9c.sh --from=46`):** tool 12 = tool 10 corrected on all four
+  trajectories (Train + the first tool-10 fast checking and whole run replays; mount untouched since phase L). Test: new
+  replays, blocks 12 12 10 12 (the tool-10 block is a drift check, `Latch/A_tool10_drift`). Prediction written before the run
+  (offline, held-out tool-10 replays): 0.31 / 0.22 / 0.50 / 0.63 mm for RCM only / slow / fast / whole run; offline predictions
+  were ~0.4 mm optimistic for trajectories not trained on. Target: all four <= 1.0 mm with one tool. Report it as a follow-up,
+  not as the pre-registered test.

@@ -24,6 +24,7 @@
 #   replays (SlowChecking, RCMOnly x2, tool 10); 42 corrected tool 11 (scripts/latch_line_fit.py, training runs
 #   only); 43 six interleaved blocks A B B A A B of SlowChecking, RCMOnly, FastChecking, WholeRun (tool 10 = A,
 #   tool 11 = B); 44 report + final settings, default tool 2. Data in logs/V9c/Latch.
+#   Follow-up --from=46: 46 tool 12 (corrected on all four trajectories), 47 blocks 12 12 10 12, 48 report.
 #   Steps 20-32 run unattended except one check before the first wrist jog.
 #
 # Unattended needs the pendant in REMOTE CONTROL with the External Control program loaded: the
@@ -644,7 +645,49 @@ step_45() {
   fi
 }
 
+# --- follow-up (11-19, chosen after phase L): one tool trained on all four trajectories ------------------
+# Tool 12 = tool 10 corrected from Train (RCM only, slow checking x2) + the first tool-10 fast checking and whole run
+# replays of step 43 (same mount, untouched since). Test: new replays, blocks 12 12 10 12; the tool-10 block is a
+# drift check, kept out of A_tool10. Prediction (offline, before the run): 0.31 / 0.22 / 0.50 / 0.63 mm for RCM only /
+# slow / fast / whole run; offline predictions ran ~0.4 mm optimistic on trajectories not trained on.
+step_46() {
+  say "=== Step 46: tool 12 from tool-10 runs of all four trajectories"
+  local train=("${LOGS}/${LT}/Train/"*_Replay[0-9]* "${LOGS}/${LT}/A_tool10/FastCheckingRCMSimpleHolder_Replay1"
+               "${LOGS}/${LT}/A_tool10/WholeRunDrinkBottleSimpleHolder_Replay1")
+  if $DRY_RUN; then echo "   latch_line_fit.py fit ${#train[@]} runs --add 12 wand_L_corrected_all4"; return 0; fi
+  python3 "${SCRIPT_DIR}/latch_line_fit.py" fit "${train[@]}" --add 12 wand_L_corrected_all4 \
+    --json "${SESSION_DIR}/latch_tool12.json" | tee "${STACK_LOG_DIR}/latch_fit12.txt" || die "latch_line_fit.py failed"
+  grep -q "corrected:" "${STACK_LOG_DIR}/latch_fit12.txt" || die "No corrected tool (see ${STACK_LOG_DIR}/latch_fit12.txt)"
+  git -C "$PKG" add config/tools.yaml "${SESSION_DIR}/latch_tool12.json"
+  git -C "$PKG" commit -q -m "V9c: tool 12 wand_L_corrected_all4 (tool 10 corrected on all four trajectories)" || die "commit failed"
+  note "tool 12: $(grep -E 'line angle|corrected:' "${STACK_LOG_DIR}/latch_fit12.txt" | tr -s ' ' | tr '\n' ' ')"
+}
+
+step_47() {
+  local order=(12 12 10 12) k tool dest
+  for k in "${!order[@]}"; do
+    tool="${order[$k]}"
+    [ "$tool" = 12 ] && dest="${LT}/C_tool12" || dest="${LT}/A_tool10_drift"
+    say "--- Step 47, block $((k + 1))/4: tool ${tool}"
+    $DRY_RUN || ndi_start
+    cell_t "$tool" p5 "$dest" 1 "${LATCH_TEST[@]}"
+  done
+}
+
+step_48() {
+  say "=== Step 48: report, settings back to final, default tool 2"
+  if ! $DRY_RUN; then
+    python3 "${SCRIPT_DIR}/latch_line_fit.py" report "${LOGS}/${LT}/A_tool10/"*_Replay[0-9]* "${LOGS}/${LT}/B_tool11/"*_Replay[0-9]* \
+      "${LOGS}/${LT}/C_tool12/"*_Replay[0-9]* "${LOGS}/${LT}/A_tool10_drift/"*_Replay[0-9]* | tee "${SESSION_DIR}/LATCH_TEST_ALL4.txt"
+    note "all-four test report: ${SESSION_DIR}/LATCH_TEST_ALL4.txt"
+    stop_stack
+    set_mode final
+    set_tool 2
+  fi
+}
+
 PHASE_L=(40 41 42 43 44)
+PHASE_L2=(46 47 48)
 
 # --- main --------------------------------------------------------------------------------
 set +u
@@ -661,8 +704,9 @@ case "$PHASE" in
 esac
 if [ -n "$ONLY" ] && [ "$ONLY" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
 if [ -n "$FROM" ] && [ "$FROM" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
-if [ -n "$ONLY" ] && [ "$ONLY" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}" 45); PHASE=L; fi
+if [ -n "$ONLY" ] && [ "$ONLY" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}" 45 "${PHASE_L2[@]}"); PHASE=L; fi
 if [ -n "$FROM" ] && [ "$FROM" -ge 40 ]; then PHASE_STEPS=("${PHASE_L[@]}"); PHASE=L; fi
+if [ -n "$FROM" ] && [ "$FROM" -ge 46 ]; then PHASE_STEPS=("${PHASE_L2[@]}"); PHASE=L; fi
 for n in "${PHASE_STEPS[@]}"; do
   if [ -n "$ONLY" ]; then
     [ "$n" = "$ONLY" ] && steps+=("$n")
