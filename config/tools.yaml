@@ -78,3 +78,11 @@ tools:
     calibration: manual
     date: '2026-11-19'
     notes: tool 4 + 2.0 mm along the shaft (V9c T2d control)
+  10:
+    name: wand_L_fit
+    tip_tool0_mm: [1.5159, 10.8956, 323.0463]
+    direction_tool0: [0.005472, 0.023884, 0.9997]
+    shaft_length_mm: 158.6
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-19_153434.json
+    date: '2026-11-19'
+    notes: V9c session D 2026-11-19 15:34
