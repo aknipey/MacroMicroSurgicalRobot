@@ -54,3 +54,11 @@ tools:
     calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-19_132231.json
     date: '2026-11-19'
     notes: V9c session D 2026-11-19 13:22
+  6:
+    name: wand_D_fit3
+    tip_tool0_mm: [-4.4791, 10.9258, 322.8529]
+    direction_tool0: [-0.013238, 0.022031, 0.99967]
+    shaft_length_mm: 158.6
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-19_132525.json
+    date: '2026-11-19'
+    notes: V9c session D 2026-11-19 13:25

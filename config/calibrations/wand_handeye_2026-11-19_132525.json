@@ -1,0 +1,71 @@
+{
+  "label": "TOOL0 -> WAND hand-eye (wand is the robot tool), 2026-11-19_132525",
+  "method": "handeye_wrist_jog",
+  "note": "No divot. Tip = the wand's calibrated tip through the hand-eye fit (refitted from the raw recording without mis-tracked frames); robot-tcp's robot-pivot tip is invalid without a divot.",
+  "raw": "/home/aidan-knipe/ros2_ws/src/ndi_tracking/calibrations/raw/robot_tcp_20261119_132525.npz",
+  "wand_calibration": "8700340",
+  "date": "2026-11-19T13:25:25",
+  "robot_poses": 2936,
+  "ndi_frames_dropped": 124,
+  "handeye": {
+    "tool0_to_wand": [
+      [
+        -0.0022527122811120126,
+        -0.9999692398239294,
+        0.007512968343567875,
+        -1.777429465616718
+      ],
+      [
+        -0.9998129939241643,
+        0.002107932091572673,
+        -0.019223262020178433,
+        -8.711556468087544
+      ],
+      [
+        0.019206833882179666,
+        -0.007554867851276063,
+        -0.9997869880649437,
+        164.64110118488708
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "pairs": 600,
+    "angle_mismatch_deg_rms": 0.31097845837808,
+    "camera_pose_spread_mm_rms": 6.411469806190517,
+    "camera_pose_spread_deg_rms": 0.2902872747325404,
+    "ndi_delay_s": 0.0200000000000001,
+    "samples": 3365
+  },
+  "halves_tip_tool0_mm": [
+    [
+      -4.462313309228522,
+      11.215241645113696,
+      322.9605463713876
+    ],
+    [
+      -4.285410571234927,
+      11.148369569153274,
+      322.91677777092934
+    ]
+  ],
+  "halves_apart_mm": 0.19411889047426514,
+  "tip_tool0_mm": [
+    -4.479120740491367,
+    10.925784499881633,
+    322.8528513251656
+  ],
+  "direction_tool0": [
+    -0.013238279308403354,
+    0.022030547645321034,
+    0.9996696468991143
+  ],
+  "direction_angle_from_tool0_z_deg": 1.473,
+  "shaft_length_mm": 158.6,
+  "previous": "/home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-03_094111.json",
+  "quality_warnings": []
+}
