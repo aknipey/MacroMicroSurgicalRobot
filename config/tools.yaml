@@ -38,3 +38,11 @@ tools:
       kinematics (ur16e_kinematics_2026-11-03.yaml), scripts/wrist_jog.py +-30 deg
       x2: mismatch 0.29 deg, spread 6.0 mm / 0.25 deg, halves 0.4 mm, wand still to
       0.04 mm (rest before/after). Length = wand geometry, not measured.'
+  4:
+    name: wand_D_fit1
+    tip_tool0_mm: [-4.2804, 10.7611, 322.9583]
+    direction_tool0: [-0.012789, 0.021528, 0.999686]
+    shaft_length_mm: 158.6
+    calibration: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/wand_handeye_2026-11-19_131937.json
+    date: '2026-11-19'
+    notes: V9c session D 2026-11-19 13:19
