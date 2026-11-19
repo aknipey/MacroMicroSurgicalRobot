@@ -339,7 +339,7 @@ ndi_start() {
   NDI_PID=$!
   set +m
   for _ in $(seq 1 30); do
-    ros2 node list --no-daemon 2>/dev/null | grep -q "/ndi_tracking" && { echo ">> NDI tracker up"; return 0; }
+    ros2 node list 2>/dev/null | grep -q "/ndi_tracking" && { echo ">> NDI tracker up"; return 0; }   # same lookup as replay_batch.sh
     ndi_running || die "The NDI tracker exited. See ${log}"
     sleep 1
   done
