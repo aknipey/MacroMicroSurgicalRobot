@@ -7,7 +7,18 @@
 #   inputs at position 20 Hz. Tool 3 stays configured, as in session C, so paths match V9b/NoTool.
 #   Order: P5 V5 P10 V10 P20 V20 Poff Voff P5_end P20(1:1). Velocity cells are 1:5 only.
 #
-# Phase B (steps 20+): the wand and NDI (RCM, tip vibration, calibration). Not written yet.
+# Phase B (steps 20-35, --phase=B): wand on the coupling, NDI. The script runs the tracker itself.
+#   20 warm-up RCMOnly (tool 3): checks the camera sees the wand at the RCM poses
+#   21 three hand-eye fits back to back (wrist jog + robot-tcp) -> tools 4, 5, 6
+#   22 NDI static floor (30 s, arm still)
+#   23 RCM baseline, P5, tool 4: SlowChecking x3, RCMOnly x3
+#   24-28 RCMOnly x3 in V5 P20 V20 Poff Voff (tool 4): RCM error and tip vibration per mode
+#   29-30 fits 2 and 3 (tools 5, 6), P5: SlowChecking x2 each
+#   31-32 perturbed tool 4: +1 mm across the shaft (tool 7), +2 mm along it (tool 8), SlowChecking x2
+#   33 C3 exchange redo (YOU swap the tool, 20x; the script times the still periods)  [--from=33]
+#   34 exchange -> RCMOnly, 5x (YOU swap, then it replays)
+#   35 settings back to final, default tool back to 2
+#   Steps 20-32 run unattended except one check before the first wrist jog.
 #
 # Unattended needs the pendant in REMOTE CONTROL with the External Control program loaded: the
 # script then presses Play itself over the dashboard port after each restart. In local mode it
@@ -15,6 +26,7 @@
 #
 # Usage:
 #   ./scripts/run_v9c.sh                 # phase A from step 1
+#   ./scripts/run_v9c.sh --phase=B       # phase B (wand) from step 20
 #   ./scripts/run_v9c.sh --from=6        # resume at step 6 (replay numbers carry on)
 #   ./scripts/run_v9c.sh --only=10
 #   ./scripts/run_v9c.sh --dry-run       # print the plan, change nothing
@@ -41,15 +53,17 @@ LAUNCH_EXTRA="${LAUNCH_EXTRA:-}"    # extra launch arguments, for testing on moc
 REPEATS_1TO5="${REPEATS_1TO5:-4}"
 REPEATS_1TO1="${REPEATS_1TO1:-2}"
 
-FROM=1
+FROM=""
 ONLY=""
+PHASE=A
 DRY_RUN=false
 for arg in "$@"; do
   case "$arg" in
     --from=*) FROM="${arg#*=}" ;;
     --only=*) ONLY="${arg#*=}" ;;
     --dry-run) DRY_RUN=true ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --phase=*) PHASE="${arg#*=}" ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
@@ -67,6 +81,13 @@ die() {
   $DRY_RUN || note "STOPPED: $*"
   printf '\a'
   exit 1
+}
+
+ask_continue() {
+  local answer
+  read -r -p "$1 [Enter = continue, q = stop here] " answer
+  [ "$answer" = "q" ] && exit 0
+  return 0
 }
 
 # --- settings (each change committed, so every recording's code_version names it) --------
@@ -285,6 +306,246 @@ step_10() { cell p20  "$G/P20_1to1" "$REPEATS_1TO1" "${ONE_TO_ONE[@]}"; }
 
 PHASE_A=(1 2 3 4 5 6 7 8 9 10)
 
+# --- phase B: wand, NDI ------------------------------------------------------------------
+NDI_DIR="${WS}/src/ndi_tracking"
+NDI_PID=""
+SHAFT_MM=158.6
+R="${V9C}/RCM"
+SLOW=V7/SlowCheckingRCMSimpleHolder
+RCMONLY=V7/RCMOnlySimpleHolder:--rcm
+
+ndi_running() { pgrep -f "ndi_tracking run" >/dev/null; }
+
+ndi_stop() {
+  if ndi_running; then
+    echo ">> Stopping the NDI tracker"
+    pkill -INT -f "ndi_tracking run"
+    for _ in $(seq 1 20); do ndi_running || break; sleep 0.5; done
+    ndi_running && pkill -KILL -f "ndi_tracking run"
+    sleep 1
+  fi
+  NDI_PID=""
+}
+
+ndi_start() {
+  ndi_running && return 0
+  mkdir -p "$STACK_LOG_DIR"
+  local log="${STACK_LOG_DIR}/$(date +%H%M%S)_ndi_run.log"
+  echo ">> Starting the NDI tracker (log: ${log})"
+  set -m
+  (cd "$NDI_DIR" && exec python3 -m ndi_tracking run) >"$log" 2>&1 </dev/null &
+  NDI_PID=$!
+  set +m
+  for _ in $(seq 1 30); do
+    ros2 node list --no-daemon 2>/dev/null | grep -q "/ndi_tracking" && { echo ">> NDI tracker up"; return 0; }
+    ndi_running || die "The NDI tracker exited. See ${log}"
+    sleep 1
+  done
+  die "NDI tracker not on ROS after 30 s. See ${log}"
+}
+
+recorder() { ros2 service call "/trajectory_recorder/$1" std_srvs/srv/Trigger 2>&1 | tail -1; }
+
+# trajectory_player.py <file>, stopped at once if External Control drops (11-06: a waiting
+# trajectory jumps to catch up when Play is pressed again)
+play_file() {
+  local file="$1" out="${STACK_LOG_DIR}/$(date +%H%M%S)_player.log" pid
+  set -m
+  ros2 run macro_micro_robot trajectory_player.py "$file" --approach-time 5 --yes >"$out" 2>&1 </dev/null &
+  pid=$!
+  set +m
+  while kill -0 "$pid" 2>/dev/null; do
+    if program_state | grep -q stopped; then
+      kill -INT -- "-${pid}" 2>/dev/null; sleep 2; kill -KILL -- "-${pid}" 2>/dev/null
+      die "External Control stopped during ${file}. Don't press Play; resume with --phase=B --from=${STEP}."
+    fi
+    sleep 0.5
+  done
+  wait "$pid"
+  tail -2 "$out"
+  grep -q "Trajectory complete" "$out" || die "The motion did not finish (${out})."
+}
+
+# fit <tool number> <name>: one hand-eye calibration through the arm, added to tools.yaml
+fit() {
+  local num="$1" name="$2" jog_out jog_file dur tcp_log cal_out json
+  say "--- Hand-eye fit -> tool ${num} (${name})"
+  if $DRY_RUN; then echo "   wrist_jog.py; robot-tcp --wand-is-tool; wand_tool_calibration.py --tool 3; tool_library add ${num}"; return 0; fi
+  ndi_stop   # robot-tcp needs the Vega to itself
+  jog_out=$(python3 "${SCRIPT_DIR}/wrist_jog.py") || die "wrist_jog.py failed: ${jog_out}"
+  echo "$jog_out" | head -3
+  jog_file=$(echo "$jog_out" | sed -n 's/^Wrote //p')
+  dur=$(echo "$jog_out" | sed -n 's/.*robot-tcp --wand-is-tool -d \([0-9.]*\).*/\1/p')
+  [ -n "$jog_file" ] && [ -n "$dur" ] || die "Could not read wrist_jog.py output."
+  tcp_log="${STACK_LOG_DIR}/$(date +%H%M%S)_robot_tcp_tool${num}.log"
+  (cd "$NDI_DIR" && exec python3 -m ndi_tracking robot-tcp --wand-is-tool -d "$dur") >"$tcp_log" 2>&1 </dev/null &
+  local tcp_pid=$!
+  for _ in $(seq 1 30); do grep -q "recording" "$tcp_log" && break; kill -0 "$tcp_pid" 2>/dev/null || break; sleep 0.5; done
+  grep -q "recording" "$tcp_log" || { kill "$tcp_pid" 2>/dev/null; die "robot-tcp did not start: ${tcp_log}"; }
+  sleep 4
+  play_file "$jog_file"
+  echo ">> Waiting for robot-tcp to finish its ${dur} s"
+  wait "$tcp_pid"
+  grep -q "raw data saved" "$tcp_log" || die "robot-tcp saved nothing: ${tcp_log}"
+  cal_out=$(python3 "${SCRIPT_DIR}/wand_tool_calibration.py" --tool 3 2>&1)
+  echo "$cal_out" | grep -E "hand-eye|halves|tip in tool0|vs tool|NOT RECOMMENDED|saved"
+  json=$(echo "$cal_out" | sed -n 's/^saved //p')
+  [ -f "$json" ] || die "wand_tool_calibration.py wrote no JSON."
+  if echo "$cal_out" | grep -q "NOT RECOMMENDED"; then
+    note "fit ${num}: NOT RECOMMENDED ($(echo "$cal_out" | grep "NOT RECOMMENDED"))"
+    [ "$num" = 4 ] && die "Fit 1 is not usable (see above): the RCM runs need it. Check the wand is in view, then --phase=B --from=21."
+  fi
+  ros2 run macro_micro_robot tool_library.py add "$num" "$name" --from "$json" --length "$SHAFT_MM" --force \
+    --notes "V9c session D $(date +%F\ %H:%M)" || die "tool_library add failed"
+  git -C "$PKG" add "$json" config/tools.yaml
+  git -C "$PKG" commit -q -m "V9c: tool ${num} ${name} (hand-eye fit)" || die "commit failed"
+  note "tool ${num} ${name}: $(echo "$cal_out" | grep "tip in tool0" | sed 's/^ *//')"
+}
+
+# perturbed copies of tool 4: across the shaft (perpendicular to direction, in its x-z plane) and along it
+perturb_tools() {
+  $DRY_RUN && { echo "   tools 7 (+1 mm across), 8 (+2 mm along) from tool 4"; return 0; }
+  python3 - "$TOOLS" <<'EOF' >"${STACK_LOG_DIR}/perturb.txt" || die "Could not compute the perturbed tools"
+import sys, yaml, numpy as np
+t = yaml.safe_load(open(sys.argv[1]))["tools"][4]
+tip, d = np.array(t["tip_tool0_mm"], float), np.array(t["direction_tool0"], float)
+d /= np.linalg.norm(d)
+x = np.array([1.0, 0, 0]); lat = x - x.dot(d) * d; lat /= np.linalg.norm(lat)
+for v in (tip + 1.0 * lat, tip + 2.0 * d):
+    print(" ".join(f"{c:.4f}" for c in v), " ".join(f"{c:.6f}" for c in d))
+EOF
+  local tip7 tip8 dir
+  read -r -a tip7 < <(sed -n 1p "${STACK_LOG_DIR}/perturb.txt")
+  read -r -a tip8 < <(sed -n 2p "${STACK_LOG_DIR}/perturb.txt")
+  ros2 run macro_micro_robot tool_library.py add 7 "wand_D_plus1mm_lateral" --tip "${tip7[@]:0:3}" --direction "${tip7[@]:3:3}" \
+    --length "$SHAFT_MM" --force --notes "tool 4 + 1.0 mm across the shaft (V9c T2d)" || die "tool_library add 7 failed"
+  ros2 run macro_micro_robot tool_library.py add 8 "wand_D_plus2mm_axial" --tip "${tip8[@]:0:3}" --direction "${tip8[@]:3:3}" \
+    --length "$SHAFT_MM" --force --notes "tool 4 + 2.0 mm along the shaft (V9c T2d control)" || die "tool_library add 8 failed"
+  git -C "$PKG" commit -q -m "V9c: perturbed tools 7 (+1 mm lateral) and 8 (+2 mm axial) from tool 4" -- config/tools.yaml
+  echo ">> tools 7, 8: $(cat "${STACK_LOG_DIR}/perturb.txt" | cut -d' ' -f1-3 | tr '\n' ' ')"
+}
+
+# cell_t <tool> <mode> <dest> <repeats> <run...>
+cell_t() {
+  local tool="$1"; shift
+  $DRY_RUN || { stop_stack; set_tool "$tool"; }
+  $DRY_RUN && echo "   tool ${tool}"
+  cell "$@"
+}
+
+countdown() {
+  local s="$1" msg="$2"
+  while [ "$s" -gt 0 ]; do printf '\r   %s: %3d s ' "$msg" "$s"; sleep 1; s=$((s - 1)); done
+  printf '\a\r   %s: done          \n' "$msg"
+}
+
+step_20() {
+  say "=== Step 20: warm-up RCMOnly, tool 3, P5 -> ${V9C}/Warmup (checks the wand is seen at the RCM poses)"
+  cell_t 3 p5 "${V9C}/Warmup" 1 "$RCMONLY"
+}
+
+step_21() {
+  say "=== Step 21: three hand-eye fits, nothing touched in between"
+  if ! $DRY_RUN; then
+    stop_stack; set_mode p5; set_tool 3; start_stack   # fresh stack: RCM off after the warm-up
+    printf '\a'
+    ask_continue "Wrist jog next: wrists 1, 2, 3 swing +-30 deg one at a time (wand tip sweeps ~20 cm). Clear around the wand?"
+  fi
+  fit 4 wand_D_fit1
+  fit 5 wand_D_fit2
+  fit 6 wand_D_fit3
+  $DRY_RUN || ndi_start
+}
+
+step_22() {
+  say "=== Step 22: NDI static floor, 30 s -> ${V9C}/NDIStaticFloor"
+  $DRY_RUN && return 0
+  ndi_start
+  stack_alive || { set_tool 4; start_stack; }
+  check_new_run_free
+  [ -e "${SESSION_DIR}/NDIStaticFloor" ] && die "${SESSION_DIR}/NDIStaticFloor exists"
+  echo ">> Hands off the arm, wand and table"; sleep 5
+  recorder start; sleep 30; recorder stop; sleep 2
+  [ -d "${LOGS}/NEW_RUN" ] || die "Nothing recorded"
+  mv "${LOGS}/NEW_RUN" "${SESSION_DIR}/NDIStaticFloor"
+  summarise "${V9C}/NDIStaticFloor"
+  note "NDI static floor recorded"
+}
+
+step_23() { $DRY_RUN || ndi_start; cell_t 4 p5   "$R/P5"   3 "$SLOW" "$RCMONLY"; }
+step_24() { $DRY_RUN || ndi_start; cell_t 4 v5   "$R/V5"   3 "$RCMONLY"; }
+step_25() { $DRY_RUN || ndi_start; cell_t 4 p20  "$R/P20"  3 "$RCMONLY"; }
+step_26() { $DRY_RUN || ndi_start; cell_t 4 v20  "$R/V20"  3 "$RCMONLY"; }
+step_27() { $DRY_RUN || ndi_start; cell_t 4 poff "$R/Poff" 3 "$RCMONLY"; }
+step_28() { $DRY_RUN || ndi_start; cell_t 4 voff "$R/Voff" 3 "$RCMONLY"; }
+step_29() { $DRY_RUN || ndi_start; cell_t 5 p5 "${V9C}/RCM_fit2" 2 "$SLOW"; }
+step_30() { $DRY_RUN || ndi_start; cell_t 6 p5 "${V9C}/RCM_fit3" 2 "$SLOW"; }
+step_31() { $DRY_RUN || ndi_start; perturb_tools; cell_t 7 p5 "${V9C}/RCM_perturb_lateral1" 2 "$SLOW"; }
+step_32() { $DRY_RUN || ndi_start; cell_t 8 p5 "${V9C}/RCM_perturb_axial2" 2 "$SLOW"; }
+
+exchange_set() {
+  local name="$1" reply dir
+  ndi_start
+  reply=$(cd "$NDI_DIR" && python3 -m ndi_tracking ctl start "$name")
+  echo ">> ${reply}"
+  dir=$(echo "$reply" | sed -n 's/.*-> //p')
+  [ -n "$dir" ] || die "The tracker did not start recording: ${reply}"
+  countdown 60 "Seated and still, HANDS OFF the table"
+  say "Now 20 exchanges: lever open, tool off and out of view, refit, lever fully closed, step back, >= 5 s seated."
+  read -r -p "Press Enter when the 20th is seated and you've stepped back. " _
+  countdown 60 "Seated and still, HANDS OFF the table"
+  (cd "$NDI_DIR" && python3 -m ndi_tracking ctl stop) | tail -3
+  sleep 2
+  [ -d "$dir" ] || die "Recording folder ${dir} not found"
+  [ -e "${LOGS}/Exchange/$(basename "$dir")" ] && die "logs/Exchange/$(basename "$dir") exists"
+  mv "$dir" "${LOGS}/Exchange/"
+  echo ">> Saved logs/Exchange/$(basename "$dir")"
+  note "exchange set logs/Exchange/$(basename "$dir")"
+}
+
+step_33() {
+  say "=== Step 33: C3 exchange redo (arm not commanded)"
+  $DRY_RUN && { echo "   stop stack; NDI recording: 60 s still, 20 swaps, 60 s still -> logs/Exchange/<time>_QC_V3_redo"; return 0; }
+  stop_stack
+  ask_continue "C3 coupling, wand on its tool plate. Nobody touches the table except to work the lever."
+  exchange_set QC_V3_redo
+  local a
+  read -r -p "Also redo C2 now (swap to the C2 tool plate first, ~15 min)? [y/N] " a
+  if [ "$a" = "y" ] || [ "$a" = "Y" ]; then
+    ask_continue "C2 tool plate on, wand on it, in view?"
+    exchange_set QC_V2_redo
+    ask_continue "Put the C3 plate and wand back for step 34."
+  fi
+}
+
+step_34() {
+  say "=== Step 34: exchange, then RCMOnly through the arm, 5x -> ${V9C}/ExchangeRCM"
+  $DRY_RUN && { echo "   5x: you exchange; replay_batch.sh --repeats=1 RCMOnly (tool 4, P5)"; return 0; }
+  ndi_start
+  stop_stack; set_mode p5; set_tool 4; start_stack
+  local i t0 t1
+  for i in 1 2 3 4 5; do
+    printf '\a'
+    say "Exchange ${i}/5: lever open, tool off, refit, lever closed, step back. (Phone stopwatch too.)"
+    t0=$(date +%s.%N)
+    read -r -p "Press Enter the moment the lever is closed and you're clear. " _
+    t1=$(date +%s.%N)
+    note "exchange ${i}: $(python3 -c "print(f'{$t1 - $t0:.1f}')") s prompt-to-Enter"
+    batch "${V9C}/ExchangeRCM" 1 "$RCMONLY"
+  done
+}
+
+step_35() {
+  say "=== Step 35: settings back to final, default tool 2"
+  $DRY_RUN && return 0
+  stop_stack
+  set_mode final
+  set_tool 2
+  note "phase B done"
+}
+
+PHASE_B=(20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35)
+
 # --- main --------------------------------------------------------------------------------
 set +u
 source "/opt/ros/${ROS_DISTRO:-jazzy}/setup.bash"
@@ -292,7 +553,14 @@ source "${WS}/install/setup.bash"
 set -u
 
 steps=()
-for n in "${PHASE_A[@]}"; do
+case "$PHASE" in
+  A|a) PHASE_STEPS=("${PHASE_A[@]}"); FROM="${FROM:-1}" ;;
+  B|b) PHASE_STEPS=("${PHASE_B[@]}"); FROM="${FROM:-20}" ;;
+  *) die "--phase=A or --phase=B" ;;
+esac
+if [ -n "$ONLY" ] && [ "$ONLY" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
+if [ -n "$FROM" ] && [ "$FROM" -ge 20 ]; then PHASE_STEPS=("${PHASE_B[@]}"); PHASE=B; fi
+for n in "${PHASE_STEPS[@]}"; do
   if [ -n "$ONLY" ]; then
     [ "$n" = "$ONLY" ] && steps+=("$n")
   elif [ "$n" -ge "$FROM" ]; then
@@ -306,7 +574,7 @@ if $DRY_RUN; then
   exit 0
 fi
 
-trap 'stop_stack; "${SCRIPT_DIR}/set_v9_mode.sh" final >/dev/null 2>&1 || true' EXIT
+trap 'stop_stack; [ -n "$NDI_PID" ] && ndi_stop; "${SCRIPT_DIR}/set_v9_mode.sh" final >/dev/null 2>&1 || true' EXIT
 trap 'echo; echo ">> Interrupted"; note "interrupted (Ctrl+C)"; exit 130' INT TERM
 
 STEP="${steps[0]}"
@@ -316,8 +584,12 @@ fi
 [ -z "$(git -C "$PKG" status --porcelain --untracked-files=no | grep -v -E 'macro_micro_robot/teleop_settings.py|config/tools.yaml' || true)" ] \
   || die "Uncommitted changes: commit them first, or code_version says -dirty."
 check_new_run_free
-NDI_OPT=--no-ndi
-set_tool 3
+if [ "$PHASE" = B ]; then
+  NDI_OPT=""
+else
+  NDI_OPT=--no-ndi
+  set_tool 3
+fi
 
 if [ -z "$LAUNCH_EXTRA" ]; then
   if remote_control; then
@@ -327,15 +599,25 @@ if [ -z "$LAUNCH_EXTRA" ]; then
     echo "   For unattended runs: pendant top-right -> Remote Control (External Control program loaded)."
   fi
 fi
-say "Phase A, steps ${steps[*]}: BARE FLANGE, nothing on the tool flange, workspace clear."
-say "About $(( ${#steps[@]} * 7 )) min. The arm moves without asking from here on. Stay near the e-stop."
-read -r -p "Bare flange, robot clear, start? [y/N] " answer
+if [ "$PHASE" = B ]; then
+  say "Phase B, steps ${steps[*]}: WAND on the C3 coupling, camera placed (and not touched again), workspace clear."
+  say "The script starts and stops the NDI tracker itself: close any 'ndi_tracking run' you have open."
+  read -r -p "Wand on, camera fixed, robot clear, start? [y/N] " answer
+else
+  say "Phase A, steps ${steps[*]}: BARE FLANGE, nothing on the tool flange, workspace clear."
+  say "About $(( ${#steps[@]} * 7 )) min. The arm moves without asking from here on. Stay near the e-stop."
+  read -r -p "Bare flange, robot clear, start? [y/N] " answer
+fi
 [ "$answer" = "y" ] || [ "$answer" = "Y" ] || exit 1
-note "phase A start, steps ${steps[*]}"
+note "phase ${PHASE} start, steps ${steps[*]}"
 
 for STEP in "${steps[@]}"; do
   "step_${STEP}"
 done
 stop_stack
-note "phase A done"
-say "Phase A done (settings go back to final on exit). Tell Claude: the grid is in logs/V9c/NoTool."
+note "phase ${PHASE} done"
+if [ "$PHASE" = B ]; then
+  say "Phase B done. Back up logs/V9c and logs/Exchange, and tell Claude the runs are in."
+else
+  say "Phase A done (settings go back to final on exit). Wand on, then: ./scripts/run_v9c.sh --phase=B"
+fi
