@@ -1,6 +1,7 @@
 # Thesis Supplementary Material
 
-Supplementary material for the thesis report *Macro–micro surgical teleoperation on a UR16e*. It holds the
+Supplementary material for the thesis report *Smooth, Safe and Modular: Diagnosing and Removing the Limits of Economical Macro–Micro Surgical
+Teleoperation*. It holds the
 detail that was moved out of the report's appendices: the stack's version history, software architecture, full
 teleoperation settings, hardware design values, calibration procedures, risk assessment and reproducibility notes.
 
@@ -21,7 +22,7 @@ Section, table and equation numbers below refer to the submitted report. Paths a
 
 ## 1. Teleoperation stack version history
 
-The table expands Table 3.1 of the report. Every version is a git tag, or a commit for the changes after V8, and
+The table expands Table B.2 of the report (Appendix B.2). Every version is a git tag, or a commit for the changes after V8, and
 every run records the code version and all of its settings, so any run can be traced to the code that produced it.
 The "reason" column gives the problem as it was diagnosed at the time. Several of those diagnoses were later revised
 by the analysis of Chapter 4 ([Section 7.2](#72-development-claims-revised-by-the-analysis)), and the numbers in the
@@ -92,7 +93,7 @@ and [`launch/touch_driver.launch.py`](../launch/touch_driver.launch.py). The blo
 
 ### 2.1 Processes of a teleoperation session
 
-"This work" marks the processes shown in orange in the report's signal-chain figure (Fig. 3.6).
+"This work" marks the processes shown in orange in the report's signal-chain figure (Fig. 3.4).
 
 | Process | Source | Role |
 | --- | --- | --- |
@@ -119,7 +120,7 @@ and [`launch/touch_driver.launch.py`](../launch/touch_driver.launch.py). The blo
 
 The Touch driver replaces the community `omni_state` node with the same topic names (`/phantom/state`,
 `/phantom/button`, `/phantom/joint_states` and `/phantom/force_feedback`), so the rest of the stack is unchanged.
-The split into two processes is what lets OpenHaptics render force (report Appendix A, haptics bench tests; handoff
+The split into two processes is what lets OpenHaptics render force (report Appendix A.2, haptics bench tests; handoff
 notes in [`docs/HAPTICS_HANDOFF.md`](HAPTICS_HANDOFF.md)).
 
 The teleoperation node runs from a live Touch or from a replay, selected by a launch argument; the replay feeds the
@@ -192,7 +193,7 @@ From each run's record.
 ### 4.1 Quick-change coupling
 
 The coupling was modelled parametrically in Onshape FeatureScript, so that each version is a change of parameters
-rather than a new model (C1 printed; C2 and C3 with steel rods and balls). The section view is Fig. 3.4 of the
+rather than a new model (C1 printed; C2 and C3 with steel rods and balls). The section view is Fig. 3.3a of the
 report.
 
 **Design values (C2 and C3 unless stated)**
@@ -231,14 +232,14 @@ report.
 
 The wand holder clamps the NDI passive four-marker wand coaxially with the coupling axis, in a V-groove closed by a
 flat cap on two M4 screws. It was built to tolerate the wand's unmeasured dimensions. The wand tip sat 367 mm from
-the flange in the first holder and 325 mm in the second, whose body was 45 mm shorter (report Section 3.2.3).
+the flange in the first holder and 325 mm in the second, whose body was 45 mm shorter (report Section 3.2.1).
 
 ### 4.3 Micro module
 
 The micro module's hardware, wiring and parts list are those of Scott (2023): four hobby servos pulling the tendons
 of a continuum tip on a 4 mm stainless steel tube, driven by an Arduino Mega 2560 in a junction box, at a parts cost
 of about AUD 250 ([`PartsList.pdf`](PartsList.pdf)). The repairs made in this work are listed in report Section
-3.2.4. It was mounted on a coupling tool plate (photo (d) above).
+3.2.2, and its software faults in Section 4.4.2. It was mounted on a coupling tool plate (photo (d) above).
 
 ---
 
@@ -278,7 +279,7 @@ Code: the `ndi_tracking` package (separate ROS 2 workspace package).
 
 The tracker reports the pose of the wand's first marker, not its tip, so the tip was located once off the arm. With
 the tip in a divot, the wand was swivelled about 30° in every direction for 20 s and the fixed point fitted; a second
-recording, twisting the handle about the shaft by ±60°, gave the shaft axis. The pivot residual (report Table 3.2) is
+recording, twisting the handle about the shaft by ±60°, gave the shaft axis. The pivot residual (report Table 3.1) is
 mostly the camera's depth error magnified by the 160 mm lever from markers to tip, and it varies with position in the
 volume, so three to five attempts with the divot moved around the working area were fitted together, each with its
 own pivot point.
@@ -292,7 +293,7 @@ Code: [`scripts/calibration/wrist_jog.py`](../scripts/calibration/wrist_jog.py),
    between wrists, and the whole sequence is repeated, about 90 s in all. The trajectory player asks for
    confirmation and runs it through the trajectory controller, so the pendant's speed slider still applies.
 2. The tracker records the wand and the controller's flange pose on one clock.
-3. The hand–eye transform $X$ is fitted (report Eq. 3.10) over a sweep of the tracker's time offset. Tracker frames
+3. The hand–eye transform $X$ is fitted (report Eq. 3.9) over a sweep of the tracker's time offset. Tracker frames
    whose implied camera pose lies more than a set distance from the median, from a blocked marker or a stray
    reflection, are removed and the fit repeated.
 4. Each half of the recording is fitted on its own. Each half contains all three wrist rotations, which is why the
@@ -329,8 +330,8 @@ In `{tool0}`, mm.
 
 ## 6. Risk assessment
 
-The arm's general hazards were covered by the robotics laboratory's induction and risk assessment, and its safety
-configuration, including the safety planes, was set by the laboratory and not changed (report Section 3.4.4). The
+The same table is Table B.3 of the report. The arm's general hazards were covered by the robotics laboratory's
+induction and risk assessment, and its safety configuration, including the safety planes, was set by the laboratory and not changed (report Section 3.4.4). The
 table lists the hazards specific to this work, what could cause them, and the controls used against each. Software
 controls act before the arm's own protective stops, which remain the last line of defence, with the emergency stop
 within the operator's reach.
@@ -410,14 +411,14 @@ those it changed.
 | --- | --- | --- |
 | Trajectory output delivers 60 % of the commanded displacement | 57 % on the arm, 56 % in the emulator | 4.1.1 |
 | V1 lagged 640–760 ms | 377–505 ms on single moves by velocity cross-correlation; the position-shift estimator has no clear minimum there | 4.1.1 |
-| The filter adds its open-loop delay (45 ms at 5 Hz) to the lag | 16.5–24 ms inside the loop, with only the filter changed | 4.1.3 |
+| The filter adds its open-loop delay (45 ms at 5 Hz) to the lag | 16.5–24 ms in the loop model with only the filter changed; 5.4–16.6 ms measured on the arm | 4.1.3, 4.1.4 |
 | Joint-velocity 15–25 Hz power down 76–88 % | 97–99 % in joint velocity, 67–81 % at the flange | 4.1.4 |
 | Position output (`servoj`) never buzzes | On the same input, 0.56 A of 80–249 Hz current against 0.11 A in trajectory output | 4.1.4 |
 | Slow-speed catches come only from the pitch encoder | Encoder stalls on every joint of the device, most often pitch | 4.1.4 |
 | Fixed tip scale needs 30 and 9 times the tip motion at 10 and 30 mm | 36 and 11 times for the tool used | 4.3.1 |
 | RCM runs used sideways gain 0.5 | Every recorded run used 1.0 | 4.3.1 |
-| The tracked RCM error is factory-kinematics error | Largest term is a latch offset of unknown cause; kinematic share not separable | 4.3.3 |
-| Median exchange 4.8 s | 5.5 s, timed from the seat being disturbed to settled | 4.4.1 |
+| The tracked RCM error is factory-kinematics error | Largest term is a latch offset, caused by the tool's line from the hand–eye fit (tilted up to 1.1° from the shaft); kinematic share not separable | 4.3.3, 4.3.4 |
+| Median exchange 4.8 s | 5.5–5.6 s per version, timed from the seat being disturbed to settled | 4.4.1 |
 
 ## 8. Additional results
 
