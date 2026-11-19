@@ -4,7 +4,7 @@
 does the tool re-seat, in which directions (seating depth, lateral, tilt, clocking), how long does an exchange
 take, and how much of the measured spread belongs to the coupling rather than the measurement chain?
 
-**Prior claims to test** (from `thesis/planning/analysis/exchange_6dof.py` and the draft; reproduce, don't reuse):
+**Prior claims to test** (from `thesis/earlier/exchange/exchange_6dof.py` and the draft; reproduce, don't reuse):
 pooled n = 60 re-seat ≤ 0.19 mm, rms 0.043 mm; tracker 5 s floor 0.003–0.006 mm; successive seats correlated
 (cosine +0.62 to +0.70); independent swap-to-swap part 0.009–0.043 mm; set 3 drifts 36 µm/min; rotation ≤ 0.03°;
 median exchange 4.8 s.

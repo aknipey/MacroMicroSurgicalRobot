@@ -7,7 +7,7 @@
 2. Demonstration counts from logs/V9b/MacroMicroDemo/micro_module_control.log: motor command messages ('Sending motor
    commands'), switches into MICRO and back, and the logged span.
 3. Micro-tool calibration: the newest config/calibrations/micro_tool_*.json as written by
-   scripts/micro_tool_calibration.py (tip, fit rms, dot rms, agreement of the two halves).
+   scripts/calibration/micro_tool_calibration.py (tip, fit rms, dot rms, agreement of the two halves).
 Writes RESULTS.md.
 """
 import glob

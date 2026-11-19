@@ -1,7 +1,7 @@
 # Loading the UR16e's own kinematic calibration (`ur_calibration_extract`)
 
 Added 2026-11-03. Code: `src/ur_calibration_extract.cpp`, `vendor/ur_calibration/`,
-`launch/ur_calibration_extract.launch.py`. Plan context: `thesis/planning/07_remaining_experiments.md` §1.
+`launch/ur_calibration_extract.launch.py`. Plan context: `docs/lab_plans/07_remaining_experiments.md` §1.
 
 ## TL;DR: how to use it
 
@@ -161,8 +161,8 @@ Settings → Security → Services. The primary interface (30001) must be enable
 These were all fitted through the nominal model, so they've partly absorbed its error. Mixing them with
 the calibrated model can make results look *worse* (07 §1.1):
 
-1. Wand hand-eye: `scripts/wand_tool_calibration.py` from a fresh wrist-jog recording.
-2. Micro tip ball: `scripts/tip_ball_calibration.py`, then update `config/tools.yaml`.
+1. Wand hand-eye: `scripts/calibration/wand_tool_calibration.py` from a fresh wrist-jog recording.
+2. Micro tip ball: `scripts/calibration/tip_ball_calibration.py`, then update `config/tools.yaml`.
 3. Make the calibrated file the default in `ur16e_teleop.launch.py` (the `default_kinematics` expression)
    only after the RD1 replays show it helps.
 
@@ -170,7 +170,7 @@ What the before/after should show:
 - the driver startup line (§1). At the default warn log level only the mismatch ERROR is visible, so
   success = that ERROR is absent;
 - `META.yaml kinematics.model: calibrated`, with the hash matching the controller's;
-- `scripts/kinematics_check.py <run>`: tool0 computed through the file vs the controller's TCP, sample
+- `thesis/run_tools/kinematics_check.py <run>`: tool0 computed through the file vs the controller's TCP, sample
   by sample from the bag (same RTDE packet). **Measured 2026-11-03:** calibrated spread 0.000 mm /
   0.000°; nominal 0.847 mm / 0.374° (FastChecking replay) and 0.638 mm / 0.371° (a 10-26 replay, which
   the calibrated file also matches exactly: the controller's calibration hasn't changed since).

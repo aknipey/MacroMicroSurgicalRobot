@@ -241,11 +241,6 @@ void touchStateCallback(
 
     geometry_msgs::msg::Vector3 current = omniState->current;
 
-    // RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Touch State:\n\tPose: %s\n\tCurrent: %s\n\tVelocity: %s",
-    //     PoseToString(omniState->pose, TOUCH_POSITION_UNIT_SCALE_FACTOR).c_str(),
-    //     Vector3ToString(omniState->current).c_str(),
-    //     Vector3ToString(omniState->velocity).c_str()
-    // );
 }
 
 int main(int argc, char **argv)
@@ -273,19 +268,6 @@ int main(int argc, char **argv)
 
     auto node = std::make_shared<rclcpp::Node>("android_pose_subscriber");
 
-    // auto poseSubscriber = node->create_subscription<geometry_msgs::msg::PoseStamped>(
-    //     "android_pose",
-    //     rclcpp::QoS(1),
-    //     [&](const geometry_msgs::msg::PoseStamped::ConstSharedPtr poseStamped)
-    //     {
-    //         poseCallback(
-    //             poseStamped,
-    //             currentPoseStamped,
-    //             prevPoseStamped,
-    //             currentAngularVelocity
-    //         );
-    //     }
-    // );
 
     auto touchStateSubscriber = node->create_subscription<omni_msgs::msg::OmniState>(
         "/phantom/state",

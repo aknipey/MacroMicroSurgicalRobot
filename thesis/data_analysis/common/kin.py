@@ -1,6 +1,6 @@
 """Forward kinematics, geometric Jacobian and condition number of the UR16e, from a kinematics yaml.
 
-FK follows scripts/kinematics_check.py (validated there against the controller's TCP to 0.000 mm with the
+FK follows thesis/run_tools/kinematics_check.py (validated there against the controller's TCP to 0.000 mm with the
 calibrated file). The Jacobian is the geometric one of the teleop node / MoveIt Servo (linear velocity of the
 tool0 origin and angular velocity, both in base_link), and c = s_max / s_min (SingularityGuard).
 Frames: kinematics_check returns tool0 in the controller's 'base' frame; base_link = Rz(pi) * base.
@@ -13,7 +13,7 @@ import yaml
 
 from .runs import PKG
 
-sys.path.insert(0, os.path.join(PKG, 'scripts'))
+sys.path.insert(0, os.path.join(PKG, 'thesis', 'run_tools'))
 import kinematics_check as kc  # noqa: E402
 
 NOMINAL = '/opt/ros/jazzy/share/ur_description/config/ur16e/default_kinematics.yaml'

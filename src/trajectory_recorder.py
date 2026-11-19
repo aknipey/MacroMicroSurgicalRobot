@@ -1,42 +1,22 @@
 #!/usr/bin/env python3
-"""Records UR16e trajectories (joint angles + tool pose) while you teleoperate.
+"""Records UR16e trajectories (joint angles + tool pose) and path logs while you teleoperate.
 
-Services (std_srvs/Trigger):
-    /trajectory_recorder/start   begin a new recording
-    /trajectory_recorder/stop    stop and save it to <output_dir>/<name>.yaml (+ .csv)
+Services (std_srvs/Trigger): /trajectory_recorder/start, /trajectory_recorder/stop.
+The keyboard ('[' / ']') and Touch (GREY) teleops call them. The path is published on
+/trajectory_recorder/path; the state latched on /trajectory_recorder/recording (JSON), which
+the NDI tracker follows to write into the same run folder.
 
-The keyboard teleop ('[' / ']') and Touch teleop (grey button) call these for you.
-The tool path being recorded is published as nav_msgs/Path on
-/trajectory_recorder/path for RViz. Recording state is published latched on
-/trajectory_recorder/recording (std_msgs/String, JSON: {"recording": bool,
-"run_dir": path or null, "start_unix": s}) so other recorders (e.g. the NDI tracker,
-src/ndi_tracking) can write into the same run folder on the same time base.
-With LOG_REQUIRE_NDI a recording is refused unless the NDI tracker follows this topic;
-a tracker that drops out mid-run, or a run without NDI_PATH.csv, is logged as an error
-and noted in META.yaml (`ndi`).
-Saved files can be replayed with trajectory_player.py.
+Each recording goes to <log_dir>/NEW_RUN/ (replaced by the next one; rename to keep).
+Every row is stamped on arrival (`t`, s since start):
 
-While recording, full-rate path logs are also written to <log_dir>/NEW_RUN/
-(see LOG_DIR in teleop_settings.py). Every sample is stamped on arrival with
-this node's clock (`t`, s since start); the sender's own stamp is kept as `stamp`.
+    TOUCH_PATH.csv   teleop target for tool0 in base_link, while WHITE is held
+    STYLUS_RAW.csv   raw stylus pose (mm, device frame) + buttons
+    UR_PATH.csv      the UR's RTDE TCP pose moved back to tool0 (TF fallback on mock hardware)
+    TRAJECTORY.yaml  replayable trajectory (+ .csv) for trajectory_player.py
+    META.yaml        date, code version, settings, row counts, NDI status
+    rosbag/          LOG_BAG_TOPICS (mcap)
 
-    TOUCH_PATH.csv   Touch target in the robot frame (base_link, tool0), one row
-                     per stylus sample while WHITE is held (from the teleop node)
-    STYLUS_RAW.csv   raw stylus pose as published (mm, device frame) + buttons
-    UR_PATH.csv      the UR's own TCP pose (tcp_pose_broadcaster, RTDE, ~500 Hz),
-                     converted to base_link and from the pendant TCP back to
-                     tool0 (offset measured against TF at the start of each
-                     recording, saved in META.yaml); TF tool0 at
-                     LOG_TF_FALLBACK_RATE if the broadcaster is not running
-                     (mock hardware)
-    TRAJECTORY.yaml  the replayable trajectory (+ .csv), same as in output_dir
-    META.yaml        date, code version, settings, row counts
-    rosbag/          ros2 bag (mcap) of LOG_BAG_TOPICS, for replaying raw topics
-                     (ros2 bag play logs/NEW_RUN/rosbag); its output is in rosbag.log
-
-NEW_RUN is deleted when the next recording starts - rename the folder to keep
-it. With LOG_KEEP_ALL_RUNS each run is also copied to <log_dir>/runs/<date_time>/.
-Plot with scripts/plot_paths.py.
+Plot a run with thesis/run_tools/plot_paths.py.
 """
 
 import csv

@@ -17,8 +17,8 @@
 #include "tf2_ros/transform_listener.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include "../include/ManipulatorModule.hpp"
-#include "../include/Pose.hpp"
+#include "macro_micro_robot/ManipulatorModule.hpp"
+#include "macro_micro_robot/Pose.hpp"
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 #include <Eigen/StdVector>
@@ -28,19 +28,15 @@
 // Touch position coordinates are output in millimetres, must convert to metres
 const double TOUCH_POSITION_UNIT_SCALE_FACTOR = 1e-3;
 
-// Share of the way from the tip's orientation to the pen's (1:1 tilt) taken each 60 Hz
-// cycle: a first-order lag, not a scale. 0.02 was a ~0.8 s time constant; 0.2 is ~80 ms.
+// Share of the way from the tip's orientation to the pen's taken each 60 Hz cycle
+// (a first-order lag, ~80 ms at 0.2).
 const double MANIPULATOR_ROTATION_SCALE_FACTOR = 0.2;
 
-// Tip motion per unit of stylus motion. The module is a few millimetres long, so the
-// stylus is scaled down: 40 mm of hand motion moves the tip 2 mm. (It was 10x up: a
-// 40 mm stroke asked for a tip target 0.4 m away.)
+// Tip motion per unit of stylus motion (40 mm of hand motion moves the tip 2 mm).
 const double MICRO_POSITION_SCALE = 0.05;
 
-// Position errors (m) are divided by this length before the inverse kinematics, so they
-// weigh about as much as orientation errors (rad): the tip's lever arms are millimetres,
-// so unweighted the position rows of the Jacobian are ~1/200 of the angle rows and the
-// damping swamped them. ~ joint-to-tip lever.
+// Position errors (m) are divided by this length (~ joint-to-tip lever) before the inverse
+// kinematics, so they weigh about as much as orientation errors (rad).
 const double POSITION_WEIGHT_LENGTH = 0.005;
 
 // Maximum (weighted) pose step for a single update: rad, or POSITION_WEIGHT_LENGTH x this in metres
@@ -89,8 +85,7 @@ const double DISTAL_JOINT_SEPARATION = 0.001;
 const double DISTAL_LENGTH = 0.00288;
 
 // lambda in the damped least squares inverse, against the weighted Jacobian (O(1)). D
-// grows from 1 mid-range to 2 at a joint limit, so the damping still rises near limits.
-// Lower = more responsive; was 1 (with a stray extra D^2: effective 2).
+// grows from 1 mid-range to 2 at a joint limit. Lower = more responsive.
 const double LEAST_SQUARES_DAMPING_FACTOR = 0.3;
 
 typedef std::vector<Eigen::Matrix4d,Eigen::aligned_allocator<Eigen::Matrix4d> > TransformVector;
@@ -218,8 +213,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
         panJointTransform = modules[i].GetPanJointTransform();
         tiltJointTransform = modules[i].GetTiltJointTransform();
 
-        // PrintMatrix(panJointTransform, "Pan Joint Transform");
-        // PrintMatrix(tiltJointTransform, "Tilt Joint Transform");
 
         for (int j = 0; j < modules[i].GetNumJoints(); j++)
         {
@@ -233,7 +226,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
                 endTransform *= tiltJointTransform;
             }
 
-            // PrintMatrix(endTransform, "Pushing back matrix: ");
 
             Eigen::Matrix4d jointTransform = endTransform;
 
@@ -244,7 +236,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
         if (i != modules.size() - 1)
         {
             endTransform *= moduleInterfaceAngularOffset;
-            // PrintMatrix(endTransform, "Rotated end transform");
         }
     }
 
@@ -252,7 +243,6 @@ TransformVector GetJointTransforms(const Eigen::Matrix4d& baseTransform, const E
 
     jointTransforms.push_back(endTransform);
 
-    // PrintMatrix(endTransform, "End Transform");
 
     return jointTransforms;
 }
@@ -289,14 +279,12 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
         for (int j = 0; j < modules[i].GetNumJoints(); j++)
         {
             Eigen::Matrix4d jointTransform = jointTransforms[numJointTransformsProcessed + j];
-            // PrintMatrix(jointTransform, "Joint Transform");
             // Current joint is a pan-type if the first joint in the module is pan and the joint index is even, or if the inverse is true
             if (modules[i].IsFirstJointPan() ^ (j % 2 != 0))
             {
                 Eigen::Vector3d actuationAxis = GetTransformRotation(jointTransform) * xAxis;
                 jointCrossProduct = actuationAxis.cross(endPosition - GetTransformPosition(jointTransform));
 
-                // PrintMatrix(jointCrossProduct, "Joint cross product");
 
                 jointJacobianColumn << jointCrossProduct, actuationAxis;
 
@@ -307,7 +295,6 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
                 Eigen::Vector3d actuationAxis = GetTransformRotation(jointTransform) * yAxis;
                 jointCrossProduct = actuationAxis.cross(endPosition - GetTransformPosition(jointTransform));
 
-                // PrintMatrix(jointCrossProduct, "Joint cross product");
 
                 jointJacobianColumn << jointCrossProduct, actuationAxis;
 
@@ -318,8 +305,6 @@ Eigen::MatrixXd GetJacobian(const TransformVector& jointTransforms, const Manipu
         modulePanJacobianColumn /= modules[i].GetNumPanJoints();
         moduleTiltJacobianColumn /= modules[i].GetNumTiltJoints();
 
-        // PrintMatrix(modulePanJacobianColumn, "Pan Jacobian column post-division");
-        // PrintMatrix(moduleTiltJacobianColumn, "Tilt Jacobian column post-division");
 
         if (modules[i].IsFirstJointPan())
         {
@@ -389,14 +374,10 @@ Eigen::MatrixXd GetInverseJacobianDamped(
         D(i, i) = pow((2 * jointPositions(i) - maxAngle - minAngle) / (maxAngle - minAngle), 2) + 1;
     }
 
-    // (Joint positions, limits, lambda and D were printed here every cycle at 60 Hz,
-    // flooding the launch terminal; the limits are logged once at startup instead)
 
     Eigen::MatrixXd inverseJacobian(jacobian.cols(), jacobian.rows());
 
-    // Damped least squares (J^T J + lambda^2 D^2)^-1 J^T. There was an extra unscaled D^2
-    // term, so with lambda = 1 the damping was 2 D^2 and each cycle covered only a small
-    // part of the error (a 1.5 mm tip step took 1.1 s to settle)
+    // Damped least squares (J^T J + lambda^2 D^2)^-1 J^T
     inverseJacobian = (jacobian.transpose() * jacobian +
     leastSquaresDampingFactor * leastSquaresDampingFactor * D * D).colPivHouseholderQr().solve(jacobian.transpose());
 
@@ -473,12 +454,10 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
 {
     Eigen::Vector4d motorPositions = Eigen::Vector4d::Zero();
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "test: %.6f", test);
 
     double proximalPanLengthDelta = proximal.GetIsolatedPanLengthDelta();
     double proximalTiltLengthDelta = proximal.GetIsolatedTiltLengthDelta();
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "prox. pan: %.6f, prox. tilt: %.6f", proximalPanLengthDelta, proximalTiltLengthDelta);
 
     motorPositions(0) = proximalPanLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(1) = proximalTiltLengthDelta * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
@@ -492,12 +471,10 @@ Eigen::Vector4d GetMotorPositionsFromJointPositions(const ManipulatorModule& pro
     // The contribution of the proximal joint positions to the length delta of the distal tendons
     double distalLengthDeltaDueToProximalJoints = proximalPanLengthDelta + proximalTiltLengthDelta + distalTendonProximalJointOffset;
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dLengthDelta: %.6f", distalLengthDeltaDueToProximalJoints);
 
     motorPositions(2) = (distal.GetIsolatedPanLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
     motorPositions(3) = (distal.GetIsolatedTiltLengthDelta() + distalLengthDeltaDueToProximalJoints) * LENGTH_DELTA_TO_PULLEY_ROTATION_DEGREES;
 
-    // RCLCPP_INFO(rclcpp::get_logger("micro_module_control"), "dist. pan: %.6f, dist. tilt: %.6f", motorPositions(0), motorPositions(1));
 
     return motorPositions;
 }
@@ -516,7 +493,6 @@ Eigen::Vector4d GetJointPositionsFromMotorPositions(const Eigen::Vector4d& motor
     proximalJacobian << -proximalRadiusRatio * sin(proximal.GetHalfCurvatureAngle() - proximalHalfPanJointAngle), proximalRadiusRatio * sin(proximalHalfTiltJointAngle),
                          proximalRadiusRatio * sin(proximalHalfPanJointAngle), -proximalRadiusRatio * sin(proximal.GetHalfCurvatureAngle() - proximalHalfTiltJointAngle);
 
-    // PrintMatrix(proximalJacobian, "Proximal Actuator Jacobian");
 
     double distalRadiusRatio = distal.GetCurvatureRadius() / PULLEY_WHEEL_RADIUS;
     double distalHalfPanJointAngle = distal.GetPanJointAngle() / 2;
@@ -536,14 +512,12 @@ Eigen::Vector4d GetJointPositionsFromMotorPositions(const Eigen::Vector4d& motor
                        distalRadiusRatio * sin(distalHalfPanJointAngle),
                        -distalRadiusRatio * sin(distal.GetHalfCurvatureAngle() - distalHalfTiltJointAngle);
 
-    // PrintMatrix(distalJacobian, "Distal Actuator Jacobian");
 
     // Combine proximal and distal Jacobians. Note that the distal motor angles have no effect on the proximal joint positions
     Eigen::Matrix4d combinedJacobian = Eigen::Matrix4d::Zero();
     combinedJacobian.block(0, 0, 2, 2) = proximalJacobian;
     combinedJacobian.block(2, 0, 2, 4) = distalJacobian;
 
-    // PrintMatrix(combinedJacobian, "Combined Jacobian");
 
     jointPositions = combinedJacobian * motorStates;
 
@@ -848,7 +822,6 @@ int main(int argc, char **argv)
 
     // Fixed transformation quaternion between touch and manipulator frames
     tf2::Quaternion touchToManipulatorRotation;
-    // touchToManipulatorRotation.setRPY(0, M_PI, M_PI_4);
     touchToManipulatorRotation.setRPY(0, 0, M_PI_4);
 
     Eigen::Vector3d endPosition = Eigen::Vector3d::Zero();
@@ -862,9 +835,7 @@ int main(int argc, char **argv)
 
     Eigen::Matrix3d movementRotation;
 
-    // Joint limits for the damped inverse: where a motor would reach its limit. These were
-    // fixed at +-0.05 / +-0.025 rad, which the tendon model puts at only ~1 deg of motor
-    // travel (of 11-22 deg), so the damping held the motors within about a degree of rest.
+    // Joint limits for the damped inverse: where a motor would reach its limit.
     Eigen::Vector4d minJointAngles;
     Eigen::Vector4d maxJointAngles;
     GetJointRangeFromMotorLimits(proximal, distal, motorReference, motorMinAngles, motorMaxAngles,
@@ -977,10 +948,8 @@ int main(int argc, char **argv)
                     jointDeltas(3)
                 );
 
-                // Apply each joint delta only if every motor stays inside its limits. The
-                // motors follow from the joint angles through the tendon model (a joint
-                // delta in rad was being added to the motor angles in degrees, so the
-                // motors moved ~1/1000 of what they should)
+                // Apply each joint delta only if every motor stays inside its limits
+                // (motor angles follow from the joint angles through the tendon model)
                 for (int i = 0; i < 4; i++)
                 {
                     ManipulatorModule candidateProximal = proximal, candidateDistal = distal;
@@ -1002,8 +971,7 @@ int main(int argc, char **argv)
 
                 RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 100, "Sending motor commands: %.6f %.6f %.6f %.6f", motorCommands(0), motorCommands(1), motorCommands(2), motorCommands(3));
 
-                // Whole degrees on the wire: round (assigning the double truncated, so
-                // 89.95 went out as 89)
+                // Whole degrees on the wire, rounded
                 motor_angles_msg::msg::MotorAngles motorCommandsMsg;
                 motorCommandsMsg.proximal_pan_angle = std::lround(motorCommands(0));
                 motorCommandsMsg.proximal_tilt_angle = std::lround(motorCommands(1));

@@ -26,7 +26,7 @@
 #include "tf2_ros/buffer.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include "../include/Pose.hpp"
+#include "macro_micro_robot/Pose.hpp"
 
 using namespace std::chrono_literals;
 

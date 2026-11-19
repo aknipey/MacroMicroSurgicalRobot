@@ -11,7 +11,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Find ament and dependency packages
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -30,10 +29,6 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(ur_client_library REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)
-
-###########
-## Build ##
-###########
 
 include_directories(include)
 
@@ -99,10 +94,6 @@ add_executable(ur_calibration_extract
 target_include_directories(ur_calibration_extract PRIVATE vendor/ur_calibration/include)
 target_link_libraries(ur_calibration_extract ur_client_library::urcl yaml-cpp Eigen3::Eigen)
 ament_target_dependencies(ur_calibration_extract rclcpp)
-
-#############
-## Install ##
-#############
 
 ## C++ executables
 ## Touch driver, split in two: OpenHaptics renders no force in a process that has ROS 2's
