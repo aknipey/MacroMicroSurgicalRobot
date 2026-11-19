@@ -54,6 +54,7 @@ ROBOT_IP="192.168.0.100"
 LAUNCH_EXTRA="${LAUNCH_EXTRA:-}"    # extra launch arguments, for testing on mock hardware
 REPEATS_1TO5="${REPEATS_1TO5:-4}"
 REPEATS_1TO1="${REPEATS_1TO1:-2}"
+EXCHANGE_STILL_S="${EXCHANGE_STILL_S:-60}"   # still period before and after the 20 swaps (earlier sets: 30)
 
 FROM=""
 ONLY=""
@@ -496,10 +497,10 @@ exchange_set() {
   echo ">> ${reply}"
   dir=$(echo "$reply" | sed -n 's/.*-> //p')
   [ -n "$dir" ] || die "The tracker did not start recording: ${reply}"
-  countdown 60 "Seated and still, HANDS OFF the table"
+  countdown "$EXCHANGE_STILL_S" "Seated and still, HANDS OFF the table"
   say "Now 20 exchanges: lever open, tool off and out of view, refit, lever fully closed, step back, >= 5 s seated."
   read -r -p "Press Enter when the 20th is seated and you've stepped back. " _
-  countdown 60 "Seated and still, HANDS OFF the table"
+  countdown "$EXCHANGE_STILL_S" "Seated and still, HANDS OFF the table"
   (cd "$NDI_DIR" && python3 -m ndi_tracking ctl stop) | tail -3
   sleep 2
   [ -d "$dir" ] || die "Recording folder ${dir} not found"
