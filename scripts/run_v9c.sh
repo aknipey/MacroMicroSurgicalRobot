@@ -663,14 +663,29 @@ step_46() {
   note "tool 12: $(grep -E 'line angle|corrected:' "${STACK_LOG_DIR}/latch_fit12.txt" | tr -s ' ' | tr '\n' ' ')"
 }
 
+# Resumable: block k replays only the trajectories its folder has fewer than (blocks so far for that tool) complete
+# replays of (<name>_Replay<n>, not _NO_NDI), so --from=47 after an interruption carries on where it stopped.
 step_47() {
-  local order=(12 12 10 12) k tool dest
+  local order=(12 12 10 12) k tool dest spec name have todo
+  declare -A blocks=()
   for k in "${!order[@]}"; do
     tool="${order[$k]}"
     [ "$tool" = 12 ] && dest="${LT}/C_tool12" || dest="${LT}/A_tool10_drift"
-    say "--- Step 47, block $((k + 1))/4: tool ${tool}"
+    blocks[$tool]=$(( ${blocks[$tool]:-0} + 1 ))
+    todo=()
+    for spec in "${LATCH_TEST[@]}"; do
+      name=$(basename "${spec%%:*}")
+      have=$(find "${LOGS}/${dest}" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended \
+               -regex ".*/${name}_Replay[0-9]+" 2>/dev/null | wc -l)
+      [ "$have" -ge "${blocks[$tool]}" ] || todo+=("$spec")
+    done
+    if [ "${#todo[@]}" -eq 0 ]; then
+      say "--- Step 47, block $((k + 1))/4: tool ${tool}: already recorded, skipped"
+      continue
+    fi
+    say "--- Step 47, block $((k + 1))/4: tool ${tool} (${#todo[@]} of ${#LATCH_TEST[@]} replays)"
     $DRY_RUN || ndi_start
-    cell_t "$tool" p5 "$dest" 1 "${LATCH_TEST[@]}"
+    cell_t "$tool" p5 "$dest" 1 "${todo[@]}"
   done
 }
 
