@@ -15,6 +15,7 @@ Section, table and equation numbers below refer to the submitted report. Paths a
 5. [Calibration procedures](#5-calibration-procedures)
 6. [Risk assessment](#6-risk-assessment)
 7. [Reproducibility and code availability](#7-reproducibility-and-code-availability)
+8. [Additional results](#8-additional-results)
 
 ---
 
@@ -417,3 +418,17 @@ those it changed.
 | RCM runs used sideways gain 0.5 | Every recorded run used 1.0 | 4.3.1 |
 | The tracked RCM error is factory-kinematics error | Largest term is a latch offset of unknown cause; kinematic share not separable | 4.3.3 |
 | Median exchange 4.8 s | 5.5 s, timed from the seat being disturbed to settled | 4.4.1 |
+
+## 8. Additional results
+
+### 8.1 Lag against smoothness in the output-mode benchmark
+
+Every replay of the same-day output-mode benchmark (report Section 4.1.4, Table 4.1), plotted as translation lag
+against the arm's jitter ratio (arm jitter above 5 Hz divided by the stylus input's). Lines join the output modes on
+the same trajectory. Trajectory output is the smoothest but lags 151–244 ms; position and filtered velocity output
+sit at 52–78 ms with higher jitter; the slow 1:5 trajectory is the only one where the arm is rougher than the hand.
+Moved here from the report's appendix because the report states these values in the text.
+
+![Lag against smoothness for every replay of the same-day benchmark](../thesis/results/4.1_latency/L08_output_mode_benchmark/figures/pareto_lag_vs_smoothness.png)
+
+Source: [`thesis/results/4.1_latency/L08_output_mode_benchmark`](../thesis/results/4.1_latency/L08_output_mode_benchmark).

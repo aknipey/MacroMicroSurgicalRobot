@@ -127,8 +127,8 @@ def main():
     # fig 1b: compact version for the report, one stack per output route
     pick = [('V3/LongBenchmark1', 'V3 trajectory output'), ('V4/LongBenchmark_failed', 'V4 velocity output, first version'),
             ('V5/LongBenchmark', 'V5 velocity output, 500 Hz + limiter'),
-            ('V9b/NoTool/PositionMode/LongBenchmark_Replay1', 'V9b position output (final)'),
-            ('V9b/NoTool/TrajectoryMode/LongBenchmark_Replay1', 'V9b trajectory output, same day')]
+            ('V9b/NoTool/PositionMode/LongBenchmark_Replay1', 'V9 position output (final)'),
+            ('V9b/NoTool/TrajectoryMode/LongBenchmark_Replay1', 'V9 trajectory output, same day')]
     sel = [(next(o for o in ok if o['run'].key == k), lab) for k, lab in pick if any(o['run'].key == k for o in ok)]
     fig, axes = plt.subplots(len(sel), 1, figsize=(FULL, 0.72 * len(sel) + 0.7), sharex=True, sharey=True)
     for ax, (o, lab) in zip(axes, sel):

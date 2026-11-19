@@ -78,7 +78,25 @@ def condition(run):
     k = run.kinematics[0] or 'nominal'
     day = run.date
     mode = run.mode
-    return f'{day} · {mode} · {k}', day, mode, k
+    return f'{k} holder · {mode}', day, mode, k
+
+
+# Strip-figure styles: one marker per output mode. Stock and ramped speedj are different settings and
+# must be distinguishable; unfiltered velocity is its own mode (its name also contains 'velocity').
+STRIP_STYLE = {
+    'position':            dict(color=MODE['position']['color'], marker='^', label='Position'),
+    'trajectory':          dict(color=MODE['trajectory']['color'], marker='D', label='Trajectory'),
+    'velocity':            dict(color=MODE['velocity']['color'], marker='o', label='Stock speedj'),
+    'velocity_optimised':  dict(color=MODE['velocity']['color'], marker='s', label='Ramped speedj'),
+    'velocity_unfiltered': dict(color=MODE['velocity_unfiltered']['color'], marker='v', label='Velocity, unfiltered'),
+}
+
+
+def setting_label(kmodel, day, cal_days):
+    """Short tick label: the kinematic model, and for the calibrated holder tool which of its days."""
+    if kmodel == 'nominal':
+        return 'Nominal holder'
+    return 'Calibrated holder' if len(cal_days) >= 1 else 'Calibrated holder'
 
 
 def main():
@@ -159,6 +177,7 @@ def main():
     # strip
     fig, ax = plt.subplots(figsize=(FULL, 2.9))
     cl = conds
+    cal_days = sorted({c[0] for c in cl if c[2] != 'nominal'})
     for i, s in enumerate(SETS):
         v = [o for o in out if o['set'] == s]
         cc = [o['ctrl_mm'] for o in v if np.isfinite(o['ctrl_mm'])]
@@ -167,23 +186,21 @@ def main():
         for j, c in enumerate(cl):
             vv = [o for o in v if (o['day'], o['mode'], o['kin']) == c]
             x = i - 0.33 + 0.66 * j / max(1, len(cl) - 1)
-            st = MODE.get(c[1], MODE['position'])
+            st = STRIP_STYLE.get(c[1], STRIP_STYLE['position'])
             for o in vv:
                 ax.scatter(x + np.random.default_rng(len(o['key'])).uniform(-0.02, 0.02), o['rms'], s=16,
                            marker=st['marker'], facecolor='none' if o['excluded'] else st['color'],
                            edgecolor=st['color'], lw=0.8, zorder=3)
             if vv:
-                ax.text(x, -0.25, day_label(c[0]), rotation=90, fontsize=7, color=INK2, ha='center', va='top')
+                ax.text(x, -0.2, setting_label(c[2], c[0], cal_days), rotation=90, fontsize=6.5, color=INK2,
+                        ha='center', va='top')
     ax.axhline(1.0, color=INK2, ls='--', lw=0.8)
     ax.text(-0.45, 1.04, '1 mm threshold', fontsize=8, color=INK2, ha='left', va='bottom')
     ax.set_xticks(range(len(SETS))); ax.set_xticklabels([SET_LABEL[s] for s in SETS])
-    ax.tick_params(axis='x', pad=30, length=0); ax.set_xlabel('Recorded trajectory')
+    ax.tick_params(axis='x', pad=24, length=0); ax.set_xlabel('Recorded trajectory')
     ax.set_ylabel('RCM error, rms (mm)'); ax.set_ylim(-0.05, None)
-    hs, seen = [], set()
-    for m in sorted({c[1] for c in cl}):
-        if MODE[m]['label'] not in seen:
-            seen.add(MODE[m]['label'])
-            hs.append(plt.Line2D([], [], ls='', marker=MODE[m]['marker'], color=MODE[m]['color'], label=MODE[m]['label']))
+    hs = [plt.Line2D([], [], ls='', marker=STRIP_STYLE[m]['marker'], color=STRIP_STYLE[m]['color'],
+                     label=STRIP_STYLE[m]['label']) for m in STRIP_STYLE if m in {c[1] for c in cl}]
     hs.append(plt.Rectangle((0, 0), 1, 1, color=MUTED, alpha=0.35, label="Controller's own error"))
     ax.legend(handles=hs, loc='lower left', bbox_to_anchor=(0, 1.0), ncol=3)
     L.append(f"- `figures/{os.path.basename(save(fig, HERE, 'rcm_strip'))}`")
@@ -208,7 +225,8 @@ def main():
             if i == 0:
                 ax.set_title(SET_LABEL[s], fontsize=8)
             if j == 0:
-                ax.set_ylabel(day_label(d), fontsize=8)
+                nominal_at_day = any(o["kin"] == "nominal" for o in inc if o["day"] == d)
+                ax.set_ylabel("Nominal holder" if nominal_at_day else "Calibrated holder", fontsize=8)
     fig.suptitle('Shaft crossing of the RCM plane (mm); +: latched point; dashed: 1 mm', fontsize=9, x=0.02,
                  ha='left')
     L.append(f"- `figures/{os.path.basename(save(fig, HERE, 'rcm_crossing_targets'))}`")

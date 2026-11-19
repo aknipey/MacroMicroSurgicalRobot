@@ -24,6 +24,9 @@ STILL_RANGE_MM, STILL_WIN_S, MIN_SEAT_S = 0.3, 1.0, 2.0      # still rule (tip r
 AWAY_MM = 1.0                     # "left the seat" / "back at the seat"
 SETTLE_WIN = 0.5                  # settled: 0.5 s rolling median inside the tracker's own 99th-percentile stray
 TRIM_S = 1.0                      # trimmed both ends for the bump test
+BEDDING_IN = 4                    # seats 0-3 (the first seating and the first three exchanges) are larger in every
+                                  # version ('first 3 seats vs rest'); the headline re-seat figures leave them out and
+                                  # are reported per version, never pooled across versions
 # Tool geometry for the tip-equivalent error is READ from config/tools.yaml, not typed in:
 #  - the wand-holder tool whose calibration date is the latest on or before the session (the exchange logs do not
 #    record which tool was mounted); the other holder tool is reported as a sensitivity check, because the coupling
@@ -152,6 +155,16 @@ def analyse(d):
     lever = tip_dist(ht)
     at_tool0 = point_disp(lever)
     at_micro = point_disp(lever - MICRO_TIP_FROM_TOOL0_MM)
+    # ---- headline re-seat figures after bedding in: seats BEDDING_IN.. about their own median (per version)
+    Cb = C[BEDDING_IN:]
+    ow_b = np.array([Rm.inv().apply(p - np.median(Cb, 0)) for p in Cb]) * 1000
+    rv_b = np.array([(Rm.inv() * R).as_rotvec() for R in seats_R[BEDDING_IN:]])
+    rv_b = np.degrees(rv_b - np.median(rv_b, 0))
+    def disp_b(L_from_tip):
+        return np.linalg.norm([ow_b[i] + np.cross(np.radians(rv_b[i]), ax_w * L_from_tip) * 1000
+                               for i in range(len(Cb))], axis=1)
+    bedded = dict(n=len(Cb), tip=np.linalg.norm(ow_b, axis=1), tool0=disp_b(lever),
+                  micro=disp_b(lever - MICRO_TIP_FROM_TOOL0_MM), rot=np.linalg.norm(rv_b, axis=1))
     alt = {n: np.linalg.norm(point_disp(tip_dist(x) - MICRO_TIP_FROM_TOOL0_MM), axis=1).max()
            for n, x in holder_tools().items()}
 
@@ -264,7 +277,7 @@ def analyse(d):
                 at_micro=at_micro, floor_rms=floor_rms, floor_max=np.max(floor_meds) * 1000, rot_floor=rot_floor_rms, settle_thr=settle_thr * 1000, sample_sd=sample_sd,
                 wander=wander, tot=tot, fast=fast, slow=slow, tot4=tot4, fast4=fast4, slow4=slow4, drift=drift,
                 drift_r2=drift_r2, cobs=cobs, cnull=cnull.mean(), p_cos=p_cos, cp=(kcp, cp_shift, p_cp),
-                bumps=bumps, bump_max=max(inner), bump_ref=max(ref), trims=trims, phases=phases,
+                bedded=bedded, bumps=bumps, bump_max=max(inner), bump_ref=max(ref), trims=trims, phases=phases,
                 settle=np.array(settle), fit=np.array(fit), date=yaml.safe_load(
                     open(os.path.join(d, 'NDI_META.yaml')))['date'])
 
@@ -431,7 +444,7 @@ def main():
     row('tracker floor, 5 s medians (rms / max)', lambda r: f"{r['floor_rms']:.1f} / {r['floor_max']:.1f}")
     row('still-period wander (µm/min, start / end)', lambda r: ' / '.join(f'{w:.0f}' for w in r['wander']))
     row('tip re-seat: rms / max', lambda r: f"{np.sqrt(np.mean(r['dev'] ** 2)):.0f} / {r['dev'].max():.0f}")
-    row('… exchanges only (first seating excluded, as in the pooled lines)',
+    row('… exchanges only (first seating excluded)',
         lambda r: f"{np.sqrt(np.mean(r['dev'][1:] ** 2)):.0f} / {r['dev'][1:].max():.0f}")
     row('× tracker floor (rms)', lambda r: f"{np.sqrt(np.mean(r['dev'] ** 2)) / r['floor_rms']:.0f}×")
     row('axial (seating depth) SD', lambda r: f"{r['off_w'][:, 2].std():.0f}")
@@ -466,28 +479,21 @@ def main():
         row(f'{lab}: median [IQR], max', lambda r, k=key: (lambda x: f"{np.median(x):.1f} [{np.percentile(x, 25):.1f}–"
                                                           f"{np.percentile(x, 75):.1f}], {np.max(x):.1f}")(
             np.array([p[k] for p in r['phases']])))
-    # pooled
-    dev = np.concatenate([r['dev'][1:] for r in res])
-    tot = np.concatenate([[p['total'] for p in r['phases']] for r in res])
-    micro = np.concatenate([np.linalg.norm(r['at_micro'][1:], axis=1) for r in res])
-    L += ['', '## Pooled over the three versions (60 exchanges)', '',
-          f'- Tip re-seat: rms {np.sqrt(np.mean(dev ** 2)):.0f} µm, p95 {np.percentile(dev, 95):.0f} µm, max '
-          f'{dev.max():.0f} µm. Seats are serially correlated (above), so no CI is put on the percentile.',
-          f'- At the micro tool tip: max {micro.max():.0f} µm.',
-          f'- Exchange time (seat disturbed → settled): median {np.median(tot):.1f} s, max {tot.max():.1f} s '
-          f'(threshold 20 s).', '']
-    # headline for the coupling as built: the steel versions only (C1 was the printed prototype)
-    steel = [r for r in res if r['v'] != res[0]['v']]
-    if steel:
-        sdev = np.concatenate([r['dev'][1:] for r in steel])
-        stot = np.concatenate([[p['total'] for p in r['phases']] for r in steel])
-        smic = np.concatenate([np.linalg.norm(r['at_micro'][1:], axis=1) for r in steel])
-        L += [f'## Pooled over the steel versions ({" + ".join(LABELS[r["v"]] for r in steel)}, {len(sdev)} exchanges)', '',
-              f'- Tip re-seat: rms {np.sqrt(np.mean(sdev ** 2)):.0f} µm, p95 {np.percentile(sdev, 95):.0f} µm, max '
-              f'{sdev.max():.0f} µm (mean of the per-version rms: '
-              f'{np.mean([np.sqrt(np.mean(r["dev"][1:] ** 2)) for r in steel]):.0f} µm).',
-              f'- At the micro tool tip: max {smic.max():.0f} µm.',
-              f'- Exchange time: median {np.median(stot):.1f} s, max {stot.max():.1f} s.', '']
+    # headline: per version, after bedding in, never pooled across versions
+    rms = lambda x: np.sqrt(np.mean(np.square(x)))
+    L += ['', f'## Re-seat after bedding in (from seat {BEDDING_IN}; per version, not pooled)', '',
+          f'Seats 0-{BEDDING_IN - 1} (the first seating and the first {BEDDING_IN - 1} exchanges) are left out: they are '
+          'larger in every version (row "first 3 seats vs rest"). Offsets are about the median of the remaining seats. '
+          'Seats are serially correlated, so no CI is put on the percentiles.', '',
+          '| | ' + ' | '.join(LABELS[r['v']] for r in res) + ' |', '|---|' + '---|' * len(res)]
+    row('exchanges', lambda r: f"{r['bedded']['n']}")
+    row('tip re-seat: rms / p95 / max (µm)', lambda r: f"{rms(r['bedded']['tip']):.0f} / "
+        f"{np.percentile(r['bedded']['tip'], 95):.0f} / {r['bedded']['tip'].max():.0f}")
+    row('× tracker floor (rms)', lambda r: f"{rms(r['bedded']['tip']) / r['floor_rms']:.0f}×")
+    row('at tool0: rms / max (µm)', lambda r: f"{rms(r['bedded']['tool0']):.0f} / {r['bedded']['tool0'].max():.0f}")
+    row('at micro tool tip: rms / max (µm)', lambda r: f"{rms(r['bedded']['micro']):.0f} / {r['bedded']['micro'].max():.0f}")
+    row('max rotation (°)', lambda r: f"{r['bedded']['rot'].max():.4f}")
+    L += ['']
     L += ['## Versions compared on the drift-robust per-swap component', '',
           'Ratio of per-swap rms (successive differences), bootstrap 95 % CI. Each version is one session, so a '
           'difference is version + day + camera pose + handling.', '']
@@ -496,8 +502,8 @@ def main():
             obs, ci = boot_ratio(res[a], res[b])
             L.append(f"- {LABELS[res[a]['v']]} / {LABELS[res[b]['v']]}: {obs:.2f} [{ci[0]:.2f}, {ci[1]:.2f}]")
     L += ['', '## Prior claims checked', '',
-          '- "pooled re-seat ≤ 0.19 mm, rms 0.043 mm": see the pooled line (note: seats here are medians of the '
-          '*settled* part, which can differ slightly from whole-segment medians).',
+          '- "pooled re-seat ≤ 0.19 mm, rms 0.043 mm": no longer reported; versions are not pooled (see the '
+          'bedding-in table; seats are medians of the *settled* part).',
           '- "tracker 5 s floor 0.003–0.006 mm": see the floor row.',
           '- "successive seats correlated, cosine +0.62 to +0.70": see the cosine row.',
           '- "median exchange 4.8 s": earlier figure was the gap between still segments; here exchange time runs '
