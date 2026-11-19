@@ -359,39 +359,45 @@ All code is in this git repository, forked from the laboratory's macro–micro r
 `ndi_tracking` tracker package, which sits beside it in the ROS 2 workspace. Each version of the
 stack is a tag or commit ([Section 1](#1-teleoperation-stack-version-history)), and every run folder records the
 commit it ran and every setting, so a run can be reproduced by checking out its commit and replaying its stylus file
-(report Section 3.4.1). The run folders, about 9 GB, are kept on the laboratory computer outside the repository and
-are never modified by the analysis.
+(report Section 3.4.1).
 
-Each result in Chapter 4 comes from one folder of [`thesis/data_analysis`](../thesis/data_analysis) (table below; see
-its [`README.md`](../thesis/data_analysis/README.md)). Every folder's script reads the raw files, applies the exclusion
-checks of report Section 3.5.7 and writes a results file (`RESULTS.md`) that lists every number it produces, so no
-number in the report is typed by hand. The only constants in the code are method choices (bands, windows, the gap
-and camera-step limits), stated in each results file. A self-test of the shared code, run before any analysis,
-checks the time base of the bag files against the CSV files, the joint ordering, the forward kinematics against the
-recorded flange path, and both lag estimators on synthetic delays.
+The recordings the results use (373 runs, about 17 GB) are in [`data/recordings/`](../data/README.md) and are never
+modified by the analysis. The small per-run files that say what each run was (code version, settings, tool, replay
+source) are in git; the per-sample CSVs and rosbags are distributed as a separate archive, checked against
+`data/MANIFEST.sha256`. [`data/RECORDINGS.md`](../data/RECORDINGS.md) lists every recording and which results read it.
+
+Each result comes from one folder of [`thesis/results`](../thesis/results/README.md), grouped by report chapter and
+numbered in report order (table below). Every folder's script reads the raw files, applies the exclusion checks of
+report Section 3.5.7 and writes a results file (`RESULTS.md`) that lists every number it produces, so no number in
+the report is typed by hand. The only constants in the code are method choices (bands, windows, the gap and
+camera-step limits), stated in each results file. A self-test of the shared code, run before any analysis, checks
+the time base of the bag files against the CSV files, the joint ordering, the forward kinematics against the
+recorded flange path, and both lag estimators on synthetic delays. `thesis/results/run_all.py` reruns everything.
 
 | Folder | Question | Report section |
 | --- | --- | --- |
-| 01 | Vibration reduction against the unfiltered baseline | 4.1.3, 4.1.4 |
-| 02 | Closed-loop latency model; filter cost; design map | 4.1.3, 4.5.1 |
-| 03 | High-frequency buzz by mode and pose | 4.1.4 |
-| 04 | Displacement delivery ratio by route | 4.1.1 |
-| 05 | Same-day output-mode benchmark | 4.1.4 |
-| 06 | Lag by version on the same input | 4.1 |
-| 07 | Singularity guard on and off | 4.2.1 |
-| 08 | RCM scaling laws, offline | 4.3.1 |
-| 09 | Tracked RCM error | 4.3.2 |
-| 10 | RCM error budget and variance decomposition | 4.3.3 |
-| 11 | Camera placement test | 4.3.3 |
-| 12 | Replay repeatability (noise floors) | 3.4.1 |
-| 13 | Exchange time and re-seat repeatability | 4.4.1 |
-| 14 | Early versions; emulator lookahead and pose source | 4.1.1 |
-| 15 | Velocity-output faults and current chatter | 4.1.2, 4.1.3 |
-| 16 | Stylus updates, tremor and filters, offline | 4.1.2, 4.1.3 |
-| 17 | Stylus encoder stalls | 4.1.4 |
-| 18 | Singularity amplification; demonstration; micro-tool fit | 4.2.1, 4.4.2 |
-| 19 | What each recorded input asks of the arm | 3.4.4 |
-| 20 | Session D output-mode × filter grid | 4.1.3 |
+| M01 | Replay repeatability (noise floors) | 3.4.1 |
+| M02 | What each recorded input asks of the arm | 3.4.4 |
+| L01 | Lag by version on the same input | 4.1, 4.1.1 |
+| L02 | Early versions; emulator lookahead and pose source | 4.1.1 |
+| L03 | Displacement delivery ratio by route | 4.1.1 |
+| L04 | Velocity-output faults and current chatter | 4.1.2 |
+| L05 | Stylus updates, tremor and filters, offline | 4.1.2, 4.1.3 |
+| L06 | Closed-loop latency model; filter cost; design map | 4.1.3 |
+| L07 | Vibration reduction against the unfiltered baseline | 4.1.3, 4.1.4 |
+| L08 | Same-day output-mode benchmark | 4.1.4 |
+| L09 | Session D output-mode × filter grid | 4.1.4 |
+| L10 | Stylus encoder stalls | 4.1.4 |
+| L11 | High-frequency buzz by mode and pose | 4.1.4 |
+| S01 | Joint-speed amplification near the singularity | 4.2.1 |
+| S02 | Singularity guard on and off | 4.2.1 |
+| R01 | RCM scaling laws, offline | 4.3.1 |
+| R02 | Tracked RCM error | 4.3.2 |
+| R03 | RCM error budget and variance decomposition | 4.3.3 |
+| R04 | Camera placement test | 4.3.3 |
+| R05 | Cause of the latch offset and its correction | 4.3.4 |
+| T01 | Exchange time and re-seat repeatability | 4.4.1 |
+| T02 | Macro–micro demonstration; micro-tool fit | 4.4.2 |
 
 ### 7.2 Development claims revised by the analysis
 

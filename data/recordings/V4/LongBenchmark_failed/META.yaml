@@ -1,0 +1,72 @@
+date: '2026-10-15T09:34:02'
+duration: 16.604
+code_version: ccb0ee8-dirty
+base_frame: base_link
+ee_frame: tool0
+rows: {touch: 13637, stylus: 17346, ur: 8183}
+rosbag: ok
+tcp_offset:
+  xyz_mm: [-66.32, 5.08, 99.12]
+  rotvec_deg: [0.012, 0.116, -0.354]
+  checks: 328
+  check_max_mm: 1.38
+trajectory_source: /home/aidan-knipe/ros2_ws/trajectories/trajectory_20261015_093418.yaml
+notes: {t: 'host receive time, s since recording start (same clock for every file)',
+  stamp: 'sender''s header stamp, s', TOUCH_PATH: 'teleop target for ee_frame in base_frame,
+    only while WHITE is held', STYLUS_RAW: 'omni_state pose as published (position
+    mm, device frame)', UR_PATH: 'source rtde = tcp_pose_broadcaster (pendant TCP,
+    tool0_controller) moved back to ee_frame by tcp_offset, tf = TF ee_frame fallback,
+    rtde_tcp = pendant TCP (offset not measured); all in base_frame', tcp_offset: 'ee_frame
+    -> pendant TCP, measured against TF at recording start; check_max_mm = largest
+    drift from it in later checks during the run (should be ~0: more means TF uses
+    the wrong arm kinematics)'}
+settings:
+  TOUCH_TRANSLATION_SCALE: 1.0
+  TOUCH_SCALE_STEPS: [1.0, 0.2, 0.05]
+  TOUCH_SCALE_ROTATION_EXPONENT: 0.5
+  TOUCH_DOUBLE_CLICK_TIME: 0.3
+  TOUCH_ROTATION_SCALE: 1.0
+  TOUCH_ENABLE_ROTATION: true
+  TOUCH_ENABLE_TWIST: true
+  TOUCH_TWIST_SCALE: 1.0
+  TOUCH_MAX_LINEAR_SPEED: 1.2
+  TOUCH_MAX_ANGULAR_SPEED: 6.0
+  TOUCH_POSITION_GAIN: 8.0
+  TOUCH_ROTATION_GAIN: 8.0
+  TOUCH_FEEDFORWARD: 1.0
+  TOUCH_FEEDFORWARD_FILTER: 0.02
+  TOUCH_COMMAND_FILTER: 8.0
+  TOUCH_LOOP_DELAY: 0.05
+  TOUCH_DEADBAND: 0.0003
+  TOUCH_TIMEOUT: 0.1
+  TOUCH_PUBLISH_RATE: 100.0
+  TOUCH_POSE_SOURCE: tf
+  TOUCH_UNITS_TO_M: 0.001
+  TOUCH_MAPPING: toward_base
+  TOUCH_AXIS_MAP: [y, -x, z]
+  TOUCH_STARTUP_DELAY: 8.0
+  SERVO_LOOKAHEAD: 0.05
+  SERVO_OUTPUT: velocity
+  KEYBOARD_LINEAR_SPEED: 0.05
+  KEYBOARD_ANGULAR_SPEED: 0.3
+  KEYBOARD_MAX_LINEAR_SPEED: 0.25
+  KEYBOARD_MAX_ANGULAR_SPEED: 1.0
+  KEYBOARD_SPEED_STEP: 1.25
+  KEYBOARD_HOLD_TIME: 0.15
+  KEYBOARD_FIRST_PRESS_HOLD: 0.6
+  KEYBOARD_PUBLISH_RATE: 50.0
+  RECORDER_SAMPLE_RATE: 25.0
+  LOG_DIR: ~/ros2_ws/src/MacroMicroSurgicalRobot/logs
+  LOG_KEEP_ALL_RUNS: false
+  LOG_TF_FALLBACK_RATE: 200.0
+  LOG_BAG_TOPICS: [/phantom/state, /phantom/button, /ur5e_touch_teleop/target_pose,
+    /ur5e_touch_teleop/motion_scale, /servo_node/delta_twist_cmds, /servo_node/status,
+    /scaled_joint_trajectory_controller/joint_trajectory, /tcp_pose_broadcaster/pose,
+    /joint_states, /speed_scaling_state_broadcaster/speed_scaling, /tf, /tf_static]
+  PLAYER_DEFAULT_SPEED: 1.0
+  PLAYER_MAX_SPEED: 2.0
+  PLAYER_APPROACH_TIME: 5.0
+  PLAYER_MIN_POINT_SPACING: 0.04
+  HOME_POSITIONS: [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+  REPLAY_LEAD_IN: 1.5
+  REPLAY_TAIL: 1.5

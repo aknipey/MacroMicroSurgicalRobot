@@ -16,7 +16,7 @@ Every row is stamped on arrival (`t`, s since start):
     META.yaml        date, code version, settings, row counts, NDI status
     rosbag/          LOG_BAG_TOPICS (mcap)
 
-Plot a run with thesis/run_tools/plot_paths.py.
+Load a run for analysis with thesis/results/common/runs.py (runs.Run).
 """
 
 import csv

@@ -2365,3 +2365,33 @@ hand-eye and the micro tip ball, then the RD1 replays (`docs/lab_plans/07_remain
   (offline, held-out tool-10 replays): 0.31 / 0.22 / 0.50 / 0.63 mm for RCM only / slow / fast / whole run; offline predictions
   were ~0.4 mm optimistic for trajectories not trained on. Target: all four <= 1.0 mm with one tool. Report it as a follow-up,
   not as the pre-registered test.
+
+## Results, recordings and scripts reorganised for hand-in (2026-11-19, after V9c)
+
+No change to the stack. The lab work is finished, so the repository was cut down to what the report needs.
+
+- **Results:** `thesis/data_analysis/01–21` became `thesis/results/<chapter>/<ID>_<name>`. They are grouped by
+  report chapter (3 methods, 4.1 latency, 4.2 safety, 4.3 RCM, 4.4 tooling) and numbered in the order the report
+  uses them (M01–M02, L01–L11, S01–S02, R01–R05, T01–T02). The old-to-new table is in `thesis/results/README.md`.
+  Old folder 18 ("misc backing") was split into S01 (singularity amplification) and T02 (demonstration, micro-tool
+  fit). Scripts now find each other by ID (`runs.folder('R02')`) instead of folder name.
+- **Recordings:** the recordings the results read were copied from `logs/` into `data/recordings/` with the same
+  relative paths, so every run key in a RESULTS.md is unchanged. The analysis now reads only from there. "Read"
+  was established by tracing every file each analysis opens (`thesis/results/common/trace_inputs.py`), giving
+  373 of 378 runs. The 5 unused ones and the session clutter were left out: lab script console logs, old METRICS
+  summaries, scratch latch-fit output (see `data/README.md`). Git holds each run's META/REPLAY/NDI_META files.
+  The 6 GB of CSVs and 11 GB of bags are gitignored, with a SHA-256 manifest so a separately distributed archive
+  can be checked. The bag cache is now keyed on the path inside `data/recordings/`, so it survives a move.
+- **Verification:** every analysis was rerun from the new layout. Before the move, a rerun reproduced every
+  committed RESULTS.md number. Three files had not been regenerated since their code or config last changed
+  (06: the V9c row; 12: one explanatory sentence; 13: tools 10–12 in the sensitivity row). Those are now current.
+- **Deleted** (all in git history):
+  - the lab session runners: `run_v9b.sh`, `run_v9c.sh`, `rerun_v9c_gaps.sh`, `replay_batch.sh`,
+    `set_v9_mode.sh`, `pose_offset_motion.py`, `singularity_input.py`
+  - the session plans (`07–09`)
+  - the per-run quick-look tools `plot_paths.py` and `rcm_offset_check.py`
+  - the superseded analyses in `thesis/earlier/` (E0, E6, first exchange scripts, first comparison plots)
+
+  Earlier entries in this log still name these paths; at the tag or commit an entry gives, the files are there.
+- **Moved:** `kinematics_check.py` and `latch_line_fit.py` joined the other calibration tools in
+  `scripts/calibration/`. They are calibration procedures, and `thesis/results` imports them from there.

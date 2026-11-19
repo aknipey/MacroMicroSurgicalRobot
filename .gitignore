@@ -10,9 +10,20 @@ log/
 __pycache__/
 *.pyc
 
-# Regenerable analysis cache and local backups
-thesis/data_analysis/common/cache/
+# Thesis results: regenerable caches, console logs, local backups (thesis/results/README.md)
+thesis/results/**/cache/
+thesis/results/**/run.log
 thesis/data_analysis_backup_*.tar.gz
+
+# Recordings: only the small per-run files are in git; CSVs, bags and plots are shipped separately (data/README.md)
+data/recordings/**
+!data/recordings/**/
+!data/recordings/**/META.yaml
+!data/recordings/**/REPLAY.yaml
+!data/recordings/**/NDI_META.yaml
+!data/recordings/**/NDI_EVENTS.csv
+!data/recordings/**/*.md
+!data/recordings/V9b/MacroMicroDemo/*.log
 
 # Editors
 .vscode/

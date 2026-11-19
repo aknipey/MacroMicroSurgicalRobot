@@ -1,0 +1,151 @@
+date: '2026-11-19T14:11:02'
+duration: 66.32
+code_version: 94b8858
+base_frame: base_link
+ee_frame: tool0
+rows: {touch: 42536, stylus: 78552, ur: 32889}
+rosbag: ok
+tcp_offset:
+  xyz_mm: [0.0, 0.0, -0.0]
+  rotvec_deg: [0.0, 0.001, 0.0]
+  checks: 1317
+  check_max_mm: 0.45
+kinematics: {file: /home/aidan-knipe/ros2_ws/src/MacroMicroSurgicalRobot/config/calibrations/ur16e_kinematics_2026-11-03.yaml,
+  model: calibrated, sha256: b65bcbfd1d8ea6943f8a6a1c6404b42104b218e89fc81e25312fa3413db659b6,
+  hash: calib_912036121568766846}
+ndi: {tracker_at_start: true, lost_at: null, files: true}
+tool:
+  at_start:
+    number: 7
+    name: wand_D_plus1mm_lateral
+    tip_tool0_mm: [-3.2805, 10.7614, 322.9711]
+    direction_tool0: [-0.012789, 0.021528, 0.999686]
+    shaft_length_mm: 158.6
+    calibration: manual
+    date: '2026-11-19'
+  changes: []
+trajectory_source: /home/aidan-knipe/ros2_ws/trajectories/trajectory_20261119_141208.yaml
+notes: {t: 'host receive time, s since recording start (same clock for every file)',
+  stamp: 'sender''s header stamp, s', TOUCH_PATH: 'teleop target for ee_frame in base_frame,
+    only while WHITE is held', STYLUS_RAW: 'omni_state pose as published (position
+    mm, device frame)', UR_PATH: 'source rtde = tcp_pose_broadcaster (pendant TCP,
+    tool0_controller) moved back to ee_frame by tcp_offset, tf = TF ee_frame fallback,
+    rtde_tcp = pendant TCP (offset not measured); all in base_frame', ndi: 'tracker_at_start
+    = NDI tracker following the recording when it started, lost_at = s when it stopped
+    following (null = never), files = NDI_PATH.csv in this folder at stop', tool: 'teleop
+    RCM tool (config/tools.yaml): at_start = active when recording started (null =
+    teleop not running), changes = switches during the run (t as above); settings''
+    TOUCH_RCM_SHAFT_* are only the no-library fallback', kinematics: 'kinematics_params_file
+    TF was built from: model nominal = ur_description default, calibrated = this arm''s
+    controller calibration (ur_calibration_extract); hash = its calibration hash',
+  tcp_offset: 'ee_frame -> pendant TCP, measured against TF at recording start; check_max_mm
+    = largest drift from it in later checks during the run (should be ~0: more means
+    TF uses the wrong arm kinematics)'}
+settings:
+  TOUCH_TRANSLATION_SCALE: 1.0
+  TOUCH_SCALE_STEPS: [1.0, 0.2, 0.05]
+  TOUCH_SCALE_ROTATION_EXPONENT: 0.5
+  TOUCH_DOUBLE_CLICK_TIME: 0.3
+  TOUCH_MODE_SWITCH_HOLD_TIME: 1.0
+  TOUCH_ROTATION_SCALE: 1.0
+  TOUCH_ENABLE_ROTATION: true
+  TOUCH_ENABLE_TWIST: true
+  TOUCH_TWIST_SCALE: 1.0
+  TOUCH_MAX_LINEAR_SPEED: 1.2
+  TOUCH_MAX_ANGULAR_SPEED: 3.0
+  TOUCH_POSITION_GAIN: 8.0
+  TOUCH_ROTATION_GAIN: 8.0
+  TOUCH_MAX_CORRECTION_SPEED: 0.05
+  TOUCH_MAX_CORRECTION_ANGULAR_SPEED: 0.5
+  TOUCH_FEEDFORWARD: 1.0
+  TOUCH_FEEDFORWARD_FILTER: 0.02
+  TOUCH_COMMAND_FILTER: 5.0
+  TOUCH_KALMAN: true
+  TOUCH_KALMAN_ACCEL_NOISE: 2.0
+  TOUCH_KALMAN_ANGULAR_ACCEL_NOISE: 30.0
+  TOUCH_KALMAN_POSITION_NOISE: 0.0005
+  TOUCH_KALMAN_ROTATION_NOISE: 0.01
+  TOUCH_LOOP_DELAY: 0.05
+  TOUCH_SINGULARITY_GUARD: true
+  TOUCH_SINGULARITY_SLOW: 30.0
+  TOUCH_SINGULARITY_STOP: 60.0
+  TOUCH_SINGULARITY_DAMPING: 0.05
+  TOUCH_SINGULARITY_ESCAPE_GAIN: 1.0
+  TOUCH_SINGULARITY_ESCAPE_SPEED: 0.2
+  TOUCH_RCM_SHAFT_START: [8.0e-05, 0.00699, 0.20827]
+  TOUCH_RCM_SHAFT_DIRECTION: [-0.00309, 0.01798, 0.99983]
+  TOUCH_RCM_SHAFT_LENGTH: 0.1586
+  TOOL_LIBRARY: ~/ros2_ws/src/MacroMicroSurgicalRobot/config/tools.yaml
+  TOOL_SWITCH_MAX_JOINT_SPEED: 0.01
+  TOOL_SWITCH_STILL_TIME: 0.5
+  TOUCH_RCM_DEPTH_MARGIN: 0.02
+  TOUCH_RCM_TOOL0_GAIN: 1.0
+  TOUCH_RCM_TOOL0_GAIN_DEPTH: 0.13
+  TOUCH_RCM_PIVOT_FADE_DEPTH: 0.0
+  TOUCH_RCM_PIVOT_FADE_STRENGTH: 1.0
+  TOUCH_RCM_RETRACT_DEPTH: 0.005
+  TOUCH_RCM_EXIT_DEPTH: 0.003
+  TOUCH_RCM_GAIN: 8.0
+  TOUCH_RCM_MAX_ERROR: 0.005
+  TOUCH_HAPTICS: true
+  TOUCH_HAPTIC_MAX_FORCE: 0.01
+  TOUCH_HAPTIC_SLEW_RATE: 2.0
+  TOUCH_HAPTIC_WALL_STIFFNESS: 0.0
+  TOUCH_HAPTIC_CROSSING_FORCE: 0.002
+  TOUCH_HAPTIC_CROSSING_HYSTERESIS: 0.001
+  TOUCH_HAPTIC_CROSSING_HOLDOFF: 0.3
+  TOUCH_HAPTIC_LIMIT_FORCE: 0.002
+  TOUCH_HAPTIC_PULSE_FORCE: 0.002
+  TOUCH_HAPTIC_PULSE_FREQUENCY: 0.0
+  TOUCH_HAPTIC_SINGULARITY_FORCE: 0.005
+  TOUCH_HAPTIC_SINGULARITY_DAMPING: 0.015
+  TOUCH_HAPTIC_SINGULARITY_FILTER: 0.03
+  TOUCH_DEADBAND: 0.0003
+  TOUCH_TIMEOUT: 0.1
+  TOUCH_PUBLISH_RATE: 500.0
+  TOUCH_POSE_SOURCE: joint_states
+  TOUCH_UNITS_TO_M: 0.001
+  TOUCH_MAPPING: toward_base
+  TOUCH_AXIS_MAP: [y, -x, z]
+  TOUCH_STARTUP_DELAY: 8.0
+  SERVO_LOOKAHEAD: 0.05
+  SERVO_OUTPUT: position
+  SERVO_SINGULARITY_SLOWDOWN: 100.0
+  SERVO_SINGULARITY_STOP: 200.0
+  SERVO_SINGULARITY_SLOWDOWN_GUARDED: 10000.0
+  SERVO_SINGULARITY_STOP_GUARDED: 1000000.0
+  SERVO_VELOCITY_RATE: 500.0
+  SERVO_SMOOTH_SPEEDJ: false
+  VELOCITY_LIMITER: true
+  VELOCITY_LIMITER_SPEED_FRACTION: 0.8
+  VELOCITY_LIMITER_MAX_ACCELERATION: [8.0, 8.0, 15.0, 25.0, 25.0, 25.0]
+  VELOCITY_LIMITER_SMOOTHING: 0.003
+  SERVO_POSITION_LEAD: 0.03
+  SERVO_POSITION_MAX_ERROR: 0.15
+  KEYBOARD_LINEAR_SPEED: 0.05
+  KEYBOARD_ANGULAR_SPEED: 0.3
+  KEYBOARD_MAX_LINEAR_SPEED: 0.25
+  KEYBOARD_MAX_ANGULAR_SPEED: 1.0
+  KEYBOARD_SPEED_STEP: 1.25
+  KEYBOARD_HOLD_TIME: 0.15
+  KEYBOARD_FIRST_PRESS_HOLD: 0.6
+  KEYBOARD_PUBLISH_RATE: 50.0
+  RECORDER_SAMPLE_RATE: 25.0
+  LOG_DIR: ~/ros2_ws/src/MacroMicroSurgicalRobot/logs
+  LOG_KEEP_ALL_RUNS: false
+  LOG_REQUIRE_NDI: false
+  LOG_TF_FALLBACK_RATE: 200.0
+  LOG_BAG_TOPICS: [/phantom/state, /phantom/button, /phantom/joint_states, /phantom/force_feedback,
+    /phantom/applied_force, /ur16e_touch_teleop/target_pose, /ur16e_touch_teleop/motion_scale,
+    /ur16e_touch_teleop/condition_number, /ur16e_touch_teleop/rcm_active, /ur16e_touch_teleop/rcm_point,
+    /ur16e_touch_teleop/rcm_error, /ur16e_touch_teleop/insertion_depth, /ur16e_touch_teleop/tool_tip,
+    /servo_node/delta_twist_cmds, /servo_node/status, /scaled_joint_trajectory_controller/joint_trajectory,
+    /joint_velocity_limiter/commands, /forward_velocity_controller/commands, /tcp_pose_broadcaster/pose,
+    /joint_states, /speed_scaling_state_broadcaster/speed_scaling, /tf, /tf_static]
+  PLAYER_DEFAULT_SPEED: 1.0
+  PLAYER_MAX_SPEED: 2.0
+  PLAYER_APPROACH_TIME: 5.0
+  PLAYER_MIN_POINT_SPACING: 0.04
+  HOME_POSITIONS: [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+  REPLAY_LEAD_IN: 1.5
+  REPLAY_TAIL: 1.5

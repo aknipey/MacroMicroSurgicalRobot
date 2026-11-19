@@ -1,0 +1,46 @@
+tool: '8700340'
+vega_serial: P9-24159
+rate_hz: 60
+calibration:
+  tool: '8700340'
+  tip_offset_mm: [-16.588835729626982, 1.547733486765992, -158.57584062106164]
+  shaft_axis: [0.002796116919630051, -0.005731938917722945, 0.9999796630964128]
+  pivot_rms_mm: 0.9287638496132051
+  axis_info: {twist_range_deg: 143.00546968794222, shaft_wobble_deg_rms: 0.3094047848077519,
+    shaft_wobble_deg_max: 0.6516915086746046, tip_axis_angle_from_rom_z_deg: 0.36541029686053,
+    n_poses: 744}
+  date: '2026-10-20T13:05:12'
+  status: tip, axis
+date: '2026-10-26T16:49:34'
+stopped_by: teleop
+start_unix: 1792993774.542028
+source: teleop
+rows: 6073
+visible_rows: 6073
+rcm_segments:
+- t_start: 36.8727
+  t_end: 94.1574
+  visible_pct: 100.0
+  samples: 3438
+  duration_s: 57.284699999999994
+  rcm_point_mm: [102.049, -113.078, -1346.286]
+  error_mean_mm: 0.7822263000176715
+  error_rms_mm: 0.9389612015149165
+  error_p95_mm: 1.8860811381817861
+  error_max_mm: 2.4162195538752873
+  within_1mm_pct: 73.47294938917976
+  within_2mm_pct: 96.18964514252472
+  depth_min_mm: -5.956698639899988
+  depth_max_mm: 104.01436351730001
+  shaft_swing_deg: 69.64067899079521
+  fitted_pivot_mm: [102.843, -112.783, -1345.87]
+  fitted_pivot_offset_mm: 0.9433675444859462
+  error_rms_about_fitted_pivot_mm: 0.7847184986564593
+notes: {columns: "(positions mm, camera frame):\n  t           s since recording start\
+    \ (the MacroMicro recorder's start when it\n              started the run, so\
+    \ it lines up with its `t`)\n  unix_time   host receive time\n  frame       Vega\
+    \ frame number (60 Hz)\n  visible     1 if the tool was tracked\n  tip_*     \
+    \  tool tip;  axis_*  unit shaft direction (tip -> handle)\n  x,y,z,q*    raw\
+    \ ROM-frame pose (q0 scalar);  fit_error  RMS marker fit (mm)\n  rcm_active  1\
+    \ while an RCM point is set;  rcm_*  that point\n  rcm_error   shaft line -> RCM\
+    \ point (mm);  rcm_depth  tip past the point (mm)"}

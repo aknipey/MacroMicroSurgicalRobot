@@ -1,0 +1,53 @@
+date: '2026-10-12T11:53:55'
+duration: 8.886
+code_version: 3fe9421-dirty
+base_frame: base_link
+ee_frame: tool0
+rows: {touch: 6840, stylus: 8687, ur: 4344}
+rosbag: ok
+trajectory_source: /home/aidan-knipe/ros2_ws/trajectories/trajectory_20261012_115403.yaml
+notes: {t: 'host receive time, s since recording start (same clock for every file)',
+  stamp: 'sender''s header stamp, s', TOUCH_PATH: 'teleop target for ee_frame in base_frame,
+    only while WHITE is held', STYLUS_RAW: 'omni_state pose as published (position
+    mm, device frame)', UR_PATH: 'source rtde = tcp_pose_broadcaster (pendant TCP,
+    tool0_controller), tf = TF ee_frame fallback; both converted to base_frame'}
+settings:
+  TOUCH_TRANSLATION_SCALE: 1.0
+  TOUCH_ROTATION_SCALE: 1.0
+  TOUCH_ENABLE_ROTATION: true
+  TOUCH_ENABLE_TWIST: true
+  TOUCH_TWIST_SCALE: 1.0
+  TOUCH_MAX_LINEAR_SPEED: 2.0
+  TOUCH_MAX_ANGULAR_SPEED: 40
+  TOUCH_POSITION_GAIN: 10.0
+  TOUCH_ROTATION_GAIN: 20.0
+  TOUCH_FEEDFORWARD: 1.0
+  TOUCH_FEEDFORWARD_FILTER: 0.02
+  TOUCH_DEADBAND: 0.0003
+  TOUCH_TIMEOUT: 0.1
+  TOUCH_PUBLISH_RATE: 100.0
+  TOUCH_UNITS_TO_M: 0.001
+  TOUCH_MAPPING: toward_base
+  TOUCH_AXIS_MAP: [y, -x, z]
+  TOUCH_STARTUP_DELAY: 8.0
+  KEYBOARD_LINEAR_SPEED: 0.05
+  KEYBOARD_ANGULAR_SPEED: 0.3
+  KEYBOARD_MAX_LINEAR_SPEED: 0.25
+  KEYBOARD_MAX_ANGULAR_SPEED: 1.0
+  KEYBOARD_SPEED_STEP: 1.25
+  KEYBOARD_HOLD_TIME: 0.15
+  KEYBOARD_FIRST_PRESS_HOLD: 0.6
+  KEYBOARD_PUBLISH_RATE: 50.0
+  RECORDER_SAMPLE_RATE: 25.0
+  LOG_DIR: ~/ros2_ws/src/MacroMicroSurgicalRobot/logs
+  LOG_KEEP_ALL_RUNS: false
+  LOG_TF_FALLBACK_RATE: 200.0
+  LOG_BAG_TOPICS: [/phantom/state, /phantom/button, /ur5e_touch_teleop/target_pose,
+    /servo_node/delta_twist_cmds, /servo_node/status, /forward_position_controller/commands,
+    /tcp_pose_broadcaster/pose, /joint_states, /speed_scaling_state_broadcaster/speed_scaling,
+    /tf, /tf_static]
+  PLAYER_DEFAULT_SPEED: 1.0
+  PLAYER_MAX_SPEED: 2.0
+  PLAYER_APPROACH_TIME: 5.0
+  PLAYER_MIN_POINT_SPACING: 0.04
+  HOME_POSITIONS: [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]

@@ -1,0 +1,243 @@
+[INFO] [launch]: All log files can be found below /home/aidan-knipe/.ros/log/2026-11-06-13-57-54-066634-aidan-knipe-Nitro-AN16S-61-223477
+[INFO] [launch]: Default logging verbosity is set to INFO
+[touch_server-12] $GTDD_HOME not set. Using Default value : /home/aidan-knipe/.3dsystems
+[touch_server-12] : Success
+[ros2_control_node-1] [WARN] [1793933874.732044877] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[touch_bridge-13] [INFO] [1793933874.750738055] [omni_haptic_node]: Touch bridge: phantom/state, /button, /pose, /joint_states from touch_server; phantom/force_feedback to it
+[ros2_control_node-1] text not specified in the tf_prefix tag
+[trajectory_recorder.py-11] [INFO] [1793933875.332477488] [trajectory_recorder]: Recorder ready: runs go to ~/ros2_ws/src/MacroMicroSurgicalRobot/logs/NEW_RUN
+[servo_node-15] [WARN] [1793933875.344187328] [servo_node]: Could not enable FIFO RT scheduling policy. Continuing with the default.
+[servo_node-15] [WARN] [1793933875.344277888] [servo_node]: Realtime kernel is recommended for better performance.
+[ros2_control_node-1] [WARN] [1793933875.380522797] [UR_Client_Library:]: Your system/user seems not to be setup for FIFO scheduling. We recommend using a lowlatency kernel with FIFO scheduling. See https://docs.universal-robots.com/Universal_Robots_ROS_Documentation/doc/ur_client_library/doc/real_time.html for details.
+[joint_velocity_limiter.py-10] [INFO] [1793933875.414997180] [joint_velocity_limiter]: Velocity limiter -> /forward_position_controller/commands: speed <= 0.8 x URDF limits, acceleration <= [8.0, 8.0, 15.0, 25.0, 25.0, 25.0] rad/s^2, smoothing 2 x 3 ms, as positions 30 ms ahead
+[touch_server-12] ****************************************
+[touch_server-12] This is the DEVELOPER EDITION of OPENHAPTICS, commercial distribution is prohibited
+[touch_server-12] Please contact 3D Systems to obtain a commercial license
+[touch_server-12] ****************************************
+[touch_bridge-13] [INFO] [1793933875.659461189] [omni_haptic_node]: Receiving Touch state from touch_server
+[touch_server-12] InitLogFile : (null)
+[touch_server-12] (/home/andy/repo/GeomagicTouchDeviceDrivers/PhantomManager/src/HIDManager.cpp,409) RELEASING Interface for 772 
+[touch_server-12] (/home/andy/repo/GeomagicTouchDeviceDrivers/PhantomManager/src/HIDManager.cpp,409) RELEASING Interface for 772 
+[touch_server-12] Found Touch.
+[touch_server-12] touch_server running: state -> udp 47101, forces <- udp 47102 (zeroed after 0.25 s without one)
+[ros2_control_node-1] [WARN] [1793933876.855853279] [controller_manager]: Overrun might occur, Total time : 12937.318 us (Expected < 2000.000 us) --> Read time : 4.298 us, Update time : 12921.008 us (Switch time : 12893.677 us (Switch chained mode time : 0.511 us, perform mode change time : 12.363 us, Activation time : 12874.531 us, Deactivation time : 0.401 us)), Write time : 12.012 us
+[ros2_control_node-1] [WARN] [1793933876.855925825] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 13.071631 ms (missed cycles : 7).
+[dashboard_client-16] [33m[WARN] [1793933878.783284659] [UR_Client_Library:]: Stream is connected but failed to read from it. Re-attempting to read![0m
+[joint_velocity_limiter.py-10] [INFO] [1793933878.788384239] [joint_velocity_limiter]: Joint speed caps: [1.68, 1.68, 2.51, 2.51, 2.51, 2.51] rad/s
+[ur16e_touch_teleop.py-18] [INFO] [1793933883.192099960] [ur16e_touch_teleop]: Tool 2: Micro module  tip (-6.4, 15.6, 436.3) mm, shaft 267.3 mm, 1.68 deg off tool0 z, calibrated 2026-11-06
+[ur16e_touch_teleop.py-18] [INFO] [1793933883.193189521] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[ros2_control_node-1] [WARN] [1793933885.205489322] [controller_manager]: Controller with name 'scaled_joint_trajectory_controller' can not be deactivated since it is not active.
+[ros2_control_node-1] [WARN] [1793933885.205534487] [controller_manager]: Could not deactivate controller with name 'scaled_joint_trajectory_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ros2_control_node-1] [WARN] [1793933885.205542311] [controller_manager]: Controller with name 'joint_trajectory_controller' can not be deactivated since it is not active.
+[ros2_control_node-1] [WARN] [1793933885.205545728] [controller_manager]: Could not deactivate controller with name 'joint_trajectory_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ros2_control_node-1] [WARN] [1793933885.205550406] [controller_manager]: Controller with name 'forward_velocity_controller' can not be deactivated since it is not active.
+[ros2_control_node-1] [WARN] [1793933885.205554264] [controller_manager]: Could not deactivate controller with name 'forward_velocity_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ros2_control_node-1] [WARN] [1793933885.205558432] [controller_manager]: Controller with name 'passthrough_trajectory_controller' can not be deactivated since it is not active.
+[ros2_control_node-1] [WARN] [1793933885.205561698] [controller_manager]: Could not deactivate controller with name 'passthrough_trajectory_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ros2_control_node-1] [WARN] [1793933885.205565905] [controller_manager]: Controller with name 'freedrive_mode_controller' can not be deactivated since it is not active.
+[ros2_control_node-1] [WARN] [1793933885.205568791] [controller_manager]: Could not deactivate controller with name 'freedrive_mode_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ur16e_touch_teleop.py-18] [INFO] [1793933885.237588578] [ur16e_touch_teleop]: Touch teleop ready: hold WHITE to move, double-click WHITE to change scale, click GREY to start/stop recording, hold WHITE + click GREY for RCM mode, hold GREY 1.0 s to switch macro/micro (tilt on, twist on, max 1.20 m/s)
+[ros2_control_node-1] [WARN] [1793933893.833454543] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.601071 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793933909.369450833] [ur16e_touch_teleop]: Robot program running - ready
+[ros2_control_node-1] [WARN] [1793933909.369832437] [controller_manager]: Controller with name 'forward_position_controller' is already active.
+[ros2_control_node-1] [WARN] [1793933909.369894183] [controller_manager]: Controller with name 'forward_position_controller' is already active.
+[ros2_control_node-1] [WARN] [1793933909.369900344] [controller_manager]: Could not activate controller with name 'forward_position_controller'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[ros2_control_node-1] [ERROR] [1793933909.369911305] [controller_manager]: Aborting, no controller is switched! (::STRICT switch)
+[controller_stopper_node-2] [31m[ERROR] [1793933909.370101802] [Controller stopper]: Could not activate requested controllers[0m
+[joint_velocity_limiter.py-10] [INFO] [1793933910.402556863] [joint_velocity_limiter]: Limited 157 commands in the last 5 s (0.31 s of motion)
+[joint_velocity_limiter.py-10] [WARN] [1793933910.402760625] [joint_velocity_limiter]: Arm more than 0.15 rad behind the command for 0.19 s in the last 5 s - command held back
+[joint_velocity_limiter.py-10] [INFO] [1793933915.402854101] [joint_velocity_limiter]: Limited 12 commands in the last 5 s (0.02 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793933920.402536474] [joint_velocity_limiter]: Limited 15 commands in the last 5 s (0.03 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793933955.402669249] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[ros2_control_node-1] [WARN] [1793934023.091284178] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.429984 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793934077.318604218] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[joint_velocity_limiter.py-10] [INFO] [1793934080.402588743] [joint_velocity_limiter]: Limited 9 commands in the last 5 s (0.02 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934085.402574549] [joint_velocity_limiter]: Limited 4 commands in the last 5 s (0.01 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934102.474238003] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[ur16e_touch_teleop.py-18] [INFO] [1793934110.594332855] [ur16e_touch_teleop]: RCM mode ON at tip (0.5715, 0.2367, 0.2144) m - the stylus now drives the tip, max depth 247 mm
+[ur16e_touch_teleop.py-18] [INFO] [1793934116.598979798] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793934120.402674504] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934125.402534914] [joint_velocity_limiter]: Limited 1096 commands in the last 5 s (2.19 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934130.402624978] [joint_velocity_limiter]: Limited 935 commands in the last 5 s (1.87 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934135.402918239] [joint_velocity_limiter]: Limited 7 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934140.402492954] [joint_velocity_limiter]: Limited 21 commands in the last 5 s (0.04 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934145.402924130] [joint_velocity_limiter]: Limited 206 commands in the last 5 s (0.41 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934150.402543580] [joint_velocity_limiter]: Limited 308 commands in the last 5 s (0.62 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934162.955221395] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[joint_velocity_limiter.py-10] [INFO] [1793934165.403002040] [joint_velocity_limiter]: Limited 9 commands in the last 5 s (0.02 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934175.402982602] [joint_velocity_limiter]: Limited 5 commands in the last 5 s (0.01 s of motion)
+[ros2_control_node-1] [WARN] [1793934213.196168049] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.313144 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793934214.775556261] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.702768 ms (missed cycles : 2).
+[joint_velocity_limiter.py-10] [INFO] [1793934235.402485511] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934245.402532344] [joint_velocity_limiter]: Limited 8 commands in the last 5 s (0.02 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934245.673051681] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[joint_velocity_limiter.py-10] [INFO] [1793934250.402659890] [joint_velocity_limiter]: Limited 3 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934255.402524261] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934258.047382122] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[ros2_control_node-1] [WARN] [1793934263.047865196] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.010401 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793934267.662604337] [ur16e_touch_teleop]: RCM mode ON at tip (0.5742, 0.2386, 0.2161) m - the stylus now drives the tip, max depth 247 mm
+[ros2_control_node-1] [WARN] [1793934285.963455023] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.601761 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793934294.716006069] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793934300.402491809] [joint_velocity_limiter]: Limited 4 commands in the last 5 s (0.01 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934304.371149451] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[joint_velocity_limiter.py-10] [INFO] [1793934305.402567371] [joint_velocity_limiter]: Limited 14 commands in the last 5 s (0.03 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934310.402636316] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934330.403106618] [joint_velocity_limiter]: Limited 3 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934335.402480277] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934340.402864283] [joint_velocity_limiter]: Limited 9 commands in the last 5 s (0.02 s of motion)
+[ros2_control_node-1] [WARN] [1793934341.333481026] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.627744 ms (missed cycles : 2).
+[joint_velocity_limiter.py-10] [INFO] [1793934345.402552971] [joint_velocity_limiter]: Limited 851 commands in the last 5 s (1.70 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934356.116202797] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[ur16e_touch_teleop.py-18] [INFO] [1793934366.060063924] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[ur16e_touch_teleop.py-18] [INFO] [1793934370.428822803] [ur16e_touch_teleop]: RCM mode ON at tip (0.5712, 0.2385, 0.2146) m - the stylus now drives the tip, max depth 247 mm
+[ur16e_touch_teleop.py-18] [INFO] [1793934384.093948625] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793934390.402479002] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934395.402651223] [joint_velocity_limiter]: Limited 168 commands in the last 5 s (0.34 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934400.402802749] [joint_velocity_limiter]: Limited 2104 commands in the last 5 s (4.21 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934405.402565619] [joint_velocity_limiter]: Limited 264 commands in the last 5 s (0.53 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934410.402549141] [joint_velocity_limiter]: Limited 17 commands in the last 5 s (0.03 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934415.402568977] [joint_velocity_limiter]: Limited 725 commands in the last 5 s (1.45 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934415.857281763] [ur16e_touch_teleop]: Switched to MICRO - WHITE now drives the micro-manipulator
+[ur16e_touch_teleop.py-18] [INFO] [1793934428.444429037] [ur16e_touch_teleop]: Switched to MACRO - WHITE now drives the arm
+[ur16e_touch_teleop.py-18] [INFO] [1793934433.189608034] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[ur16e_touch_teleop.py-18] [WARN] [1793934434.094649376] [ur16e_touch_teleop]: Near the shoulder (wrist centre near the base axis) singularity (condition 30) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [INFO] [1793934434.337696211] [ur16e_touch_teleop]: Clear of the singularity
+[ur16e_touch_teleop.py-18] [WARN] [1793934434.789719999] [ur16e_touch_teleop]: Near the shoulder (wrist centre near the base axis) singularity (condition 30) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [WARN] [1793934434.903828827] [ur16e_touch_teleop]: At the elbow (arm stretched out) singularity limit (condition 60) - backing out; keep holding WHITE, or move the stylus away
+[joint_velocity_limiter.py-10] [INFO] [1793934435.402507123] [joint_velocity_limiter]: Limited 180 commands in the last 5 s (0.36 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793934435.621665934] [ur16e_touch_teleop]: Clear of the singularity
+[ur16e_touch_teleop.py-18] [WARN] [1793934436.865778612] [ur16e_touch_teleop]: Near the shoulder (wrist centre near the base axis) singularity (condition 30) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [WARN] [1793934436.984282942] [ur16e_touch_teleop]: At the elbow (arm stretched out) singularity limit (condition 60) - backing out; keep holding WHITE, or move the stylus away
+[ur16e_touch_teleop.py-18] [INFO] [1793934437.388534255] [ur16e_touch_teleop]: RCM mode ON at tip (0.5658, 0.1789, 0.3151) m - the stylus now drives the tip, max depth 247 mm
+[ur16e_touch_teleop.py-18] [WARN] [1793934437.389805480] [ur16e_touch_teleop]: Near the elbow (arm stretched out) singularity (condition 56) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [ERROR] [1793934437.399567620] [ur16e_touch_teleop]: Shaft is 5.7 mm off the RCM point (limit 5.0 mm) - holding still. Hold WHITE + click GREY to leave RCM mode
+[joint_velocity_limiter.py-10] [INFO] [1793934440.402575647] [joint_velocity_limiter]: Limited 144 commands in the last 5 s (0.29 s of motion)
+[ros2_control_node-1] [WARN] [1793934443.051067718] [controller_manager]: Overrun might occur, Total time : 2119.838 us (Expected < 2000.000 us) --> Read time : 58.311 us, Update time : 1999.118 us, Write time : 62.409 us
+[ros2_control_node-1] [WARN] [1793934443.051167818] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.313714 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793934466.982294705] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[ur16e_touch_teleop.py-18] [WARN] [1793934466.984510763] [ur16e_touch_teleop]: Near the elbow (arm stretched out) singularity (condition 45) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [INFO] [1793934467.261551816] [ur16e_touch_teleop]: Clear of the singularity
+[ur16e_touch_teleop.py-18] [WARN] [1793934467.918515366] [ur16e_touch_teleop]: Near the shoulder (wrist centre near the base axis) singularity (condition 30) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [INFO] [1793934468.156249847] [ur16e_touch_teleop]: Clear of the singularity
+[joint_velocity_limiter.py-10] [INFO] [1793934470.402532687] [joint_velocity_limiter]: Limited 513 commands in the last 5 s (1.03 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793934475.403018375] [joint_velocity_limiter]: Limited 42 commands in the last 5 s (0.08 s of motion)
+[ur16e_touch_teleop.py-18] [WARN] [1793934475.777867803] [ur16e_touch_teleop]: Near the shoulder (wrist centre near the base axis) singularity (condition 30) - motion towards it is slowed, along / away from it is free
+[ur16e_touch_teleop.py-18] [INFO] [1793934476.213872696] [ur16e_touch_teleop]: Clear of the singularity
+[joint_velocity_limiter.py-10] [INFO] [1793934480.402534249] [joint_velocity_limiter]: Limited 40 commands in the last 5 s (0.08 s of motion)
+[ros2_control_node-1] [WARN] [1793934488.846384364] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.530220 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793934497.191663700] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.809385 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793934518.709535854] [ur16e_touch_teleop]: Switched to MICRO - WHITE now drives the micro-manipulator
+[ur16e_touch_teleop.py-18] [INFO] [1793934565.469325136] [ur16e_touch_teleop]: Switched to MACRO - WHITE now drives the arm
+[ur16e_touch_teleop.py-18] [INFO] [1793934570.031190466] [ur16e_touch_teleop]: Switched to MICRO - WHITE now drives the micro-manipulator
+[joint_velocity_limiter.py-10] [INFO] [1793934570.402492466] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[ros2_control_node-1] [WARN] [1793934671.680004444] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.151162 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793934679.915890718] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.036003 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793934923.090284813] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.430629 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793935174.155299457] [ur16e_touch_teleop]: Switched to MACRO - WHITE now drives the arm
+[joint_velocity_limiter.py-10] [INFO] [1793935180.402492946] [joint_velocity_limiter]: Limited 20 commands in the last 5 s (0.04 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935200.402850005] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935205.402493279] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935210.242518898] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[joint_velocity_limiter.py-10] [INFO] [1793935210.402995099] [joint_velocity_limiter]: Limited 481 commands in the last 5 s (0.96 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935215.402507089] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935220.402521157] [joint_velocity_limiter]: Limited 14 commands in the last 5 s (0.03 s of motion)
+[ros2_control_node-1] [WARN] [1793935287.471667192] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.813148 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793935311.908174779] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 3.319834 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793935341.167656044] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.802101 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793935352.995424077] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.570715 ms (missed cycles : 2).
+[ur16e_touch_teleop.py-18] [INFO] [1793935374.384065382] [ur16e_touch_teleop]: Tool 1: NDI wand 8700340  tip (-0.4, 9.8, 366.9) mm, shaft 158.6 mm, 1.05 deg off tool0 z, calibrated 2026-10-26
+[joint_velocity_limiter.py-10] [INFO] [1793935395.403335457] [joint_velocity_limiter]: Limited 4 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935400.402552769] [joint_velocity_limiter]: Limited 15 commands in the last 5 s (0.03 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935401.964705160] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[ur16e_touch_teleop.py-18] [INFO] [1793935411.366396722] [ur16e_touch_teleop]: RCM mode ON at tip (0.5582, 0.2306, 0.2146) m - the stylus now drives the tip, max depth 139 mm
+[ur16e_touch_teleop.py-18] [INFO] [1793935412.684539994] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793935415.402535188] [joint_velocity_limiter]: Limited 5 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935420.402535779] [joint_velocity_limiter]: Limited 776 commands in the last 5 s (1.55 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935425.402822634] [joint_velocity_limiter]: Limited 14 commands in the last 5 s (0.03 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935425.823180335] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[joint_velocity_limiter.py-10] [INFO] [1793935430.402543210] [joint_velocity_limiter]: Limited 19 commands in the last 5 s (0.04 s of motion)
+[ros2_control_node-1] [WARN] [1793935439.637506662] [controller_manager]: Overrun might occur, Total time : 2557.069 us (Expected < 2000.000 us) --> Read time : 2323.990 us, Update time : 223.661 us, Write time : 9.418 us
+[ros2_control_node-1] [WARN] [1793935439.637599236] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.745233 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793935463.043523143] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.667958 ms (missed cycles : 2).
+[ros2_control_node-1] [WARN] [1793935463.055224014] [controller_manager]: Overrun might occur, Total time : 2292.231 us (Expected < 2000.000 us) --> Read time : 49.744 us, Update time : 2187.193 us, Write time : 55.294 us
+[ros2_control_node-1] [WARN] [1793935465.255469785] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.615861 ms (missed cycles : 2).
+[joint_velocity_limiter.py-10] [INFO] [1793935485.402556019] [joint_velocity_limiter]: Limited 5 commands in the last 5 s (0.01 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935500.402555078] [joint_velocity_limiter]: Limited 119 commands in the last 5 s (0.24 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935502.630627305] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[joint_velocity_limiter.py-10] [INFO] [1793935505.402531344] [joint_velocity_limiter]: Limited 2 commands in the last 5 s (0.00 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935508.914983342] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[ur16e_touch_teleop.py-18] [INFO] [1793935515.704144361] [ur16e_touch_teleop]: RCM mode ON at tip (0.5561, 0.2346, 0.2159) m - the stylus now drives the tip, max depth 139 mm
+[ur16e_touch_teleop.py-18] [INFO] [1793935518.208958883] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793935525.402475120] [joint_velocity_limiter]: Limited 8 commands in the last 5 s (0.02 s of motion)
+[ur16e_touch_teleop.py-18] [WARN] [1793935529.680560320] [ur16e_touch_teleop]: Retract the tool before leaving RCM mode (depth 11.7 mm, needs <= 3.0 mm)
+[joint_velocity_limiter.py-10] [INFO] [1793935530.402906638] [joint_velocity_limiter]: Limited 10 commands in the last 5 s (0.02 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935531.108530619] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[joint_velocity_limiter.py-10] [INFO] [1793935535.402513253] [joint_velocity_limiter]: Limited 27 commands in the last 5 s (0.05 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935553.229713649] [ur16e_touch_teleop]: Tool 2: Micro module  tip (-6.4, 15.6, 436.3) mm, shaft 267.3 mm, 1.68 deg off tool0 z, calibrated 2026-11-06
+[joint_velocity_limiter.py-10] [INFO] [1793935560.402908142] [joint_velocity_limiter]: Limited 5 commands in the last 5 s (0.01 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935573.324532384] [ur16e_touch_teleop]: RCM mode ON at tip (0.5518, 0.2286, 0.2162) m - the stylus now drives the tip, max depth 247 mm
+[joint_velocity_limiter.py-10] [INFO] [1793935580.402528610] [joint_velocity_limiter]: Limited 1 commands in the last 5 s (0.00 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935584.115792621] [ur16e_touch_teleop]: Motion scale 1:5 (rotation 1:5)
+[joint_velocity_limiter.py-10] [INFO] [1793935585.402503139] [joint_velocity_limiter]: Limited 41 commands in the last 5 s (0.08 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935588.128613132] [ur16e_touch_teleop]: Motion scale 1:20 (rotation 1:20)
+[joint_velocity_limiter.py-10] [INFO] [1793935590.402547179] [joint_velocity_limiter]: Limited 10 commands in the last 5 s (0.02 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935592.222766897] [ur16e_touch_teleop]: Motion scale 1:1 (rotation 1:1)
+[joint_velocity_limiter.py-10] [INFO] [1793935595.402896658] [joint_velocity_limiter]: Limited 1147 commands in the last 5 s (2.29 s of motion)
+[ur16e_touch_teleop.py-18] [INFO] [1793935598.518577837] [ur16e_touch_teleop]: RCM mode OFF - free motion
+[joint_velocity_limiter.py-10] [INFO] [1793935600.402478644] [joint_velocity_limiter]: Limited 20 commands in the last 5 s (0.04 s of motion)
+[joint_velocity_limiter.py-10] [INFO] [1793935605.402533885] [joint_velocity_limiter]: Limited 5 commands in the last 5 s (0.01 s of motion)
+[ros2_control_node-1] [WARN] [1793935703.103037185] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 500 Hz. The loop took 2.183252 ms (missed cycles : 2).
+[touch_bridge-13] [INFO] [1793935720.287390798] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[move_group-14] Stack trace (most recent call last):
+[joint_velocity_limiter.py-10] Traceback (most recent call last):
+[joint_velocity_limiter.py-10]   File "/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/joint_velocity_limiter.py", line 257, in <module>
+[joint_velocity_limiter.py-10]     main()
+[joint_velocity_limiter.py-10]   File "/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/joint_velocity_limiter.py", line 247, in main
+[joint_velocity_limiter.py-10]     rclpy.spin(node)
+[joint_velocity_limiter.py-10]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+[joint_velocity_limiter.py-10]     executor.spin_once()
+[joint_velocity_limiter.py-10]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+[joint_velocity_limiter.py-10]     self._spin_once_impl(timeout_sec)
+[joint_velocity_limiter.py-10]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+[joint_velocity_limiter.py-10]     handler, entity, node = self.wait_for_ready_callbacks(
+[joint_velocity_limiter.py-10]                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[joint_velocity_limiter.py-10]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+[joint_velocity_limiter.py-10]     return next(self._cb_iter)
+[joint_velocity_limiter.py-10]            ^^^^^^^^^^^^^^^^^^^
+[joint_velocity_limiter.py-10]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 757, in _wait_for_ready_callbacks
+[joint_velocity_limiter.py-10]     wait_set = _rclpy.WaitSet(
+[joint_velocity_limiter.py-10]                ^^^^^^^^^^^^^^^
+[joint_velocity_limiter.py-10] rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+[move_group-14] #6    Object "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2", at 0xffffffffffffffff, in 
+[trajectory_recorder.py-11] Traceback (most recent call last):
+[trajectory_recorder.py-11]   File "/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/trajectory_recorder.py", line 634, in <module>
+[trajectory_recorder.py-11]     main()
+[trajectory_recorder.py-11]   File "/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/trajectory_recorder.py", line 622, in main
+[trajectory_recorder.py-11]     rclpy.spin(node)
+[trajectory_recorder.py-11]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+[trajectory_recorder.py-11]     executor.spin_once()
+[trajectory_recorder.py-11]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+[trajectory_recorder.py-11]     self._spin_once_impl(timeout_sec)
+[trajectory_recorder.py-11]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+[trajectory_recorder.py-11]     handler, entity, node = self.wait_for_ready_callbacks(
+[trajectory_recorder.py-11]                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[trajectory_recorder.py-11]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+[trajectory_recorder.py-11]     return next(self._cb_iter)
+[trajectory_recorder.py-11]            ^^^^^^^^^^^^^^^^^^^
+[trajectory_recorder.py-11]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 757, in _wait_for_ready_callbacks
+[trajectory_recorder.py-11]     wait_set = _rclpy.WaitSet(
+[trajectory_recorder.py-11]                ^^^^^^^^^^^^^^^
+[trajectory_recorder.py-11] rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+[touch_server-12] touch_server stopped
+[ros2_control_node-1] [ERROR] [1793935720.423011020] [controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ros2_control_node-1] [ERROR] [1793935720.423010960] [controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ERROR] [joint_velocity_limiter.py-10]: process has died [pid 223522, exit code 1, cmd '/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/joint_velocity_limiter.py --ros-args -r __node:=joint_velocity_limiter --params-file /tmp/launch_params_0d5gxq2a'].
+[ERROR] [trajectory_recorder.py-11]: process has died [pid 223523, exit code 1, cmd '/home/aidan-knipe/ros2_ws/install/macro_micro_robot/lib/macro_micro_robot/trajectory_recorder.py --ros-args -r __node:=trajectory_recorder --params-file /tmp/launch_params_whn6b_pi'].
+[move_group-14] #5    Object "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group", at 0x619589cb6a14, in _start
+[move_group-14] #4    Source "../csu/libc-start.c", line 360, in __libc_start_main_impl [0x78a964c2a28a]
+[move_group-14] #3    Source "../sysdeps/nptl/libc_start_call_main.h", line 58, in __libc_start_call_main [0x78a964c2a1c9]
+[move_group-14] #2    Object "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group", at 0x619589cb54e7, in main
+[move_group-14] #1    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x78a9655162f7, in rclcpp::Executor::~Executor()
+[move_group-14] #0    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x78a965510dde, in 
+[move_group-14] Segmentation fault (Address not mapped to object [0x78a9290ae170])
+[ERROR] [move_group-14]: process has died [pid 223712, exit code -11, cmd '/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args --log-level warn --log-level move_group.moveit.moveit.ros.occupancy_map_monitor:=fatal --params-file /tmp/launch_params_g1unazic --params-file /tmp/launch_params_0_9d3dz3 --params-file /tmp/launch_params_lfr0maaf'].

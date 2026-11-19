@@ -24,11 +24,12 @@ Touch ─► touch_server ─UDP─► touch_bridge ─► ur16e_touch_teleop �
 | [`include/macro_micro_robot/`](include/macro_micro_robot) | C++ headers |
 | [`launch/`](launch), [`urdf/`](urdf), [`meshes/`](meshes), [`rviz/`](rviz) | Launch files and the micro-module model |
 | [`config/`](config) | Tool library (`tools.yaml`), arm and tool calibrations, smoothed speedj URScript |
-| [`scripts/`](scripts) | `launch_system.sh` (start a session), `replay_batch.sh`, `set_v9_mode.sh`; `calibration/` (tool and hand-eye calibration), `lab/` (scripted lab sessions), `touch_diagnostics/` |
-| [`thesis/`](thesis/README.md) | All offline analysis of the recorded runs: the report's analyses in `data_analysis/`, per-run checks in `run_tools/` |
+| [`scripts/`](scripts) | `launch_system.sh` (start a session); `calibration/` (kinematics check, hand-eye, tool tip and tool-line calibration); `touch_diagnostics/` |
+| [`thesis/results/`](thesis/results/README.md) | The analysis behind every number and data figure in the thesis report, one folder per result, in report order |
+| [`data/`](data/README.md) | The recordings the results use (`data/recordings/`; small files in git, CSVs and bags as a separate archive) and their index |
 | [`docs/`](docs) | Guides, lab log, report supplement, parts list, architecture diagram |
 | [`vendor/ur_calibration/`](vendor/ur_calibration) | Unmodified upstream code from the UR driver (do not edit) |
-| `logs/` | Recorded runs (not in git) |
+| `logs/` | The recorder's working folder on the lab computer (not in git) |
 
 ## Install
 
@@ -100,10 +101,7 @@ ros2 run macro_micro_robot trajectory_player.py home                 # safe read
 ros2 run macro_micro_robot trajectory_player.py latest --speed 0.5   # replay joint trajectory
 ros2 launch macro_micro_robot ur16e_teleop.launch.py input:=replay   # then:
 ros2 run macro_micro_robot stylus_replay.py V9b/SomeRun              # replay the same hand input
-python3 src/MacroMicroSurgicalRobot/thesis/run_tools/plot_paths.py   # plot the last run
 ```
-
-`scripts/replay_batch.sh` replays a set of runs several times each into a version folder.
 
 ### Calibration
 
@@ -125,8 +123,8 @@ Procedures are in [docs/THESIS_APPENDIX.md §5](docs/THESIS_APPENDIX.md#5-calibr
 | [docs/THESIS_APPENDIX.md](docs/THESIS_APPENDIX.md) | Report supplement: architecture, settings, hardware, calibration, risk, reproducibility |
 | [docs/UR_CALIBRATION_FIX.md](docs/UR_CALIBRATION_FIX.md) | Why the driver's calibration tool is replaced |
 | [docs/HAPTICS_HANDOFF.md](docs/HAPTICS_HANDOFF.md) | Touch force-feedback findings |
-| [docs/lab_plans/](docs/lab_plans) | Lab session plans |
-| [thesis/README.md](thesis/README.md) | How to rerun the analysis |
+| [thesis/results/README.md](thesis/results/README.md) | The results: index by report section, how to rerun them |
+| [data/README.md](data/README.md) | The recordings: what is kept, what is in git, the archive |
 
 ## Credits
 

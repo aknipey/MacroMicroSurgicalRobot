@@ -1,0 +1,3 @@
+t,unix_time,event,source,x,y,z
+0.0015,1793928611.6984,start,teleop,,,
+13.2273,1793928624.9241,stop,teleop,,,

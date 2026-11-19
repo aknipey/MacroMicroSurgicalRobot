@@ -1,0 +1,5 @@
+t,unix_time,event,source,x,y,z
+0.0014,1793663129.3749,start,teleop,,,
+36.8594,1793663166.2329,rcm_set,teleop,35.6664,-25.471,-1412.1216
+94.1750,1793663223.5485,rcm_clear,teleop,,,
+101.2607,1793663230.6342,stop,teleop,,,
