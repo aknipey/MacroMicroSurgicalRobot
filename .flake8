@@ -1,0 +1,8 @@
+# ament_flake8 style, at this repo's line length, with its double quotes and docstring habits.
+[flake8]
+max-line-length = 120
+ignore = Q,D,I,C408,A003,W503,W504,E226,E241,E731,E402
+exclude = vendor,launch/ur_rsp_smooth_speedj.launch.py,build,install,log,logs
+per-file-ignores =
+    scripts/*:E501,E401,E225,E231,E228,E127,E128,E111,E301
+    thesis/*:E501,E401,E225,E231,E228,E127,E128,E111,E301

@@ -38,8 +38,8 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 from macro_micro_robot.ur16e_common import (
     RECORDER_START_SERVICE,
     RECORDER_STOP_SERVICE,
+    TELEOP_CONTROLLER,
     TRAJECTORY_ACTION,
-    TRAJECTORY_CONTROLLER,
     activate_controller,
     ndi_tracker_listening,
     servo_controller,
@@ -211,7 +211,10 @@ class StylusReplay(Node):
         """Double clicks needed to bring the teleop node from its current scale to `step`."""
         steps = cfg.TOUCH_SCALE_STEPS
         current = (self.teleop_scale or cfg.TOUCH_TRANSLATION_SCALE) / cfg.TOUCH_TRANSLATION_SCALE
-        index = lambda s: min(range(len(steps)), key=lambda i: abs(steps[i] - s))
+
+        def index(s):
+            return min(range(len(steps)), key=lambda i: abs(steps[i] - s))
+
         if abs(steps[index(step)] - step) > 1e-6:
             self.get_logger().warn(f"Recorded scale step {step:g} is not in TOUCH_SCALE_STEPS {steps} "
                                    f"- using {steps[index(step)]:g}")
@@ -253,7 +256,7 @@ class StylusReplay(Node):
         """follow() with Servo paused and its controller swapped out, then back."""
         if not set_servo_paused(self, True, timeout=2.0):
             self.get_logger().warn("Could not pause MoveIt Servo")
-        ok = activate_controller(self, TRAJECTORY_CONTROLLER) and self.follow(points, what)
+        ok = activate_controller(self, TELEOP_CONTROLLER) and self.follow(points, what)
         activate_controller(self, servo_controller(self))
         set_servo_paused(self, False, timeout=2.0)
         return ok

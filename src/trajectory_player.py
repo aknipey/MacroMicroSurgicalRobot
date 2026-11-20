@@ -33,8 +33,8 @@ from rclpy.utilities import remove_ros_args
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from macro_micro_robot.ur16e_common import (
+    TELEOP_CONTROLLER,
     TRAJECTORY_ACTION,
-    TRAJECTORY_CONTROLLER,
     activate_controller,
     servo_controller,
     set_servo_paused,
@@ -105,7 +105,8 @@ class TrajectoryPlayer(Node):
         last_time = None
         for sample in data["samples"]:
             t = approach_time + sample["time"] / speed
-            if last_time is not None and t - last_time < cfg.PLAYER_MIN_POINT_SPACING and sample is not data["samples"][-1]:
+            is_last = sample is data["samples"][-1]
+            if last_time is not None and t - last_time < cfg.PLAYER_MIN_POINT_SPACING and not is_last:
                 continue
             point = JointTrajectoryPoint()
             point.positions = [float(p) for p in sample["positions"]]
@@ -187,7 +188,7 @@ def main():
         servo_paused = set_servo_paused(node, True, timeout=2.0)
         if not servo_paused:
             node.get_logger().warn("Could not pause MoveIt Servo - don't touch the teleop input during replay")
-        if not activate_controller(node, TRAJECTORY_CONTROLLER):
+        if not activate_controller(node, TELEOP_CONTROLLER):
             return
         node.execute(goal)
     except KeyboardInterrupt:

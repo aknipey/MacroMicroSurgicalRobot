@@ -56,18 +56,22 @@ class JointVelocityLimiter(Node):
         self.declare_parameter("output", "velocity")        # or "position"
         self.declare_parameter("lead", cfg.SERVO_POSITION_LEAD)                 # s, position output
         self.declare_parameter("max_position_error", cfg.SERVO_POSITION_MAX_ERROR)     # rad, position output
-        p = lambda name: self.get_parameter(name).value
-        self.position_output = p("output") == "position"
-        if p("output") not in ("velocity", "position"):
-            raise ValueError(f"output must be 'velocity' or 'position', not {p('output')!r}")
-        self.lead = p("lead")
-        self.max_position_error = p("max_position_error")
-        self.period = 1.0 / p("rate")
-        self.speed_fraction = p("speed_fraction")
-        self.max_acceleration = np.array(p("max_acceleration"), dtype=float)
+
+        def param(name):
+            return self.get_parameter(name).value
+
+        self.position_output = param("output") == "position"
+        if param("output") not in ("velocity", "position"):
+            raise ValueError(f"output must be 'velocity' or 'position', not {param('output')!r}")
+        self.lead = param("lead")
+        self.max_position_error = param("max_position_error")
+        self.period = 1.0 / param("rate")
+        self.speed_fraction = param("speed_fraction")
+        self.max_acceleration = np.array(param("max_acceleration"), dtype=float)
         if self.max_acceleration.shape != (len(UR_JOINTS),) or np.any(self.max_acceleration <= 0.0):
-            raise ValueError(f"max_acceleration needs {len(UR_JOINTS)} positive values, not {p('max_acceleration')}")
-        smoothing = p("smoothing")
+            raise ValueError(f"max_acceleration needs {len(UR_JOINTS)} positive values, "
+                             f"not {param('max_acceleration')}")
+        smoothing = param("smoothing")
         if smoothing < 0.0:
             raise ValueError(f"smoothing must be >= 0, not {smoothing}")
         self.alpha = self.period / (smoothing + self.period)   # per stage; 1 = no smoothing
@@ -87,14 +91,14 @@ class JointVelocityLimiter(Node):
 
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, "/robot_description", self.on_robot_description, latched)
-        self.publisher = self.create_publisher(Float64MultiArray, p("output_topic"), 10)
+        self.publisher = self.create_publisher(Float64MultiArray, param("output_topic"), 10)
         self.create_subscription(Float64MultiArray, LIMITER_INPUT_TOPIC, self.on_command, 10)
         if self.position_output:
             self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
         self.create_timer(self.period / 2.0, self.check)
         self.create_timer(5.0, self.report)
         self.get_logger().info(
-            f"Velocity limiter -> {p('output_topic')}: speed <= {self.speed_fraction:g} x URDF limits, "
+            f"Velocity limiter -> {param('output_topic')}: speed <= {self.speed_fraction:g} x URDF limits, "
             f"acceleration <= {self.max_acceleration.tolist()} rad/s^2, smoothing 2 x {smoothing * 1000:g} ms"
             + (f", as positions {self.lead * 1000:g} ms ahead" if self.position_output else ""))
 

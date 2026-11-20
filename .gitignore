@@ -8,7 +8,7 @@ log/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 
 # Thesis results: regenerable caches, console logs, local backups (thesis/results/README.md)
 thesis/results/**/cache/
@@ -27,6 +27,11 @@ data/recordings/**
 
 # Editors
 .vscode/
+.idea/
+*.user
 *~
 .#*
-*.user
+*.swp
+
+# Local working notes (kept on the lab PC, not part of the repository)
+docs/HAPTICS_HANDOFF.md

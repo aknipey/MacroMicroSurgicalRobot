@@ -1,9 +1,8 @@
-"""Haptic cues on the Touch stylus, sent to omni_state's NAME/force_feedback.
+"""Haptic cues on the Touch stylus, sent to the driver's NAME/force_feedback.
 
 The driver applies the last force it was sent (N, in the /phantom/state position axes:
 x right, y away from the operator, z up) on every 1 kHz servo cycle until a new one
-arrives, and adds a little damping of its own. A node that stops publishing therefore
-leaves its last force on: always send zero when done.
+arrives or it times out. Always send zero when done.
 
 The RCM walls and detent are not here: touch_server renders them in the Touch's own
 1 kHz loop from a scene the teleop sends (a spring computed over ROS arrives too late

@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(macro_micro_robot)
 
-# Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,14 +13,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(visualization_msgs REQUIRED)
-find_package(controller_manager_msgs REQUIRED)
 find_package(omni_msgs REQUIRED)
-find_package(cartesian_control_msgs REQUIRED)
 find_package(motor_angles_msg REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -33,28 +28,11 @@ find_package(yaml_cpp_vendor REQUIRED)
 include_directories(include)
 
 ## Helper libraries (pure C++ / Eigen / tf2, no ROS API)
-add_library(pose src/Pose.cpp)
+add_library(pose src/pose.cpp)
 ament_target_dependencies(pose tf2)
 
-add_library(manipulator_module src/ManipulatorModule.cpp)
+add_library(manipulator_module src/manipulator_module.cpp)
 target_link_libraries(manipulator_module Eigen3::Eigen)
-
-## ur16e_control node
-add_executable(ur16e_control src/ur16e_control.cpp)
-target_link_libraries(ur16e_control pose)
-ament_target_dependencies(ur16e_control
-  rclcpp
-  rclcpp_action
-  std_msgs
-  geometry_msgs
-  sensor_msgs
-  controller_manager_msgs
-  omni_msgs
-  cartesian_control_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
 
 ## micro_module_control node
 add_executable(micro_module_control src/micro_module_control.cpp)
@@ -66,21 +44,6 @@ ament_target_dependencies(micro_module_control
   omni_msgs
   motor_angles_msg
   tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
-
-## android_pose_subscriber node
-add_executable(android_pose_subscriber src/android_pose_subscriber.cpp)
-ament_target_dependencies(android_pose_subscriber
-  rclcpp
-  std_msgs
-  geometry_msgs
-  sensor_msgs
-  visualization_msgs
-  omni_msgs
-  tf2
-  tf2_ros
   tf2_geometry_msgs
 )
 
@@ -95,7 +58,6 @@ target_include_directories(ur_calibration_extract PRIVATE vendor/ur_calibration/
 target_link_libraries(ur_calibration_extract ur_client_library::urcl yaml-cpp Eigen3::Eigen)
 ament_target_dependencies(ur_calibration_extract rclcpp)
 
-## C++ executables
 ## Touch driver, split in two: OpenHaptics renders no force in a process that has ROS 2's
 ## libraries (lttng-ust / libnuma) loaded, so touch_server (device, OpenHaptics only -
 ## never link ROS into it) and touch_bridge (ROS only) talk over UDP on localhost
@@ -113,9 +75,7 @@ add_executable(touch_bridge src/touch_bridge.cpp)
 ament_target_dependencies(touch_bridge rclcpp geometry_msgs sensor_msgs omni_msgs)
 
 install(TARGETS
-  ur16e_control
   micro_module_control
-  android_pose_subscriber
   touch_bridge
   ur_calibration_extract
   DESTINATION lib/${PROJECT_NAME}
@@ -123,7 +83,6 @@ install(TARGETS
 
 ## Python nodes
 install(PROGRAMS
-  src/android_pose_publisher.py
   src/ur16e_keyboard_teleop.py
   src/ur16e_touch_teleop.py
   src/trajectory_recorder.py

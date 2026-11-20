@@ -34,7 +34,7 @@ The driver warned about this on every connection. **125 ROS logs (2026-10-01 to 
 
 and none contain `Calibration checked successfully`. (`grep -rl "don't match" ~/.ros/log | wc -l`)
 
-The other evidence is in `07_remaining_experiments.md` §1.1: TF vs controller tool0 drifting 0.6–1.2 mm
+The other evidence was in the lab plan `07_remaining_experiments.md` §1.1 (removed 2026-11-19; in git history): TF vs controller tool0 drifting 0.6–1.2 mm
 within a run (`META.yaml tcp_offset.check_max_mm`), the 0.17–3.7 mm NDI pivot offset (R7.9), and the
 pose-dependent 1.5–1.9 mm micro tip residual (R8.4).
 

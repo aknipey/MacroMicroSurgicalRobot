@@ -120,8 +120,8 @@ and [`launch/touch_driver.launch.py`](../launch/touch_driver.launch.py). The blo
 
 The Touch driver replaces the community `omni_state` node with the same topic names (`/phantom/state`,
 `/phantom/button`, `/phantom/joint_states` and `/phantom/force_feedback`), so the rest of the stack is unchanged.
-The split into two processes is what lets OpenHaptics render force (report Appendix A.2, haptics bench tests; handoff
-notes in [`docs/HAPTICS_HANDOFF.md`](HAPTICS_HANDOFF.md)).
+The split into two processes is what lets OpenHaptics render force (report Appendix A.2, haptics bench tests; full
+history in [`docs/VERSIONS.md`](VERSIONS.md), V7 part 2).
 
 The teleoperation node runs from a live Touch or from a replay, selected by a launch argument; the replay feeds the
 same node, so replayed and live runs differ only in where the stylus pose comes from. Mock hardware, with or without

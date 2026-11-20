@@ -5,26 +5,24 @@
   <version>0.1.0</version>
   <description>Teleoperation of a UR16e and a continuum micro-manipulator with a 3D Systems Touch stylus, through MoveIt Servo, with RCM mode, run recording and replay.</description>
 
-  <maintainer email="z5207471@student.unsw.edu.au">z5207471@student.unsw.edu.au</maintainer>
+  <maintainer email="z5418749@student.unsw.edu.au">Aidan Knipe</maintainer>
 
-  <license>TODO</license>
+  <license>MIT</license>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <!-- Client libraries -->
   <depend>rclcpp</depend>
-  <depend>rclcpp_action</depend>
   <depend>rclpy</depend>
 
   <!-- Message / interface packages -->
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
-  <depend>visualization_msgs</depend>
   <depend>controller_manager_msgs</depend>
   <depend>omni_msgs</depend>
-  <depend>cartesian_control_msgs</depend>
   <depend>motor_angles_msg</depend>
 
   <!-- Transforms -->

@@ -45,7 +45,7 @@ SERVO_POSITION_TOPIC = f"/{POSITION_CONTROLLER}/commands"
 EMULATOR_TRAJECTORY_TOPIC = "/ur_emulator/joint_trajectory"
 EMULATOR_VELOCITY_TOPIC = "/ur_emulator/commands"
 EMULATOR_POSITION_TOPIC = "/ur_emulator/positions"
-EMULATOR_CONTROLLER = "forward_position_controller"
+EMULATOR_CONTROLLER = POSITION_CONTROLLER
 # joint_velocity_limiter.py (velocity mode) sits between Servo and the velocity
 # controller (or ur_emulator): Servo publishes here, the limiter's output_topic
 # parameter says where the limited velocities go
@@ -63,8 +63,7 @@ UR_JOINTS = [
 # forward_velocity_controller keeps its last command until a new one arrives, so the
 # arm would keep moving if Servo died mid-motion: VelocityWatchdog zeroes it after this (s)
 VELOCITY_WATCHDOG_TIMEOUT = 0.05
-TRAJECTORY_CONTROLLER = "scaled_joint_trajectory_controller"
-TRAJECTORY_ACTION = "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+TRAJECTORY_ACTION = f"/{TELEOP_CONTROLLER}/follow_joint_trajectory"
 
 # Every other joint-level controller the UR driver may have running. Only one of
 # these can claim the joint command interfaces at a time.
@@ -382,7 +381,8 @@ class SingularityGuard:
             self.limiting = min(1.0, (self.condition - self.slow) / (self.stop - self.slow))
             towards = self.twist_gradient @ twist
             if towards < 0.0:
-                twist = twist - self.limiting * towards / (self.twist_gradient @ self.twist_gradient) * self.twist_gradient
+                gradient_sq = self.twist_gradient @ self.twist_gradient
+                twist = twist - self.limiting * towards / gradient_sq * self.twist_gradient
             joint_velocity = damped_inverse(twist)
             if self.condition > self.stop:
                 speed = min(self.escape_speed, self.escape_gain * (self.condition / self.stop - 1.0))
