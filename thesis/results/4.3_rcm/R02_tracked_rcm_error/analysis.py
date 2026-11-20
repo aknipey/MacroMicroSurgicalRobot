@@ -179,7 +179,7 @@ def main():
     cl = conds
     cal_days = sorted({c[0] for c in cl if c[2] != 'nominal'})
     for i, s in enumerate(SETS):
-        v = [o for o in out if o['set'] == s]
+        v = [o for o in out if o['set'] == s and not o['excluded']]
         cc = [o['ctrl_mm'] for o in v if np.isfinite(o['ctrl_mm'])]
         if cc:
             ax.fill_between([i - 0.42, i + 0.42], min(cc), max(cc), color=MUTED, alpha=0.35, lw=0)
@@ -189,7 +189,7 @@ def main():
             st = STRIP_STYLE.get(c[1], STRIP_STYLE['position'])
             for o in vv:
                 ax.scatter(x + np.random.default_rng(len(o['key'])).uniform(-0.02, 0.02), o['rms'], s=16,
-                           marker=st['marker'], facecolor='none' if o['excluded'] else st['color'],
+                           marker=st['marker'], facecolor=st['color'],
                            edgecolor=st['color'], lw=0.8, zorder=3)
             if vv:
                 ax.text(x, -0.2, setting_label(c[2], c[0], cal_days), rotation=90, fontsize=6.5, color=INK2,
