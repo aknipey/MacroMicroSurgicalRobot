@@ -6,7 +6,7 @@ ee_frame: tool0
 rows: {touch: 14258, stylus: 21092, ur: 3944}
 rosbag: ok
 tcp_offset: null
-trajectory_source: /tmp/claude-1000/-home-aidan-knipe-ros2-ws/529b96f7-5ae9-4349-a08c-147a1a030235/scratchpad/traj/trajectory_20261014_224946.yaml
+trajectory_source: trajectory_20261014_224946.yaml  # temporary copy, not kept
 notes: {t: 'host receive time, s since recording start (same clock for every file)',
   stamp: 'sender''s header stamp, s', TOUCH_PATH: 'teleop target for ee_frame in base_frame,
     only while WHITE is held', STYLUS_RAW: 'omni_state pose as published (position
