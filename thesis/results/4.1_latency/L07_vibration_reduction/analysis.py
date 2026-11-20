@@ -261,7 +261,7 @@ def main():
         ax.set_xscale('log'); ax.set_yscale('log'); ax.set_ylim(0.01, 5)
         panel(ax, letter, tr.replace('Scaled5_', '1:5 ').replace('Fast', 'fast').replace('Slow', 'slow') + ' trajectory')
         ax.set_xlabel('Frequency (Hz)')
-    np.atleast_1d(axes)[0].set_ylabel('Flange PSD ratio to unfiltered velocity')
+    np.atleast_1d(axes)[0].set_ylabel('Flange power ratio to unfiltered velocity')
     np.atleast_1d(axes)[0].legend(loc='lower left')
     L.append(f"- `figures/{os.path.basename(save(fig, HERE, 'psd_ratio'))}`")
 

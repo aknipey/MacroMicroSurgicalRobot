@@ -51,10 +51,10 @@ commit byte for byte (all 39 tracked files), and every V1–V3 run's recorded se
 file at the time of that run. The tags `v1`, `v1-90deg` and `v2` are these rebuilt states; `v3` onwards are
 ordinary commits.
 
-### 1.2 Command filter cut-off
+### 1.2 Command filter cutoff
 
 The command filter was introduced at 8 Hz in V5. On the arm it removed most of the 15–25 Hz vibration, but motion
-at 8–10 Hz remained, which was hand tremor that an 8 Hz filter only halves at 10 Hz. The cut-off was lowered to
+at 8–10 Hz remained, which was hand tremor that an 8 Hz filter only halves at 10 Hz. The cutoff was lowered to
 6 Hz, which cut the tool's angular jerk by about a third for a few milliseconds more lag, and then to 5 Hz after the
 benchmark comparison, which cut the 5–15 Hz position jitter by a further 13 % for 4–8 ms more lag. These are
 development measurements on hand-made and replayed runs, and the lag cost inside the loop was later re-measured with

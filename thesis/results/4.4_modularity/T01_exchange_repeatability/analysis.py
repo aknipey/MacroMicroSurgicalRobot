@@ -406,7 +406,7 @@ def fig_components(res):
                 f"{np.linalg.norm(r['at_micro'], axis=1).max():.0f} µm)", va='center', fontsize=8, color=INK2)
     ax.set_yticks(range(len(res))); ax.set_yticklabels([LABELS[r['v']] for r in res])
     ax.invert_yaxis()
-    ax.set_xlabel('Tip re-seat error, rms (µm)')
+    ax.set_xlabel('Tip reseat error, rms (µm)')
     ax.legend(ncol=3, loc='lower left', bbox_to_anchor=(0, 1.0))
     ax.set_xlim(0, max(np.sqrt(r['floor_rms'] ** 2 + max(r['fast'] ** 2 - r['floor_rms'] ** 2, 0) + r['slow'] ** 2)
                        for r in res) * 1.9)

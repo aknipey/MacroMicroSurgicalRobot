@@ -163,7 +163,7 @@ def main():
     L += ['', f'Included: {len(inc)} runs.', '']
 
     # --- 1. timing
-    t = [o for o in inc if o['group'] in 'ABCD' and np.isfinite(o['speed'])]
+    t = [o for o in inc if o['group'] in ('Fresh fit', 'Calibrated holder', 'FLANGE_FRESH', 'FLANGE_TEST') and np.isfinite(o['speed'])]
     r_ = np.corrcoef([o['speed'] for o in t], [o['offset'] for o in t])[0, 1]
     L += ['## 1. Is the offset a latch-timing effect?', '',
           f"Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, {len(t)} runs with the tip tracked before the "

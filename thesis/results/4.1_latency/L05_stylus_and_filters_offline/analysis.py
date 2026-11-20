@@ -252,7 +252,7 @@ def command_filter_study():
         th = c['th']
         g = np.arange(th[0], th[-1], 1 / 500.0)
         cmds.append(np.column_stack([np.interp(g, th, X[:, k]) for k in range(6)]))
-    for fc in (5.0, 6.0, 8.0, 10.0):
+    for fc in (5.0, 6.0, 8.0, 10.0, 20.0):
         b_, a_ = butter(2, fc, fs=500.0)
         w, gd = group_delay((b_, a_), w=[0.5, 1.0, 2.0], fs=500.0)
         Pin = {}; Pout = {}
@@ -360,7 +360,7 @@ def main():
     L.append(f"- `figures/{os.path.basename(save(fig, HERE, 'stylus_filter_tradeoff'))}`: noise above 10 Hz in the "
              "feedforward velocity against lag, raw differencing vs the node's Kalman filter vs a One Euro grid "
              "(dotted = the Kalman level)")
-    fig, ax = plt.subplots(figsize=(FULL * 0.6, 2.4))
+    fig, ax = plt.subplots(figsize=(FULL * 0.85, 2.4))
     fcs = [r['fc'] for r in cf]
     for (nm, b), c, mk in ((('lin', '15–25'), '#0072B2', 'o'), (('ang', '15–25'), '#0072B2', 's'),
                            (('lin', '8–12'), '#E69F00', 'o'), (('lin', '30–50'), '#D55E00', 'o')):
@@ -370,7 +370,7 @@ def main():
         ax.annotate(f"{r['gd_ms'][0]:.0f} ms", (r['fc'], 100 * r[('lin', '8–12')]), xytext=(0, 5),
                     textcoords='offset points', fontsize=7, ha='center', color=INK2)
     ax.set_xlabel('Filter cutoff $f_c$ (Hz)'); ax.set_ylabel('Amplitude left (%)')
-    ax.legend(fontsize=7)
+    ax.legend(fontsize=7, loc='upper left', bbox_to_anchor=(1.02, 1.0))
     L.append(f"- `figures/{os.path.basename(save(fig, HERE, 'command_filter_offline'))}`: amplitude left per band by "
              "the node's 2nd-order Butterworth at each cutoff, on the recorded unfiltered commands; labels = low-frequency "
              "group delay")

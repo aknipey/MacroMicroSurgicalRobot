@@ -12,7 +12,7 @@ Included: 141 runs.
 
 ## 1. Is the offset a latch-timing effect?
 
-Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, 0 runs with the tip tracked before the latch: r = nan. Tip speed – mm/s, offset – mm. Phantom RCM runs latch at rest and have no pre-latch speed.
+Latch offset against tip speed at the latch, holder-tool and flange-mounted runs, 60 runs with the tip tracked before the latch: r = -0.182. Tip speed 0.7–17.0 mm/s, offset 1.28–7.38 mm. Phantom RCM runs latch at rest and have no pre-latch speed.
 
 ## 2. One line fixed in the wand frame, per mounting and trajectory
 

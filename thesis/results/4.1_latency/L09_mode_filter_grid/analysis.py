@@ -266,7 +266,7 @@ def main():
     axes[0].set_ylabel('Translation lag (ms)')
     axes[1].set_ylabel('15–25 Hz power below\nunfiltered velocity (%)')
     panel(axes[0], 'a', 'Lag')
-    panel(axes[1], 'b', 'Tremor-band reduction')
+    panel(axes[1], 'b', '15–25 Hz reduction')
     fig.legend(*axes[0].get_legend_handles_labels(), loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3)
     save(fig, HERE, 'grid_lag_and_vibration')
 
