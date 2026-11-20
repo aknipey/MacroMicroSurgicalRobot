@@ -44,11 +44,10 @@ Clone into `~/ros2_ws/src/MacroMicroSurgicalRobot`. `LOG_DIR` and `TOOL_LIBRARY`
 | Package | For |
 |---|---|
 | [Universal_Robots_ROS2_Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) | Arm driver, `ur_moveit_config` |
-| `cartesian_control_msgs` | Build dependency of the legacy `ur16e_control` node |
 | `omni_msgs` (from a ROS 2 Geomagic Touch driver) | Touch messages |
-| `motor_angles_msg` | Micro-module messages; a ROS 2 port of [the original](https://github.com/LMBScott/motor_angles_msg/) |
-| [Serial_Control](https://github.com/LMBScott/Serial_Control/) | Micro-module Arduino bridge |
-| `ndi_tracking` | NDI optical tracking of runs and tool calibration (optional) |
+| [motor_angles_msg](https://github.com/aknipey/ak_motor_angles_msg) | Micro-module messages; a ROS 2 port of [the original](https://github.com/LMBScott/motor_angles_msg/) |
+| [Serial_Control](https://github.com/aknipey/Serial_Control) | Micro-module Arduino firmware and ROS 2 serial bridge; a fork of [the original](https://github.com/LMBScott/Serial_Control/) |
+| [ndi_tracking](https://github.com/aknipey/ndi_tracking) | NDI optical tracking of runs and tool calibration (optional) |
 | [OpenHaptics SDK](https://support.3dsystems.com/s/article/OpenHaptics-for-Linux-Developer-Edition-v34?language=en_US) | `touch_server`; skipped at build time if absent |
 
 ```bash
@@ -124,7 +123,7 @@ Procedures are in [docs/THESIS_APPENDIX.md §5](docs/THESIS_APPENDIX.md#5-calibr
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Lab log: every stack version (V1–V9c), what changed and why, with its git tag or commit |
 | [docs/THESIS_APPENDIX.md](docs/THESIS_APPENDIX.md) | Report supplement: architecture, settings, hardware, calibration, risk, reproducibility |
 | [docs/UR_CALIBRATION_FIX.md](docs/UR_CALIBRATION_FIX.md) | Why the driver's calibration tool is replaced |
-| [docs/HAPTICS_HANDOFF.md](docs/HAPTICS_HANDOFF.md) | Touch force-feedback findings |
+| [docs/VERSIONS.md](docs/VERSIONS.md), V7 part 2 | Touch force-feedback findings |
 | [thesis/results/README.md](thesis/results/README.md) | The results: index by report section, how to rerun them |
 | [data/README.md](data/README.md) | The recordings: what is kept, what is in git, the archive |
 
