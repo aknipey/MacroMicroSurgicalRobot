@@ -1,5 +1,7 @@
 # A Low-Cost Teleoperable Surgical Robot with a Macro-Micro Structure and a Continuum Tip
 
+> Honours thesis overview (summary, results, how the repositories fit together): [Honours-Thesis](https://github.com/aknipey/Honours-Thesis)
+
 ROS 2 Jazzy package that teleoperates a Universal Robots UR16e (the macro stage) and a
 tendon-driven continuum micro-manipulator (the micro stage) with a 3D Systems Touch haptic
 stylus. The arm is driven through MoveIt Servo. On top of plain teleoperation the package provides:
