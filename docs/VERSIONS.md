@@ -12,7 +12,8 @@ git worktree add /tmp/v2 v2   # a copy of the code as it ran
 
 Run data lives in `logs/V<n>/` (git-ignored, on the lab PC). Each run's
 `META.yaml` holds every `teleop_settings.py` value it ran with and its
-`code_version`.
+`code_version`. Commit hashes in this file and in the runs predate the 20 November 2026
+message rewrite: [COMMIT_MAP.md](COMMIT_MAP.md) gives the current hash of each.
 
 | Version | Tag | Date | Change | Why | Lag (pos / angle) |
 |---------|-----|------|--------|-----|-------------------|

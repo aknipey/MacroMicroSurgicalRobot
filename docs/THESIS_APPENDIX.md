@@ -357,6 +357,9 @@ within the operator's reach.
 
 ### 7.1 Code, data and analysis
 
+Commit hashes recorded before 20 November 2026 (in run folders and in this document) map to the current
+history through [`docs/COMMIT_MAP.md`](COMMIT_MAP.md); the tags are unchanged in content.
+
 All code is in this git repository, forked from the laboratory's macro–micro robot repository, apart from the
 `ndi_tracking` tracker package, which sits beside it in the ROS 2 workspace. Each version of the
 stack is a tag or commit ([Section 1](#1-teleoperation-stack-version-history)), and every run folder records the
